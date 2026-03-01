@@ -25,47 +25,7 @@ EdgeReco is built on three core principles:
 
 The system spans four tiers: the Datalake (training), Backend (fallback + event ingestion), CDN (artifact distribution), and Browser (inference + personalization).
 
-```mermaid
-graph TB
-    subgraph Datalake
-        TRAIN[Model Training Pipeline]
-    end
-
-    subgraph Backend
-        API[Recommendation API<br/>fallback]
-        EVENT_SINK[Event Ingestion<br/>Service]
-        PUBLISHER[Artifact Publisher]
-    end
-
-    subgraph CDN
-        MANIFEST[Manifest JSON]
-        WASM_ART[WASM Engine<br/>Artifacts]
-        CATALOG_ART[Catalog Snapshots<br/>& Delta Patches]
-        CONFIG_ART[Config Artifacts]
-    end
-
-    subgraph Browser
-        SDK[EdgeReco SDK]
-        SW[Service Worker]
-        CW[Compute Worker]
-        STORE[(Local Storage<br/>OPFS + IDB)]
-    end
-
-    TRAIN -->|trained model| PUBLISHER
-    PUBLISHER -->|publish artifacts| CDN
-    MANIFEST -.->|fetch| SW
-    WASM_ART -.->|fetch| SW
-    CATALOG_ART -.->|fetch| SW
-    CONFIG_ART -.->|fetch| SW
-    SW -->|cache artifacts| STORE
-    CW -->|read artifacts| STORE
-    SDK -->|reco request| CW
-    SDK -->|fallback request| API
-    SDK -->|interaction events| EVENT_SINK
-    EVENT_SINK -->|raw events| TRAIN
-    API -->|fallback response| SDK
-    CW -->|reco response| SDK
-```
+![System Context](diagrams/system-context.svg)
 
 ---
 
@@ -73,46 +33,7 @@ graph TB
 
 ### Browser Internals
 
-```mermaid
-graph LR
-    subgraph Main Thread
-        APP[Application Code]
-        ROUTER[Hybrid Router]
-        SDK_API[SDK API Layer]
-    end
-
-    subgraph Service Worker Thread
-        SW_CORE[SW Core]
-        MANIFEST_MGR[Manifest Manager]
-        ARTIFACT_CACHE[Artifact Cache Controller]
-        BG_SYNC[Background Sync<br/>Orchestrator]
-    end
-
-    subgraph Compute Worker Thread
-        ENGINE[WASM Engine]
-        SQLITE[SQLite WASM]
-        SMOKE[Smoke Test<br/>Harness]
-    end
-
-    subgraph Storage
-        OPFS[(OPFS<br/>catalog.db + engine.wasm)]
-        IDB[(IndexedDB<br/>manifest, user_state,<br/>events, metadata)]
-        CACHE_API[(Cache API<br/>artifact HTTP cache)]
-    end
-
-    APP --> SDK_API
-    SDK_API --> ROUTER
-    ROUTER -->|local path| CW_PORT[postMessage]
-    ROUTER -->|fallback path| FETCH[fetch → Backend]
-    CW_PORT --> ENGINE
-    ENGINE --> SQLITE
-    SQLITE --> OPFS
-    SW_CORE --> MANIFEST_MGR
-    MANIFEST_MGR --> ARTIFACT_CACHE
-    ARTIFACT_CACHE --> CACHE_API
-    BG_SYNC --> IDB
-    ENGINE --> IDB
-```
+![Browser Internals](diagrams/browser-internals.svg)
 
 ### Component Responsibilities
 
@@ -135,102 +56,15 @@ graph LR
 
 ### 4.1 Artifact Distribution Flow
 
-```mermaid
-sequenceDiagram
-    participant PUB as Artifact Publisher
-    participant CDN as CDN
-    participant SW as Service Worker
-    participant CACHE as Cache API
-    participant OPFS as OPFS
-    participant CW as Compute Worker
-
-    PUB->>CDN: Upload new artifacts + manifest
-    Note over CDN: Content-addressed URLs<br/>Immutable artifacts
-
-    SW->>CDN: GET /manifest.json (periodic poll)
-    CDN-->>SW: Manifest (versions, URLs, hashes)
-    SW->>SW: Compare with cached manifest
-
-    alt New engine version
-        SW->>CDN: GET /engines/{hash}.wasm
-        CDN-->>SW: WASM binary
-        SW->>CACHE: Cache WASM artifact
-        SW->>OPFS: Write engine binary
-        SW->>CW: Notify: new engine available
-        CW->>CW: Load + smoke test
-        alt Smoke test passes
-            CW->>CW: Activate new engine
-        else Smoke test fails
-            CW->>CW: Discard, keep old engine
-        end
-    end
-
-    alt New catalog delta
-        SW->>CDN: GET /catalogs/{hash}.delta
-        CDN-->>SW: Delta patch binary
-        SW->>OPFS: Apply delta to catalog.db
-    end
-```
+![Artifact Distribution Flow](diagrams/artifact-distribution-flow.svg)
 
 ### 4.2 Recommendation Request Flow
 
-```mermaid
-sequenceDiagram
-    participant APP as Application
-    participant ROUTER as Hybrid Router
-    participant CW as Compute Worker
-    participant IDB as IndexedDB
-    participant API as Backend API
-
-    APP->>ROUTER: getRecommendations(request)
-    ROUTER->>ROUTER: Check engine ready + kill switch
-
-    alt Local engine ready, no kill switch
-        ROUTER->>CW: postMessage(RecoQuery)
-        CW->>IDB: Read user local state
-        CW->>CW: WASM inference (engine + catalog + state)
-        CW-->>ROUTER: postMessage(RecoResult)
-        ROUTER-->>APP: RecoResponse {source: "local"}
-    else Engine not ready OR kill switch active OR timeout
-        ROUTER->>API: POST /v1/recommendations
-        API-->>ROUTER: JSON response
-        ROUTER-->>APP: RecoResponse {source: "backend"}
-    end
-
-    APP->>ROUTER: reportInteraction(event)
-    ROUTER->>IDB: Queue event for uplink
-    ROUTER->>IDB: Update user local state
-```
+![Recommendation Request Flow](diagrams/recommendation-request-flow.svg)
 
 ### 4.3 Event Uplink Flow
 
-```mermaid
-sequenceDiagram
-    participant APP as Application
-    participant SDK as SDK
-    participant IDB as IndexedDB
-    participant SW as Service Worker
-    participant API as Event Ingestion
-
-    APP->>SDK: reportInteraction(event)
-    SDK->>IDB: Append to event_queue
-    SDK->>IDB: Update user_state
-
-    Note over SW: Periodic flush / page unload
-
-    SW->>IDB: Read event_queue batch
-    SW->>SW: Apply sampling rules
-    SW->>SW: Strip PII, build EventBatch
-
-    alt Page unloading
-        SW->>API: sendBeacon(EventBatch)
-    else Background flush
-        SW->>API: POST /v1/events (fetch)
-        API-->>SW: 200 OK
-    end
-
-    SW->>IDB: Remove sent events from queue
-```
+![Event Uplink Flow](diagrams/event-uplink-flow.svg)
 
 ---
 
@@ -297,16 +131,7 @@ The manifest can specify two engine versions with a traffic-split percentage:
 
 ### Flywheel Cycle
 
-```mermaid
-graph LR
-    A[User Interacts<br/>with Recommendations] -->|interaction events| B[Local State<br/>Updated]
-    B -->|richer context| C[Better Local<br/>Inference]
-    C -->|better recs| A
-    B -->|anonymous events<br/>uplinked| D[Server-Side<br/>Training Pipeline]
-    D -->|improved model| E[New WASM<br/>Engine Published]
-    E -->|CDN deploy| F[Client Downloads<br/>New Engine]
-    F --> C
-```
+![Personalization Flywheel](diagrams/personalization-flywheel.svg)
 
 ### Two-Level Identity Model
 

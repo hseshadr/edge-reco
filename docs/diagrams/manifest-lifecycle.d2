@@ -1,0 +1,24 @@
+direction: right
+
+publish: Artifact Publisher {
+  style.fill: "#f0e8f8"
+}
+cdn_art: CDN Artifacts {
+  style.fill: "#e8f8e8"
+}
+cdn_man: CDN Manifest {
+  style.fill: "#e8f8e8"
+}
+sw: Service Worker {
+  style.fill: "#f8f0e8"
+}
+cw: Compute Worker {
+  style.fill: "#e8f4f8"
+}
+
+publish -> cdn_art: 1. Upload artifacts
+publish -> cdn_man: 2. Publish manifest
+cdn_man -> sw: 3. Client polls
+sw -> sw: 4. Detect changes
+sw -> cdn_art: 5. Download new artifacts
+sw -> cw: 6. Activate

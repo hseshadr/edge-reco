@@ -1,0 +1,30 @@
+shape: sequence_diagram
+
+pub: Artifact Publisher
+cdn: CDN
+sw: Service Worker
+cache: Cache API
+opfs: OPFS
+cw: Compute Worker
+
+pub -> cdn: Upload new artifacts + manifest
+
+sw -> cdn: GET /manifest.json (periodic poll)
+cdn -> sw: Manifest (versions, URLs, hashes)
+sw -> sw: Compare with cached manifest
+
+"New engine version": {
+  sw -> cdn: "GET /engines/{hash}.wasm"
+  cdn -> sw: WASM binary
+  sw -> cache: Cache WASM artifact
+  sw -> opfs: Write engine binary
+  sw -> cw: "Notify: new engine available"
+  cw -> cw: Load + smoke test
+  cw -> cw: "Pass → activate new engine\nFail → discard, keep old engine"
+}
+
+"New catalog delta": {
+  sw -> cdn: "GET /catalogs/{hash}.delta"
+  cdn -> sw: Delta patch binary
+  sw -> opfs: Apply delta to catalog.db
+}

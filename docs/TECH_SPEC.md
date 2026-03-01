@@ -691,15 +691,7 @@ Config updates are **additive-only** within a major version — new fields may b
 
 ### Manifest Lifecycle
 
-```mermaid
-graph LR
-    PUBLISH[Artifact Publisher] -->|1. Upload artifacts| CDN_ART[CDN Artifacts]
-    PUBLISH -->|2. Publish manifest| CDN_MAN[CDN Manifest]
-    CDN_MAN -->|3. Client polls| SW[Service Worker]
-    SW -->|4. Detect changes| SW
-    SW -->|5. Download new artifacts| CDN_ART
-    SW -->|6. Activate| CW[Compute Worker]
-```
+![Manifest Lifecycle](diagrams/manifest-lifecycle.svg)
 
 ---
 
