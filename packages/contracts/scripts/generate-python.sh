@@ -23,11 +23,84 @@ touch "${API_GENERATED}/__init__.py"
   --snake-case-field \
   --use-field-description)
 
-(cd "${API_DIR}" && uv run fastapi-codegen \
-  --input "${OPENAPI_SPEC}" \
-  --output "${API_GENERATED}/_fastapi_out" \
-  --model-file "models" \
-  --disable-timestamp)
+# NOTE: fastapi-codegen CLI is broken with click 8.3 / typer 0.12.
+# Invoke the generate_code function directly via Python instead.
+(cd "${API_DIR}" && uv run python - <<PYEOF
+from pathlib import Path
+from fastapi_code_generator.__main__ import generate_code
+from datamodel_code_generator import DataModelType, PythonVersion
+
+input_file = "${OPENAPI_SPEC}"
+output_dir = Path("${API_GENERATED}/_fastapi_out")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+with open(input_file, encoding="utf-8") as f:
+    input_text = f.read()
+
+generate_code(
+    input_name=input_file,
+    input_text=input_text,
+    encoding="utf-8",
+    output_dir=output_dir,
+    template_dir=None,
+    model_path=Path("models"),
+    enum_field_as_literal=None,
+    generate_routers=False,
+    specify_tags=None,
+    custom_visitors=None,
+    disable_timestamp=True,
+    output_model_type=DataModelType.PydanticBaseModel,
+    python_version=PythonVersion.PY_39,
+)
+PYEOF
+)
+
+# Merge inline response models from fastapi-codegen into datamodel-codegen output,
+# then copy routes and clean up.
+(cd "${API_DIR}" && uv run python - <<PYEOF
+"""Merge inline response models that fastapi-codegen creates but datamodel-codegen does not."""
+from pathlib import Path
+
+dc_models = Path("${API_GENERATED}/models.py").read_text(encoding="utf-8")
+fc_models = Path("${API_GENERATED}/_fastapi_out/models.py").read_text(encoding="utf-8")
+
+# Find class names in routes.py imports that are missing from datamodel-codegen models
+routes_text = Path("${API_GENERATED}/_fastapi_out/main.py").read_text(encoding="utf-8")
+import re
+imported = re.findall(r"from \.models import \((.*?)\)", routes_text, re.DOTALL)
+if imported:
+    names = [n.strip().rstrip(",") for n in imported[0].split("\n") if n.strip() and n.strip().rstrip(",")]
+else:
+    names = []
+
+missing = [n for n in names if f"class {n}" not in dc_models]
+
+if missing:
+    # Extract class definitions from fastapi-codegen models (BaseModel or Enum)
+    extra_classes = []
+    for name in missing:
+        pattern = rf"(class {name}\([^)]+\):.*?)(?=\nclass |\Z)"
+        match = re.search(pattern, fc_models, re.DOTALL)
+        if match:
+            extra_classes.append(match.group(1).rstrip())
+
+    # Also find any types referenced by the extra classes that are missing
+    all_extra = "\n".join(extra_classes)
+    # Look for type references that are neither builtins nor already in dc_models
+    fc_class_names = re.findall(r"class (\w+)\(", fc_models)
+    for ref_name in fc_class_names:
+        if ref_name in all_extra and f"class {ref_name}" not in dc_models and f"class {ref_name}" not in all_extra:
+            pattern = rf"(class {ref_name}\([^)]+\):.*?)(?=\nclass |\Z)"
+            match = re.search(pattern, fc_models, re.DOTALL)
+            if match:
+                extra_classes.insert(0, match.group(1).rstrip())
+
+    if extra_classes:
+        dc_models = dc_models.rstrip() + "\n\n\n" + "\n\n\n".join(extra_classes) + "\n"
+        Path("${API_GENERATED}/models.py").write_text(dc_models, encoding="utf-8")
+        print(f"Merged {len(extra_classes)} inline response model(s) into models.py")
+PYEOF
+)
 
 cp "${API_GENERATED}/_fastapi_out/main.py" "${API_GENERATED}/routes.py"
 rm -rf "${API_GENERATED}/_fastapi_out"
