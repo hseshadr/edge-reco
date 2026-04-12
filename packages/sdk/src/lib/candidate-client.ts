@@ -40,9 +40,7 @@ function isRetryable(status: number): boolean {
   return status >= 500 || status === 429;
 }
 
-export function createCandidateClient(
-  opts: CandidateClientOptions,
-): CandidateClient {
+export function createCandidateClient(opts: CandidateClientOptions): CandidateClient {
   const candidatesUrl = `${opts.apiBaseUrl}/v0/candidates`;
   const eventsUrl = `${opts.apiBaseUrl}/v0/events`;
 
@@ -67,9 +65,7 @@ export function createCandidateClient(
           lastError = err;
         }
       }
-      throw lastError instanceof Error
-        ? lastError
-        : new Error("Candidate request failed");
+      throw lastError instanceof Error ? lastError : new Error("Candidate request failed");
     },
 
     async postEventBatch(events: EventEnvelope[]): Promise<void> {

@@ -3,10 +3,7 @@ import type { EventEnvelope } from "./candidate-client.js";
 import type { ProfileStore } from "./profile-store.js";
 
 export interface TrackerOptions {
-  profileStore: Pick<
-    ProfileStore,
-    "applyClick" | "applyFavorite" | "applyImpression"
-  >;
+  profileStore: Pick<ProfileStore, "applyClick" | "applyFavorite" | "applyImpression">;
   sendEvents: (events: EventEnvelope[]) => Promise<void>;
 }
 
@@ -24,10 +21,7 @@ function newEventId(): string {
   return `evt_${Math.random().toString(36).slice(2)}${Date.now()}`;
 }
 
-function envelope(
-  eventType: EventEnvelope["eventType"],
-  opts: TrackOptions,
-): EventEnvelope {
+function envelope(eventType: EventEnvelope["eventType"], opts: TrackOptions): EventEnvelope {
   return {
     eventId: newEventId(),
     eventType,

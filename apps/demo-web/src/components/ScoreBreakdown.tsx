@@ -1,7 +1,9 @@
-import { useState } from "react";
 import type { ScoreBreakdown as Breakdown } from "@edgereco/sdk";
+import { useState } from "react";
 
-export interface ScoreBreakdownProps { breakdown: Breakdown; }
+export interface ScoreBreakdownProps {
+  breakdown: Breakdown;
+}
 
 export function ScoreBreakdown({ breakdown }: ScoreBreakdownProps) {
   const [open, setOpen] = useState(false);
@@ -12,11 +14,19 @@ export function ScoreBreakdown({ breakdown }: ScoreBreakdownProps) {
       </button>
       {open && (
         <dl>
-          <dt>Popularity</dt><dd>{breakdown.popularity.toFixed(3)}</dd>
-          <dt>Category match</dt><dd>{breakdown.categoryMatch.toFixed(3)}</dd>
-          <dt>Tag match</dt><dd>{breakdown.tagMatch.toFixed(3)}</dd>
-          <dt>Freshness</dt><dd>{breakdown.freshness.toFixed(3)}</dd>
-          <dt>Repetition penalty</dt><dd>{"\u2212"}{breakdown.repetitionPenalty.toFixed(3)}</dd>
+          <dt>Popularity</dt>
+          <dd>{breakdown.popularity.toFixed(3)}</dd>
+          <dt>Category match</dt>
+          <dd>{breakdown.categoryMatch.toFixed(3)}</dd>
+          <dt>Tag match</dt>
+          <dd>{breakdown.tagMatch.toFixed(3)}</dd>
+          <dt>Freshness</dt>
+          <dd>{breakdown.freshness.toFixed(3)}</dd>
+          <dt>Repetition penalty</dt>
+          <dd>
+            {"\u2212"}
+            {breakdown.repetitionPenalty.toFixed(3)}
+          </dd>
         </dl>
       )}
     </div>

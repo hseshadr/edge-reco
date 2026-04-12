@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createTracker } from "./tracker.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogItem } from "../types.js";
+import { createTracker } from "./tracker.js";
 
 const itemRunning: CatalogItem = {
   id: "run_1",

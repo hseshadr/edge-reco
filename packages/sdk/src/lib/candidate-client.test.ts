@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { createCandidateClient } from "./candidate-client.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogItem } from "../types.js";
+import { createCandidateClient } from "./candidate-client.js";
 
 const sampleItem: CatalogItem = {
   id: "a",
@@ -60,9 +60,7 @@ describe("candidateClient.fetchCandidates", () => {
       .mockResolvedValueOnce(jsonResponse({}, 503))
       .mockResolvedValueOnce(jsonResponse({}, 503));
     const client = createCandidateClient({ apiBaseUrl: "http://api.test" });
-    await expect(
-      client.fetchCandidates({ contextType: "homepage", limit: 5 }),
-    ).rejects.toThrow();
+    await expect(client.fetchCandidates({ contextType: "homepage", limit: 5 })).rejects.toThrow();
   });
 });
 

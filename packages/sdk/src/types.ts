@@ -49,9 +49,9 @@ export interface EdgeRecoSdkOptions {
 
 export interface EdgeRecoSdk {
   init(): Promise<void>;
-  trackImpression(opts: TrackOptions): void;
-  trackClick(opts: TrackOptions): void;
-  trackFavorite(opts: TrackOptions): void;
+  trackImpression(opts: TrackOptions): Promise<void>;
+  trackClick(opts: TrackOptions): Promise<void>;
+  trackFavorite(opts: TrackOptions): Promise<void>;
   getCandidates(query: CandidateQuery): Promise<RankedResponse>;
   getProfile(): ProfileSnapshot;
   resetProfile(): Promise<void>;

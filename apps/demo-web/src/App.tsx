@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
 import { createEdgeRecoSdk } from "@edgereco/sdk";
 import type { EdgeRecoSdk, ProfileSnapshot, RankedResponse } from "@edgereco/sdk";
+import { useCallback, useEffect, useState } from "react";
 import { CandidateGrid } from "./components/CandidateGrid.js";
 import { ProfilePanel } from "./components/ProfilePanel.js";
 
@@ -27,7 +27,9 @@ export function App() {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refresh = useCallback(async () => {
@@ -36,24 +38,34 @@ export function App() {
       const response = await sdk.getCandidates({ contextType: CONTEXT_TYPE, limit: LIMIT });
       setRanked(response);
       setProfile(sdk.getProfile());
-    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }, [sdk]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-  const onClick = useCallback(async (itemId: string) => {
-    if (!sdk) return;
-    sdk.trackClick({ itemId, contextType: CONTEXT_TYPE });
-    await new Promise((r) => setTimeout(r, 50)); // let profile write settle
-    await refresh();
-  }, [sdk, refresh]);
+  const onClick = useCallback(
+    async (itemId: string) => {
+      if (!sdk) return;
+      sdk.trackClick({ itemId, contextType: CONTEXT_TYPE });
+      await new Promise((r) => setTimeout(r, 50)); // let profile write settle
+      await refresh();
+    },
+    [sdk, refresh],
+  );
 
-  const onFavorite = useCallback(async (itemId: string) => {
-    if (!sdk) return;
-    sdk.trackFavorite({ itemId, contextType: CONTEXT_TYPE });
-    await new Promise((r) => setTimeout(r, 50));
-    await refresh();
-  }, [sdk, refresh]);
+  const onFavorite = useCallback(
+    async (itemId: string) => {
+      if (!sdk) return;
+      sdk.trackFavorite({ itemId, contextType: CONTEXT_TYPE });
+      await new Promise((r) => setTimeout(r, 50));
+      await refresh();
+    },
+    [sdk, refresh],
+  );
 
   const onReset = useCallback(async () => {
     if (!sdk) return;
@@ -66,7 +78,10 @@ export function App() {
 
   return (
     <div className="demo-app">
-      <header><h1>EdgeReco — Phase 0 Demo</h1><p>Click items to shape the local profile; the grid reranks live.</p></header>
+      <header>
+        <h1>EdgeReco — Phase 0 Demo</h1>
+        <p>Click items to shape the local profile; the grid reranks live.</p>
+      </header>
       <main className="layout" style={{ display: "flex", gap: "2rem" }}>
         <CandidateGrid items={ranked.items} onClick={onClick} onFavorite={onFavorite} />
         <ProfilePanel profile={profile} onReset={onReset} />

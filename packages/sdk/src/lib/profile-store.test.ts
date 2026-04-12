@@ -1,10 +1,6 @@
-import { describe, it, expect, afterEach } from "vitest";
-import {
-  createProfileStore,
-  SCORING_CONSTANTS,
-  type ProfileStore,
-} from "./profile-store.js";
+import { afterEach, describe, expect, it } from "vitest";
 import type { CatalogItem } from "../types.js";
+import { type ProfileStore, SCORING_CONSTANTS, createProfileStore } from "./profile-store.js";
 
 const stores: ProfileStore[] = [];
 
@@ -68,10 +64,7 @@ describe("profileStore.applyClick", () => {
       SCORING_CONSTANTS.clickTagBump,
       10,
     );
-    expect(store.snapshot().tagAffinity.waterproof).toBeCloseTo(
-      SCORING_CONSTANTS.clickTagBump,
-      10,
-    );
+    expect(store.snapshot().tagAffinity.waterproof).toBeCloseTo(SCORING_CONSTANTS.clickTagBump, 10);
   });
 
   it("prepends clicked item to recentlyViewed", async () => {

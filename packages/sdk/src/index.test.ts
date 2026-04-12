@@ -1,10 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEdgeRecoSdk } from "./index.js";
+import type { CandidateClient, EventEnvelope } from "./lib/candidate-client.js";
 import type { CatalogItem } from "./types.js";
-import type {
-  CandidateClient,
-  EventEnvelope,
-} from "./lib/candidate-client.js";
 
 const items: CatalogItem[] = [
   {

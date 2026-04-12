@@ -5,7 +5,7 @@
     "category": "running",
     "tags": ["trail", "lightweight", "outdoors"],
     "popularityScore": 0.82,
-    "freshnessScore": 0.40
+    "freshnessScore": 0.4
   },
   {
     "id": "run_002",
@@ -21,7 +21,7 @@
     "category": "running",
     "tags": ["cushioned", "road", "long-distance"],
     "popularityScore": 0.88,
-    "freshnessScore": 0.60
+    "freshnessScore": 0.6
   },
   {
     "id": "run_004",
@@ -29,7 +29,7 @@
     "category": "running",
     "tags": ["trail", "waterproof", "grip"],
     "popularityScore": 0.65,
-    "freshnessScore": 0.30
+    "freshnessScore": 0.3
   },
   {
     "id": "run_005",
@@ -61,7 +61,7 @@
     "category": "outdoors",
     "tags": ["trekking", "ankle-support", "durable"],
     "popularityScore": 0.63,
-    "freshnessScore": 0.70
+    "freshnessScore": 0.7
   },
   {
     "id": "out_003",
@@ -69,7 +69,7 @@
     "category": "outdoors",
     "tags": ["low-cut", "breathable", "scrambling"],
     "popularityScore": 0.56,
-    "freshnessScore": 0.50
+    "freshnessScore": 0.5
   },
   {
     "id": "out_004",
@@ -77,7 +77,7 @@
     "category": "outdoors",
     "tags": ["sandal", "quick-dry", "grip"],
     "popularityScore": 0.42,
-    "freshnessScore": 0.80
+    "freshnessScore": 0.8
   },
   {
     "id": "out_005",
@@ -93,7 +93,7 @@
     "category": "outdoors",
     "tags": ["backpacking", "insulated", "rugged"],
     "popularityScore": 0.74,
-    "freshnessScore": 0.20
+    "freshnessScore": 0.2
   },
   {
     "id": "fml_001",
@@ -124,7 +124,7 @@
     "title": "Chelsea Elegance",
     "category": "formal",
     "tags": ["chelsea", "sleek", "versatile"],
-    "popularityScore": 0.60,
+    "popularityScore": 0.6,
     "freshnessScore": 0.72
   },
   {
@@ -188,7 +188,7 @@
     "title": "Boat Deck Shoe",
     "category": "casual",
     "tags": ["boat", "deck", "nautical"],
-    "popularityScore": 0.40,
+    "popularityScore": 0.4,
     "freshnessScore": 0.28
   },
   {

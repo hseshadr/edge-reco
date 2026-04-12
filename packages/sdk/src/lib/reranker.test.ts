@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { rerank, SCORING_WEIGHTS } from "./reranker.js";
+import { describe, expect, it } from "vitest";
 import type { CatalogItem, ProfileSnapshot } from "../types.js";
+import { SCORING_WEIGHTS, rerank } from "./reranker.js";
 
 const emptyProfile: ProfileSnapshot = {
   categoryAffinity: {},
@@ -128,11 +128,7 @@ describe("rerank — score breakdown", () => {
     const { items } = rerank([item], profile);
     const bd = items[0]!.scoreBreakdown;
     const summed =
-      bd.popularity +
-      bd.categoryMatch +
-      bd.tagMatch +
-      bd.freshness -
-      bd.repetitionPenalty;
+      bd.popularity + bd.categoryMatch + bd.tagMatch + bd.freshness - bd.repetitionPenalty;
     expect(items[0]!.finalScore).toBeCloseTo(summed, 10);
   });
 });

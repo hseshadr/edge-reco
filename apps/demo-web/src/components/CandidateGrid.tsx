@@ -23,8 +23,12 @@ export function CandidateGrid({ items, onClick, onFavorite }: CandidateGridProps
             <div className="score">score: {item.finalScore.toFixed(3)}</div>
             <ScoreBreakdown breakdown={item.scoreBreakdown} />
             <div className="actions">
-              <button type="button" onClick={() => onClick(item.id)}>Click</button>
-              <button type="button" onClick={() => onFavorite(item.id)}>&#9733; Favorite</button>
+              <button type="button" onClick={() => onClick(item.id)}>
+                Click
+              </button>
+              <button type="button" onClick={() => onFavorite(item.id)}>
+                &#9733; Favorite
+              </button>
             </div>
           </li>
         ))}

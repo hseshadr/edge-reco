@@ -1,4 +1,4 @@
-import { openDB, type IDBPDatabase } from "idb";
+import { type IDBPDatabase, openDB } from "idb";
 
 const DB_NAME = "edgereco";
 const STORE_NAME = "profile";
@@ -33,9 +33,7 @@ export async function createProfileStorage(): Promise<ProfileStorage> {
   const db = await openProfileDb();
   return {
     async load(): Promise<PersistedProfile | null> {
-      const value = (await db.get(STORE_NAME, SINGLETON_KEY)) as
-        | PersistedProfile
-        | undefined;
+      const value = (await db.get(STORE_NAME, SINGLETON_KEY)) as PersistedProfile | undefined;
       return value ?? null;
     },
     async save(profile: PersistedProfile): Promise<void> {

@@ -1,3 +1,7 @@
+import { type CandidateClient, createCandidateClient } from "./lib/candidate-client.js";
+import { type ProfileStore, createProfileStore } from "./lib/profile-store.js";
+import { rerank } from "./lib/reranker.js";
+import { type Tracker, createTracker } from "./lib/tracker.js";
 import type {
   CandidateQuery,
   EdgeRecoSdk,
@@ -6,25 +10,15 @@ import type {
   RankedResponse,
   TrackOptions,
 } from "./types.js";
-import { createProfileStore, type ProfileStore } from "./lib/profile-store.js";
-import {
-  createCandidateClient,
-  type CandidateClient,
-} from "./lib/candidate-client.js";
-import { createTracker, type Tracker } from "./lib/tracker.js";
-import { rerank } from "./lib/reranker.js";
 
 export interface CreateSdkOptions extends EdgeRecoSdkOptions {
   candidateClientOverride?: CandidateClient;
 }
 
-export async function createEdgeRecoSdk(
-  opts: CreateSdkOptions,
-): Promise<EdgeRecoSdk> {
+export async function createEdgeRecoSdk(opts: CreateSdkOptions): Promise<EdgeRecoSdk> {
   const profileStore: ProfileStore = await createProfileStore();
   const client: CandidateClient =
-    opts.candidateClientOverride ??
-    createCandidateClient({ apiBaseUrl: opts.apiBaseUrl });
+    opts.candidateClientOverride ?? createCandidateClient({ apiBaseUrl: opts.apiBaseUrl });
   const tracker: Tracker = createTracker({
     profileStore,
     sendEvents: (events) => client.postEventBatch(events),
@@ -35,16 +29,16 @@ export async function createEdgeRecoSdk(
       /* profile already loaded in createProfileStore */
     },
 
-    trackImpression(options: TrackOptions): void {
-      return tracker.trackImpression(options) as unknown as void;
+    trackImpression(options: TrackOptions): Promise<void> {
+      return tracker.trackImpression(options);
     },
 
-    trackClick(options: TrackOptions): void {
-      return tracker.trackClick(options) as unknown as void;
+    trackClick(options: TrackOptions): Promise<void> {
+      return tracker.trackClick(options);
     },
 
-    trackFavorite(options: TrackOptions): void {
-      return tracker.trackFavorite(options) as unknown as void;
+    trackFavorite(options: TrackOptions): Promise<void> {
+      return tracker.trackFavorite(options);
     },
 
     async getCandidates(query: CandidateQuery): Promise<RankedResponse> {

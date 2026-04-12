@@ -1,9 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  createProfileStorage,
-  type PersistedProfile,
-  type ProfileStorage,
-} from "./storage.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type PersistedProfile, type ProfileStorage, createProfileStorage } from "./storage.js";
 
 let storage: ProfileStorage;
 

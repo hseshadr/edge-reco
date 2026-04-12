@@ -14,35 +14,21 @@ export const SCORING_WEIGHTS = {
   repetitionPenalty: 0.3,
 } as const;
 
-function categoryMatch(
-  item: CatalogItem,
-  profile: ProfileSnapshot,
-): number {
+function categoryMatch(item: CatalogItem, profile: ProfileSnapshot): number {
   return profile.categoryAffinity[item.category] ?? 0;
 }
 
 function tagMatch(item: CatalogItem, profile: ProfileSnapshot): number {
   if (item.tags.length === 0) return 0;
-  const total = item.tags.reduce(
-    (sum, tag) => sum + (profile.tagAffinity[tag] ?? 0),
-    0,
-  );
+  const total = item.tags.reduce((sum, tag) => sum + (profile.tagAffinity[tag] ?? 0), 0);
   return total / item.tags.length;
 }
 
-function repetitionPenalty(
-  item: CatalogItem,
-  profile: ProfileSnapshot,
-): number {
-  return profile.recentlyViewed.includes(item.id)
-    ? SCORING_WEIGHTS.repetitionPenalty
-    : 0;
+function repetitionPenalty(item: CatalogItem, profile: ProfileSnapshot): number {
+  return profile.recentlyViewed.includes(item.id) ? SCORING_WEIGHTS.repetitionPenalty : 0;
 }
 
-function scoreItem(
-  item: CatalogItem,
-  profile: ProfileSnapshot,
-): RankedItem {
+function scoreItem(item: CatalogItem, profile: ProfileSnapshot): RankedItem {
   const popularity = SCORING_WEIGHTS.popularity * item.popularityScore;
   const catMatch = SCORING_WEIGHTS.category * categoryMatch(item, profile);
   const tags = SCORING_WEIGHTS.tag * tagMatch(item, profile);
