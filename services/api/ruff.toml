@@ -1,0 +1,7 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "SIM", "UP"]
+ignore = []
+exclude = ["app/generated"]
