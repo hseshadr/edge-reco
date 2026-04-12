@@ -1,0 +1,23 @@
+{
+  "name": "edgereco",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "generate": "pnpm -C packages/contracts run generate",
+    "test": "pnpm -r --parallel run test",
+    "build": "pnpm -r --parallel run build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "dev:api": "cd services/api && uv run uvicorn app.main:app --reload --port 8000",
+    "dev:web": "pnpm -C apps/demo-web run dev",
+    "dev": "pnpm run dev:api & pnpm run dev:web",
+    "e2e": "pnpm -C apps/demo-web-e2e run test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "typescript": "^5.6.0"
+  },
+  "packageManager": "pnpm@9.12.0"
+}
