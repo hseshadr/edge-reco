@@ -1,0 +1,5 @@
+[
+  {"id": "a", "title": "A", "category": "running", "tags": ["lightweight"], "popularityScore": 0.7, "freshnessScore": 0.4},
+  {"id": "b", "title": "B", "category": "formal", "tags": ["leather"], "popularityScore": 0.9, "freshnessScore": 0.2},
+  {"id": "c", "title": "C", "category": "running", "tags": ["waterproof"], "popularityScore": 0.5, "freshnessScore": 0.6}
+]
