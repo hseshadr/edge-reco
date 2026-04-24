@@ -4,20 +4,37 @@
 |-------|-------|
 | **Version** | 1.0 |
 | **Status** | Draft |
-| **Last Updated** | 2026-02-28 |
+| **Last Updated** | 2026-02-28 | 
 | **Companion Docs** | [PRD](PRD.md) · [Technical Specification](TECH_SPEC.md) |
 
 ---
 
+> **TLDR** — EdgeReco runs recommendation inference **in the browser** using a WASM engine in a Dedicated Worker, with a SQLite product catalog stored in OPFS. A **Capability Detector** gates local inference at init — devices that lack sufficient hardware skip WASM downloads entirely and route straight to the backend. A **Service Worker** polls a CDN manifest to download, verify (SHA256), and cache immutable artifacts. The **Hybrid Router** decides local vs. backend per-request based on device capability, engine readiness, kill switch, and timeout — with a five-level **degradation ladder** guaranteeing a response even when everything fails. Engine updates deploy via **hot-swap** with automatic rollback. Only anonymous, sampled interaction events are uplinked to close the training flywheel.
+
 ## 1. System Overview & Design Philosophy
 
-EdgeReco is built on three core principles:
+### 1.1 Core Principles
 
 **CDN-first** — All artifacts (WASM engines, catalogs, configs) are static, content-addressed files distributed via CDN. No backend involvement in the hot path. Deploys are cache invalidations, not server rollouts.
 
 **Local-first** — The browser is the primary compute environment for recommendations. The backend exists as a fallback, not the default. Storage, inference, and personalization all happen on-device.
 
 **Flywheel** — Interaction events captured locally feed back into server-side model training. Better models produce better artifacts. Better artifacts produce better local recommendations. Better recommendations produce richer interaction signals.
+
+### 1.2 Platform Pluggability
+
+EdgeReco is a platform, not a vertical product. The platform is not tightly coupled to any specific codebase or dataset — it defines **stable API contracts** at four layers and treats everything else as swappable input:
+
+| Layer | Contract | What's swappable |
+|-------|----------|-----------------|
+| **Client SDK API** | `EdgeReco` class (`getRecommendations`, `reportInteraction`) | The WASM engine binary, catalog data, embedding model, scoring logic |
+| **Backend REST API** | `POST /v1/recommendations`, `POST /v1/edgereco/events` | The server-side model, training pipeline, catalog source |
+| **Storage schema** | SQLite `products`/`categories` tables | The product dataset, feature dimensionality, category taxonomy |
+| **Engine ABI** | `reco_init`, `reco_query`, `reco_apply_config` | The Rust scoring implementation, model architecture, ranking algorithm |
+
+The SDK and REST APIs are dataset-agnostic — `RecoRequest`/`RecoResponse` carry generic `placement`, `contextItemIds`, and scored `items[]`. Neither interface encodes anything about a specific product domain. The catalog schema accepts embeddings of any dimensionality (the engine reads the expected dimension from config). The WASM engine is a content-addressed binary swapped via manifest — deploying a new algorithm is a CDN publish, not a code change.
+
+The prototype uses a specific dataset and embedding model as a concrete example (see [TECH_SPEC §6 — Prototype Reference Dataset](TECH_SPEC.md#6-artifact-formats)), but integrators replace the data, the model, and the scoring logic without modifying any platform code.
 
 ---
 
@@ -39,7 +56,8 @@ The system spans four tiers: the Datalake (training), Backend (fallback + event 
 
 | Component | Thread | Responsibility |
 |-----------|--------|----------------|
-| **Hybrid Router** | Main | Decides local vs. fallback for each request based on engine readiness, timeout, and kill-switch status |
+| **Capability Detector** | Main | Detects device hardware capability via three-tier approach (API checks + optional micro-benchmark); produces `CapabilityTier` used by Hybrid Router to gate local inference |
+| **Hybrid Router** | Main | Decides local vs. fallback for each request based on device capability, engine readiness, timeout, and kill-switch status |
 | **SDK API Layer** | Main | Public API surface (`init`, `getRecommendations`, `reportInteraction`, `destroy`) |
 | **Service Worker** | SW | Manifest polling, artifact download/caching, background delta-sync |
 | **Manifest Manager** | SW | Parses manifest, determines required artifact updates, handles canary logic |
@@ -168,6 +186,7 @@ This state feeds into the WASM engine as input features alongside the catalog da
 | **Artifact failures** | Manifest fetch fails, WASM download corrupt, delta patch mismatched base |
 | **Runtime failures** | WASM trap/crash, SQLite query error, Worker unresponsive |
 | **Storage failures** | Quota exceeded, OPFS unavailable, IDB blocked |
+| **Capability failures** | Device memory < 1GB, benchmark too slow |
 | **Network failures** | Offline, CDN unreachable, backend unreachable |
 
 ### Response Matrix
@@ -181,6 +200,7 @@ This state feeds into the WASM engine as input features alongside the catalog da
 | SQLite query error | Route to backend fallback | Re-download catalog on next sync |
 | Quota exceeded | Evict oldest artifacts, degrade gracefully | Reduce catalog scope in future syncs |
 | Offline | Serve from cached artifacts | Resume sync when online |
+| Device capability insufficient | Skip WASM download + Compute Worker, route to backend | Re-detect on next session or SDK update |
 | Backend fallback unreachable | Return degraded results (popular items from cached catalog) | Retry backend on next request |
 
 ### Degradation Ladder
@@ -189,7 +209,7 @@ The system degrades gracefully through these levels:
 
 1. **Full local** — WASM engine + fresh catalog + full personalization. *(Ideal state)*
 2. **Stale local** — WASM engine + stale catalog. *(Manifest unreachable, but cached data available)*
-3. **Backend fallback** — Server-side recommendations. *(Local engine unavailable)*
+3. **Backend fallback** — Server-side recommendations. *(Local engine unavailable or device capability insufficient)*
 4. **Degraded fallback** — Popular items from cached catalog. *(Both engine and backend unavailable)*
 5. **No recommendations** — Empty state. *(No cached data, no network)*
 
@@ -220,6 +240,7 @@ The manifest contains a `kill_switch` boolean. When `true`:
 | `catalog.version` | Gauge | Current catalog version hash |
 | `catalog.sync` | Counter | Sync operations (labeled: `snapshot`, `delta`, `fail`) |
 | `storage.usage` | Gauge | Bytes used in OPFS + IDB |
+| `capability.tier` | Gauge | Device capability tier: `high`, `medium`, `insufficient` |
 | `event.uplink` | Counter | Events sent (labeled: `success`, `fail`, `sampled_out`) |
 
 ### Collection
@@ -330,20 +351,9 @@ See the [PRD Glossary](PRD.md#12-glossary) for shared terms. Additional architec
 | **Shadow load** | Loading a new engine version alongside the active one for testing before activation |
 | **VFS** | Virtual File System — the abstraction SQLite uses to interact with OPFS |
 
-### B. Browser Compatibility Matrix
+### B. Browser Compatibility
 
-| Feature | Chrome | Firefox | Safari | Edge |
-|---------|--------|---------|--------|------|
-| WASM | 57+ | 52+ | 11+ | 16+ |
-| Dedicated Workers | 4+ | 3.5+ | 4+ | 12+ |
-| Service Workers | 40+ | 44+ | 11.1+ | 17+ |
-| OPFS | 86+ | 111+ | 16.4+ | 86+ |
-| IndexedDB | 24+ | 16+ | 10+ | 12+ |
-| Cache API | 40+ | 39+ | 11.1+ | 16+ |
-| `sendBeacon` | 39+ | 31+ | 11.1+ | 14+ |
-| WASM Threads | 74+ | 79+ | 16.4+ | 79+ |
-
-**Minimum target**: Chrome 90+, Firefox 100+, Safari 16.4+, Edge 90+
+**Minimum browser targets**: Chrome 90+, Firefox 100+, Safari 16.4+, Edge 90+. See [TECH_SPEC Appendix C](TECH_SPEC.md#c-browser-compatibility--api-fallbacks) for the full compatibility matrix and API fallback details.
 
 ### C. Estimated Artifact Sizes
 

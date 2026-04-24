@@ -9,6 +9,8 @@
 
 ---
 
+> **TLDR** — **SDK API**: `init()` detects device capability and boots workers, `getRecommendations()` returns `RecoResponse` with `source: "local" | "backend" | "degraded"`, `reportInteraction()` queues events, `destroy()` tears down. **Hybrid Router**: check kill switch → check device capability → check engine readiness → race local inference against timeout → fall back to backend. **Storage**: OPFS holds SQLite catalog + WASM binary; IndexedDB stores manifest, user state, event queue, sync metadata; Cache API handles HTTP artifacts. **Performance budgets**: cold start < 3s, warm inference p95 < 10ms, WASM < 2MB gzipped, peak memory < 128MB, zero main-thread blocking. **Events**: 13 event types (interactions + system + metrics) batched ≤ 50 events / 64KB, uplinked via `fetch` or `sendBeacon`, deterministic per-device sampling.
+
 ## 1. Technical Overview
 
 ### Stack Summary
@@ -38,12 +40,20 @@ function route(request: RecoRequest): RecoResponse
     if kill_switch is active:
         return backend_fallback(request)
 
+    if capability_tier is "insufficient":
+        emit_event(FALLBACK, reason: "capability_blocked")
+        return backend_fallback(request)
+
     if engine_status is not READY:
         return backend_fallback(request)
 
+    effective_timeout = capability_tier is "medium"
+        ? min(request.timeout ?? 200, 500)
+        : request.timeout ?? 200
+
     result = await_with_timeout(
         local_inference(request),
-        timeout_ms = request.timeout ?? 200
+        timeout_ms = effective_timeout
     )
 
     if result is success:
@@ -76,7 +86,7 @@ interface RecoResponse {
   /** Where the recommendation was generated */
   source: "local" | "backend" | "degraded";
   /** Engine version hash (if source is "local") */
-  engineVersion?: string;
+  engineVersion: string | null;
   /** Time taken in ms */
   latencyMs: number;
   /** Request trace ID for observability */
@@ -101,6 +111,7 @@ interface RecoItem {
 | Local inference exceeds timeout | Cancel Worker task, return backend fallback |
 | Compute Worker unresponsive (no heartbeat for 5s) | Terminate and restart Worker, return backend fallback |
 | Backend fallback also fails | Return degraded result (popular items from cached catalog) |
+| Device capability insufficient | Skip WASM artifact download and Compute Worker creation, route all to backend | Re-detect on next session or SDK update |
 | All paths fail | Return empty `RecoResponse` with `source: "degraded"` and `items: []` |
 
 ---
@@ -290,12 +301,13 @@ type WorkerResponse =
 
 interface RecoResultPayload {
   items: Array<{ itemId: string; score: number; reason?: string }>;
+  /** Engine version hash — always present since results only come from the engine */
   engineVersion: string;
   inferenceTimeMs: number;
 }
 
 interface EngineStatus {
-  state: "INITIALIZING" | "READY" | "ERROR" | "SWAPPING";
+  state: "INITIALIZING" | "READY" | "ERROR" | "SWAPPING" | "CAPABILITY_BLOCKED";
   engineVersion: string | null;
   catalogVersion: string | null;
   memoryUsageMb: number;
@@ -446,13 +458,15 @@ The `UserLocalState` is the bridge between stored interaction history and the WA
 The catalog is a read-only SQLite database with the following schema:
 
 ```sql
+PRAGMA user_version = 1;
+
 CREATE TABLE products (
     item_id     TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
     category_id TEXT NOT NULL,
     price       REAL NOT NULL,
     image_url   TEXT,
-    -- Feature vector for scoring (packed float32 array, hex-encoded)
+    -- Feature vector for scoring (packed little-endian float32 array, raw binary)
     features    BLOB NOT NULL,
     -- Popularity score (pre-computed, 0-1)
     popularity  REAL NOT NULL DEFAULT 0,
@@ -474,6 +488,37 @@ CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_popularity ON products(popularity DESC);
 CREATE INDEX idx_products_in_stock ON products(in_stock) WHERE in_stock = 1;
 ```
+
+#### Pluggability & Dataset Agnosticism
+
+The catalog schema is **dataset-agnostic** — any product set conforming to the `products` and `categories` tables works. The `features` BLOB column accepts embedding vectors of **any dimensionality**; the engine reads the expected dimension from the config JSON (`engine_config`), not from the schema.
+
+EdgeReco is not tightly coupled to any specific code or data. The platform's stable contracts — the client SDK API (`RecoRequest`/`RecoResponse`), the backend REST API (`POST /v1/recommendations`), the storage schema, and the WASM engine ABI (`reco_query`) — are all generic. Integrators swap in their own product catalog, embedding model, scoring engine, and training pipeline without modifying platform code. Deploying a new algorithm or dataset is a CDN artifact publish, not a code change.
+
+#### Prototype Reference Dataset
+
+The personalization prototype uses the following dataset as a concrete example:
+
+| Field | Value |
+|-------|-------|
+| **Dataset** | Amazon Reviews 2023 — All Beauty |
+| **Source** | [`McAuley-Lab/Amazon-Reviews-2023`](https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023) (HuggingFace, `raw_meta_All_Beauty` subset) |
+| **Fallback source** | [`milistu/AMAZON-Products-2023`](https://huggingface.co/datasets/milistu/AMAZON-Products-2023) |
+| **Approximate size** | ~117K products |
+| **Local cache path** | `backend/demo-service/data/amazon_products.parquet` |
+| **Embedding model** | `all-MiniLM-L6-v2` (SentenceTransformers), 384-dimensional vectors |
+
+**Field mapping to catalog schema:**
+
+| Parquet field | Catalog column | Notes |
+|--------------|----------------|-------|
+| `item_id` | `products.item_id` | ASIN identifier |
+| `title` | `products.title` | Product title |
+| `description` | — | Concatenated into embedding input |
+| `category` | `categories.name` | Leaf category |
+| `main_category` | `categories.parent_id` | Top-level category |
+| `image_url` | `products.image_url` | First image URL |
+| *(computed)* | `products.features` | 384-dim float32 BLOB from `all-MiniLM-L6-v2` over `title + description` |
 
 ### Delta Patch Binary Format
 
@@ -514,6 +559,7 @@ Offset  Size     Field
 {
   "schema_version": 1,
   "engine_config": {
+    "feature_dimensions": 384,
     "num_candidates": 100,
     "num_results": 20,
     "diversity_factor": 0.3,
@@ -540,100 +586,15 @@ Offset  Size     Field
 
 Config updates are **additive-only** within a major version — new fields may be added, existing fields retain their meaning. A `schema_version` bump indicates a breaking change requiring a matching engine version.
 
+> **Note**: `feature_dimensions` is dataset-dependent; the prototype value of `384` matches the `all-MiniLM-L6-v2` embedding model. Integrators set this to match their chosen embedding dimensionality.
+
 ---
 
 ## 7. Manifest Design
 
-### Full JSON Schema
+### Manifest Structure
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "required": ["schema_version", "version", "engine", "catalog", "config", "kill_switch"],
-  "properties": {
-    "schema_version": {
-      "type": "integer",
-      "description": "Manifest schema version. Current: 1"
-    },
-    "version": {
-      "type": "string",
-      "description": "Manifest version identifier (monotonically increasing, e.g., ISO timestamp)"
-    },
-    "engine": {
-      "type": "object",
-      "required": ["hash", "url", "semver"],
-      "properties": {
-        "hash": { "type": "string", "description": "SHA256 hex of WASM binary" },
-        "url": { "type": "string", "description": "CDN URL for WASM binary" },
-        "semver": { "type": "string", "description": "Semantic version of the engine" },
-        "min_config_schema": { "type": "integer", "description": "Minimum config schema_version this engine supports" }
-      }
-    },
-    "catalog": {
-      "type": "object",
-      "required": ["hash", "url"],
-      "properties": {
-        "hash": { "type": "string", "description": "SHA256 hex of current catalog SQLite file" },
-        "url": { "type": "string", "description": "CDN URL for full catalog snapshot" },
-        "delta_chain": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["from_hash", "to_hash", "url", "size_bytes"],
-            "properties": {
-              "from_hash": { "type": "string" },
-              "to_hash": { "type": "string" },
-              "url": { "type": "string" },
-              "size_bytes": { "type": "integer" }
-            }
-          },
-          "description": "Ordered delta patches. Client walks chain from its current hash to the target."
-        }
-      }
-    },
-    "config": {
-      "type": "object",
-      "required": ["hash", "url"],
-      "properties": {
-        "hash": { "type": "string" },
-        "url": { "type": "string" }
-      }
-    },
-    "canary": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean", "default": false },
-        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
-        "engine": {
-          "type": "object",
-          "properties": {
-            "hash": { "type": "string" },
-            "url": { "type": "string" },
-            "semver": { "type": "string" }
-          }
-        }
-      }
-    },
-    "kill_switch": {
-      "type": "boolean",
-      "description": "When true, all clients skip local inference and use backend fallback"
-    },
-    "min_client_version": {
-      "type": "string",
-      "description": "Minimum SDK version required. Older clients must update before using local inference."
-    },
-    "event_sampling": {
-      "type": "object",
-      "properties": {
-        "interaction_rate": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.1 },
-        "metric_rate": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.01 },
-        "error_rate": { "type": "number", "minimum": 0, "maximum": 1, "default": 1.0 }
-      }
-    }
-  }
-}
-```
+The manifest follows the `ManifestRecord` TypeScript interface defined in [Section 5 — Storage Layer](#5-storage-layer). The manifest JSON uses `snake_case` keys matching the CDN representation; the `ManifestRecord` interface uses `camelCase` as consumed by the SDK. Required top-level fields: `schema_version`, `version`, `engine`, `catalog`, `config`, `kill_switch`.
 
 ### Example Manifest
 
@@ -709,6 +670,7 @@ enum EventType {
   DISMISS = "dismiss",
 
   // System events
+  CAPABILITY_DETECTED = "capability_detected",
   ENGINE_LOADED = "engine_loaded",
   ENGINE_SWAP = "engine_swap",
   SMOKE_TEST = "smoke_test",
@@ -741,6 +703,26 @@ interface EdgeEvent {
   data: Record<string, unknown>;
 }
 ```
+
+### Event Data Schemas
+
+Each event type requires specific fields in the `data` payload:
+
+| Event Type | Required `data` Fields |
+|-----------|----------------------|
+| `impression` | `itemIds: string[]`, `position?: number` |
+| `click` | `itemId: string`, `position: number` |
+| `add_to_cart` | `itemId: string`, `quantity?: number` |
+| `purchase` | `itemIds: string[]`, `totalValue?: number` |
+| `dismiss` | `itemId: string` |
+| `capability_detected` | `tier: string`, `cores: number`, `memoryGb: number`, `benchmarkMs: number` |
+| `engine_loaded` | `version: string`, `loadTimeMs: number` |
+| `engine_swap` | `fromVersion: string`, `toVersion: string`, `result: string` |
+| `smoke_test` | `version: string`, `pass: boolean`, `details: string` |
+| `fallback` | `reason: string` |
+| `error` | `code: string`, `message: string`, `component: string` |
+| `latency` | `source: string`, `durationMs: number`, `placement: string` |
+| `storage_usage` | `totalBytes: number`, `opfsBytes: number`, `idbBytes: number` |
 
 ### EventBatch Format
 
@@ -796,6 +778,8 @@ Sampling decision: `hash(deviceId + eventType + hourBucket) % 1000 < rate * 1000
 
 ## 9. API Contracts
 
+> **Serialization convention**: The TypeScript SDK uses `camelCase` property names (e.g., `contextItemIds`, `engineVersion`). The backend REST API uses `snake_case` (e.g., `context_item_ids`, `engine_version`). The SDK handles conversion transparently — callers always use camelCase.
+
 ### Client-Facing SDK API
 
 ```typescript
@@ -842,6 +826,21 @@ interface InitConfig {
   debug?: boolean;
   /** Consent for event uplink (default: false) */
   consentGranted?: boolean;
+  /** Override capability detection. "local" forces local, "backend" forces backend-only. */
+  capabilityOverride?: "local" | "backend";
+  /** Custom thresholds for capability detection (merged with defaults). */
+  capabilityThresholds?: Partial<CapabilityThresholds>;
+}
+
+interface CapabilityThresholds {
+  /** Minimum CPU cores (default: 2) */
+  minCores: number;
+  /** Minimum device memory in GB, Chromium only (default: 1) */
+  minMemoryGb: number;
+  /** Benchmark ceiling in ms — above this = "insufficient" (default: 150) */
+  benchmarkCeilingMs: number;
+  /** Benchmark floor in ms — below this = "high" (default: 50) */
+  benchmarkFloorMs: number;
 }
 
 interface InteractionEvent {
@@ -1041,6 +1040,7 @@ Within a `schema_version`:
 | Peak memory usage (WASM + SQLite) | < 128 MB | `performance.measureUserAgentSpecificMemory()` or Worker `EngineStatus.memoryUsageMb` |
 | Total storage footprint | < 50 MB | `navigator.storage.estimate()` |
 | Event uplink payload per batch | < 64 KB | Serialized JSON size |
+| Capability detection | < 51ms | Tier 1+2 sync (<1ms) + Tier 3 async (10-50ms, only if borderline) |
 | Main thread blocking | < 1ms per SDK call | No synchronous WASM calls on main thread (all via Worker postMessage) |
 
 ---
@@ -1090,7 +1090,6 @@ See the [PRD Glossary](PRD.md#12-glossary) and [Architecture Glossary](ARCHITECT
 |------|------------|
 | **AOT** | Ahead-of-Time compilation — compiling WASM to native code before execution (used on mobile) |
 | **postMessage** | The browser API for sending messages between threads (main ↔ Worker) |
-| **VFS** | Virtual File System — SQLite's abstraction layer for file I/O, mapped to OPFS on web |
 | **wa-sqlite** | A SQLite distribution compiled to WASM, suitable for browser use with OPFS VFS |
 | **wasm-bindgen** | Rust toolchain for generating JS/WASM interop bindings |
 | **wasm-pack** | Build tool for compiling Rust to WASM with npm-compatible packaging |
@@ -1106,7 +1105,22 @@ function content_addressed_url(base: string, type: string, binary: Uint8Array): 
 
 All artifact URLs follow this pattern. The hash is computed over the raw (uncompressed) artifact bytes.
 
-### C. Browser API Compatibility Notes
+### C. Browser Compatibility & API Fallbacks
+
+**Minimum target**: Chrome 90+, Firefox 100+, Safari 16.4+, Edge 90+
+
+| Feature | Chrome | Firefox | Safari | Edge |
+|---------|--------|---------|--------|------|
+| WASM | 57+ | 52+ | 11+ | 16+ |
+| Dedicated Workers | 4+ | 3.5+ | 4+ | 12+ |
+| Service Workers | 40+ | 44+ | 11.1+ | 17+ |
+| OPFS | 86+ | 111+ | 16.4+ | 86+ |
+| IndexedDB | 24+ | 16+ | 10+ | 12+ |
+| Cache API | 40+ | 39+ | 11.1+ | 16+ |
+| `sendBeacon` | 39+ | 31+ | 11.1+ | 14+ |
+| WASM Threads | 74+ | 79+ | 16.4+ | 79+ |
+
+**API Fallbacks**:
 
 | API | Polyfill / Fallback |
 |-----|-------------------|

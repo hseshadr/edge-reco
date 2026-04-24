@@ -13,6 +13,8 @@
 
 EdgeReco moves recommendation inference from backend servers to the user's browser. A WebAssembly-compiled engine, fed by CDN-distributed product catalogs and model artifacts, generates personalized recommendations locally — achieving sub-10ms latency, offline capability, and 80%+ reduction in backend recommendation calls. Interaction events flow back to the data pipeline to close the personalization loop without exposing individual user data.
 
+EdgeReco is a **platform**, not a vertical product. The SDK API, REST API, storage schema, and engine ABI are stable contracts — integrators swap in their own product catalog, embedding model, scoring engine, and training pipeline without modifying platform code. Deploying a new algorithm or dataset is a CDN artifact publish, not a code change.
+
 ---
 
 ## 2. Problem Statement
@@ -231,32 +233,12 @@ The event uplink pipeline transmits **anonymous, aggregated interaction signals*
 
 ## 10. Rollout Strategy
 
-### Phase 0 — Shadow Mode (Internal)
-
-- Deploy full client stack to internal/staging environments.
-- Hybrid Router sends requests to **both** local engine and backend; only backend result shown to user.
-- Compare local vs. backend results for quality parity.
-- **Kill switch available.**
-
-### Phase 1 — Canary (1-5% Production Traffic)
-
-- Manifest canary flag directs a small percentage of real users to local inference.
-- Monitor latency, error rates, CTR, and revenue metrics against control group.
-- **Kill switch available.** Instant rollback to 0% canary via manifest update.
-
-### Phase 2 — Controlled Rollout (5-50%)
-
-- Gradually increase canary percentage based on Phase 1 results.
-- Introduce delta-sync catalogs and engine hot-swap in production.
-- Validate storage quota behavior across browser populations.
-- **Kill switch available.**
-
-### Phase 3 — General Availability (50-100%)
-
-- Local inference becomes the default path.
-- Backend fallback remains permanently for failure cases, unsupported browsers, and kill-switch scenarios.
-- Offline mode enabled by default.
-- **Kill switch available** — always.
+| Phase | Audience | Behavior | Key Conditions |
+|-------|----------|----------|----------------|
+| **0 — Shadow** | Internal / staging | Both local + backend execute; only backend shown. Compare quality parity. | Kill switch available |
+| **1 — Canary** | 1–5% production | Manifest canary flag routes subset to local inference. Monitor latency, error rates, CTR, revenue vs. control. | Kill switch available; instant rollback via manifest |
+| **2 — Controlled** | 5–50% production | Gradually increase canary %. Introduce delta-sync + hot-swap in production. Validate storage quota across browsers. | Kill switch available |
+| **3 — GA** | 50–100% production | Local inference is default path. Backend fallback permanent for failures, unsupported browsers, kill-switch. Offline mode enabled. | Kill switch always available |
 
 ---
 
@@ -269,7 +251,7 @@ The event uplink pipeline transmits **anonymous, aggregated interaction signals*
 | OQ3 | How do we handle users who aggressively clear browser storage? | Open Question | Pending design |
 | R1 | Browser vendors change OPFS or WASM APIs in breaking ways | Risk | Mitigated by abstraction layer + fallback |
 | R2 | Catalog size exceeds practical storage limits for large retailers | Risk | Mitigated by catalog segmentation strategy (TBD) |
-| R3 | WASM cold-start exceeds 3s budget on low-end devices | Risk | Mitigated by backend fallback + progressive enhancement |
+| R3 | WASM cold-start exceeds 3s budget on low-end devices | Risk | Mitigated by three-tier hardware capability detection at init (API checks + micro-benchmark), backend fallback, and progressive enhancement |
 | R4 | CDN cache poisoning delivers malicious WASM binary | Risk | Mitigated by content-addressed URLs + integrity verification |
 | R5 | Users on Safari < 16.4 have no OPFS support | Risk | Mitigated by IndexedDB fallback path |
 

@@ -1,0 +1,92 @@
+direction: down
+
+title: {
+  label: MVP Phase Dependencies
+  near: top-center
+  style: {
+    font-size: 24
+    bold: true
+    underline: false
+  }
+}
+
+p1: "Phase 1\nProject Scaffolding & CI" {
+  style.fill: "#e8f4f8"
+  style.font-size: 13
+}
+
+p2: "Phase 2\nStorage Abstractions" {
+  style.fill: "#e8f4f8"
+  style.font-size: 13
+}
+
+p3: "Phase 3\nService Worker Shell" {
+  style.fill: "#f0e8f8"
+  style.font-size: 13
+}
+
+p4: "Phase 4\nManifest Manager" {
+  style.fill: "#f0e8f8"
+  style.font-size: 13
+}
+
+p5: "Phase 5\nWASM Engine Core (Rust)" {
+  style.fill: "#e8f8e8"
+  style.font-size: 13
+}
+
+p6: "Phase 6\nCompute Worker & SQLite" {
+  style.fill: "#e8f8e8"
+  style.font-size: 13
+}
+
+p7: "Phase 7\nHybrid Router & SDK API" {
+  style.fill: "#f8f0e8"
+  style.font-size: 13
+}
+
+p8: "Phase 8\nArtifact Distribution\n& Delta Sync" {
+  style.fill: "#f0e8f8"
+  style.font-size: 13
+}
+
+p9: "Phase 9\nEngine Hot-Swap\n& Smoke Test" {
+  style.fill: "#f8e8e8"
+  style.font-size: 13
+}
+
+p10: "Phase 10\nEvent System & Uplink" {
+  style.fill: "#f8f0e8"
+  style.font-size: 13
+}
+
+p11: "Phase 11\nObservability, Health\n& Hardening" {
+  style.fill: "#f8e8e8"
+  style.font-size: 13
+}
+
+p1 -> p2: storage foundation
+p1 -> p5: Rust toolchain
+
+p2 -> p3: Cache API + OPFS
+p2 -> p6: IDB + OPFS
+p2 -> p10: IDB event queue
+
+p3 -> p4: SW lifecycle
+p3 -> p8: Cache API
+
+p4 -> p8: manifest diff
+p4 -> p9: version detection
+
+p5 -> p6: WASM binary
+
+p3 -> p7: SW registration
+p6 -> p7: inference path
+
+p7 -> p9: engine readiness
+p7 -> p11: health API
+
+p8 -> p9: artifact cache
+
+p9 -> p11: swap metrics
+p10 -> p11: uplink metrics
