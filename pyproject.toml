@@ -1,0 +1,71 @@
+[project]
+name = "edgereco"
+version = "0.1.0"
+description = "Edge product discovery engine — hybrid search + session-aware recommendations"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "polars>=1.0",
+  "faiss-cpu>=1.9",
+  "sentence-transformers>=3.3",
+  "rank-bm25>=0.2",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "typer>=0.15",
+  "httpx>=0.27",
+  "numpy>=2.0",
+  "structlog>=24.4",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "pytest-bdd>=8.1",
+  "mypy>=1.11",
+  "ruff>=0.6",
+]
+
+[tool.uv]
+package = true
+
+[project.scripts]
+edgereco = "edgereco.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+pythonpath = ["src"]
+bdd_features_base_dir = "features/"
+markers = [
+  "bdd: BDD acceptance tests",
+  "integration: integration tests",
+  "e2e: end-to-end tests",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["edgereco"]
+mypy_path = "src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF"]
+ignore = ["S101"]  # allow assert in tests
+
+[tool.coverage.run]
+source = ["edgereco"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
