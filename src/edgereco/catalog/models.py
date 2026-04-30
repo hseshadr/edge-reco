@@ -1,4 +1,5 @@
 """Data models for EdgeReco product catalog."""
+
 from __future__ import annotations
 
 from typing import Literal

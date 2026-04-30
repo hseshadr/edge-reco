@@ -1,4 +1,5 @@
 """Step impls for features/product_search.feature."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -55,7 +56,7 @@ def _search(
     ctx["results"] = reciprocal_rank_fusion(keyword, vector, k=60)
 
 
-@when(parsers.parse("I search for \"{query}\" within the {category} category"))
+@when(parsers.parse('I search for "{query}" within the {category} category'))
 def _search_with_filter(
     ctx: dict[str, Any],
     query: str,

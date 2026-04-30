@@ -1,4 +1,5 @@
 """Rerank search results using session profile."""
+
 from __future__ import annotations
 
 from edgereco.catalog.models import SearchResult, SessionProfile

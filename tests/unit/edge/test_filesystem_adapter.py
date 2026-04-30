@@ -6,8 +6,10 @@ from edgereco.edge.adapters.filesystem import FilesystemAdapter
 
 def test_fetch_manifest(tmp_path: Path) -> None:
     manifest_data = {
-        "catalog_id": "test", "version": "v1",
-        "embedding_model": "model", "embedding_dim": 384,
+        "catalog_id": "test",
+        "version": "v1",
+        "embedding_model": "model",
+        "embedding_dim": 384,
         "files": [{"path": "products.jsonl", "file_type": "products", "checksum": "sha256:abc"}],
     }
     (tmp_path / "manifest.json").write_text(json.dumps(manifest_data))

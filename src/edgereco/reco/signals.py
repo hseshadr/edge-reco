@@ -1,4 +1,5 @@
 """Session signal tracking and profile updates."""
+
 from __future__ import annotations
 
 from edgereco.catalog.models import EventType, Product, SessionProfile
@@ -6,10 +7,10 @@ from edgereco.catalog.models import EventType, Product, SessionProfile
 RECENTLY_VIEWED_CAP = 50
 
 INTERACTION_WEIGHTS: dict[EventType, dict[str, float]] = {
-    "click":    {"category": 0.10, "tag": 0.05, "brand": 0.08},
-    "view":     {"category": 0.02, "tag": 0.01, "brand": 0.02},
+    "click": {"category": 0.10, "tag": 0.05, "brand": 0.08},
+    "view": {"category": 0.02, "tag": 0.01, "brand": 0.02},
     "favorite": {"category": 0.20, "tag": 0.10, "brand": 0.15},
-    "cart":     {"category": 0.25, "tag": 0.12, "brand": 0.20},
+    "cart": {"category": 0.25, "tag": 0.12, "brand": 0.20},
 }
 
 

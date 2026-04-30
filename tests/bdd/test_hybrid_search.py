@@ -1,4 +1,5 @@
 """Step impls for features/hybrid_search.feature."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -11,10 +11,12 @@ def _result(
 ) -> SearchResult:
     return SearchResult(product=_product(pid, category, pop), score=score)
 
+
 def test_rerank_with_empty_profile_preserves_order() -> None:
     results = [_result("a", 0.9), _result("b", 0.7), _result("c", 0.5)]
     reranked = rerank(results, SessionProfile())
     assert len(reranked) == 3
+
 
 def test_rerank_boosts_matching_category() -> None:
     # formal: 0.40*0.6 = 0.24; electronics: 0.40*0.2 + 0.20*1.0 = 0.28 → electronics wins
@@ -25,6 +27,7 @@ def test_rerank_boosts_matching_category() -> None:
     profile = SessionProfile(category_affinity={"Electronics": 1.0})
     reranked = rerank(results, profile)
     assert reranked[0].product.id == "electronics"
+
 
 def test_rerank_applies_repetition_penalty() -> None:
     results = [_result("a", 0.9, pop=0.9), _result("b", 0.7, pop=0.7)]

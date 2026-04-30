@@ -1,4 +1,5 @@
 """HTTP catalog adapter for edge/CDN servers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,8 +28,10 @@ class HttpAdapter:
     def fetch_file(self, base_url: str, path: str, local_path: Path) -> None:
         url = urljoin(base_url.rstrip("/") + "/", path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(timeout=self._timeout, transport=self._transport) as client, \
-             client.stream("GET", url) as response:
+        with (
+            httpx.Client(timeout=self._timeout, transport=self._transport) as client,
+            client.stream("GET", url) as response,
+        ):
             response.raise_for_status()
             with local_path.open("wb") as f:
                 for chunk in response.iter_bytes(chunk_size=8192):

@@ -1,4 +1,5 @@
 """edgereco preprocess --category flag overrides the default 5-category set."""
+
 from __future__ import annotations
 
 import json

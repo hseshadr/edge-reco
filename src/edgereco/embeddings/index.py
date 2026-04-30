@@ -1,4 +1,5 @@
 """FAISS-backed vector index for product similarity search."""
+
 from __future__ import annotations
 
 import json

@@ -1,4 +1,5 @@
 """POST /events rejects unknown event_type values at the Pydantic boundary."""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient

@@ -1,4 +1,5 @@
 """End-to-end test: sync → index → search → click → recommend."""
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ def origin_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     shutil.copy2(FIXTURES_DIR / "mini_catalog.jsonl", origin / "products.jsonl")
 
     import hashlib
+
     products_bytes = (origin / "products.jsonl").read_bytes()
     checksum = "sha256:" + hashlib.sha256(products_bytes).hexdigest()
     manifest = {
@@ -33,12 +35,14 @@ def origin_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "version": "v1",
         "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
         "embedding_dim": 384,
-        "files": [{
-            "path": "products.jsonl",
-            "file_type": "products",
-            "checksum": checksum,
-            "rows": 50,
-        }],
+        "files": [
+            {
+                "path": "products.jsonl",
+                "file_type": "products",
+                "checksum": checksum,
+                "rows": 50,
+            }
+        ],
     }
     (origin / "manifest.json").write_text(json.dumps(manifest))
     return origin

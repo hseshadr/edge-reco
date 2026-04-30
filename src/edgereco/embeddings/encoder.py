@@ -1,4 +1,5 @@
 """Encode product text into embedding vectors using sentence-transformers."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
@@ -29,13 +30,17 @@ class ProductEncoder:
     def encode(self, products: list[Product]) -> NDArray[np.float32]:
         texts = [_product_text(p) for p in products]
         embeddings: NDArray[np.float32] = self._model.encode(
-            texts, convert_to_numpy=True, normalize_embeddings=True,
+            texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
         )
         return embeddings.astype(np.float32)
 
     def encode_query(self, query: str) -> NDArray[np.float32]:
         embeddings: NDArray[np.float32] = self._model.encode(
-            [query], convert_to_numpy=True, normalize_embeddings=True,
+            [query],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
         )
         return cast(NDArray[np.float32], embeddings[0].astype(np.float32))
 

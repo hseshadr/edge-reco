@@ -1,4 +1,5 @@
 """Search endpoint: hybrid BM25 + FAISS + RRF, optional session rerank."""
+
 from __future__ import annotations
 
 from typing import Annotated, Any

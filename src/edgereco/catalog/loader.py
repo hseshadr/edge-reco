@@ -1,4 +1,5 @@
 """Load product catalogs from JSONL."""
+
 from __future__ import annotations
 
 from pathlib import Path

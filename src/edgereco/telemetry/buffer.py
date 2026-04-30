@@ -1,4 +1,5 @@
 """Capped in-memory event buffer."""
+
 from __future__ import annotations
 
 from collections import deque

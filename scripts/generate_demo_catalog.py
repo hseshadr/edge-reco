@@ -3,6 +3,7 @@
 Run: uv run python scripts/generate_demo_catalog.py
 Writes: examples/catalog/products.jsonl + examples/catalog/manifest.json
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -147,12 +148,14 @@ def main() -> None:
         version="2026-04-30T00:00:00Z",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=384,
-        files=[CatalogFile(
-            path="products.jsonl",
-            file_type="products",
-            checksum=checksum,
-            rows=len(products),
-        )],
+        files=[
+            CatalogFile(
+                path="products.jsonl",
+                file_type="products",
+                checksum=checksum,
+                rows=len(products),
+            )
+        ],
     )
     (OUT_DIR / "manifest.json").write_text(
         manifest.model_dump_json(indent=2),

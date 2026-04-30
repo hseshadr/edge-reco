@@ -1,4 +1,5 @@
 """BM25-based keyword search over products."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

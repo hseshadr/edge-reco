@@ -1,4 +1,5 @@
 """Typer CLI for EdgeReco — sync, index, serve, search, preprocess."""
+
 from __future__ import annotations
 
 import json
@@ -20,9 +21,7 @@ app = typer.Typer(name="edgereco", help="EdgeReco: edge product discovery engine
 def sync(
     manifest_url: Annotated[str, typer.Argument(help="URL or path to manifest.json")],
     cache_dir: Annotated[Path, typer.Argument(help="Local cache directory")],
-    http: Annotated[
-        bool, typer.Option("--http", help="Force HTTP adapter")
-    ] = False,
+    http: Annotated[bool, typer.Option("--http", help="Force HTTP adapter")] = False,
     filesystem: Annotated[
         bool, typer.Option("--filesystem", help="Force filesystem adapter")
     ] = False,
@@ -59,10 +58,7 @@ def sync(
         client=adapter,
         file_base_url=file_base_url,
     )
-    typer.echo(
-        f"Synced catalog '{manifest.catalog_id}' v{manifest.version} "
-        f"→ {cache_dir}"
-    )
+    typer.echo(f"Synced catalog '{manifest.catalog_id}' v{manifest.version} → {cache_dir}")
 
 
 # ---------------------------------------------------------------------------
@@ -127,9 +123,7 @@ def serve(  # pragma: no cover
 
     container = ServiceContainer.from_dirs(cache_dir, index_dir)
     fastapi_app = create_app(container)
-    typer.echo(
-        f"Serving on http://{host}:{port}  (catalog: {len(container.catalog)} products)"
-    )
+    typer.echo(f"Serving on http://{host}:{port}  (catalog: {len(container.catalog)} products)")
     uvicorn.run(fastapi_app, host=host, port=port)
 
 
@@ -144,12 +138,8 @@ def search(
     cache_dir: Annotated[Path, typer.Argument(help="Cache directory with products.jsonl")],
     index_dir: Annotated[Path, typer.Argument(help="Directory with vector/ index")],
     limit: Annotated[int, typer.Option(help="Number of results")] = 10,
-    category: Annotated[
-        str | None, typer.Option(help="Filter by category")
-    ] = None,
-    output_json: Annotated[
-        bool, typer.Option("--json", help="Output as JSON")
-    ] = False,
+    category: Annotated[str | None, typer.Option(help="Filter by category")] = None,
+    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Search the catalog and print results."""
     from edgereco.api.deps import ServiceContainer
@@ -185,8 +175,7 @@ def search(
         typer.echo("-" * 72)
         for r in results:
             typer.echo(
-                f"{r.product.id:<12} {r.score:>7.4f}  "
-                f"{r.product.category:<18}  {r.product.title}"
+                f"{r.product.id:<12} {r.score:>7.4f}  {r.product.category:<18}  {r.product.title}"
             )
 
 
@@ -213,10 +202,7 @@ def preprocess(
         list[str] | None,
         typer.Option(
             "--category",
-            help=(
-                "Top-level category to keep (repeatable). "
-                "Defaults to the 5 demo categories."
-            ),
+            help=("Top-level category to keep (repeatable). Defaults to the 5 demo categories."),
         ),
     ] = None,
 ) -> None:
@@ -233,10 +219,7 @@ def preprocess(
     typer.echo(f"Reading {input_path}...")
     df = pl.read_csv(input_path)
 
-    pop_expr = (
-        pl.col("stars").cast(pl.Float64)
-        * (pl.col("reviews").cast(pl.Float64) + 1).log()
-    )
+    pop_expr = pl.col("stars").cast(pl.Float64) * (pl.col("reviews").cast(pl.Float64) + 1).log()
     df = df.with_columns([pop_expr.alias("pop_raw")])
     pop_min = float(df["pop_raw"].min() or 0.0)  # type: ignore[arg-type]
     pop_max = float(df["pop_raw"].max() or 1.0)  # type: ignore[arg-type]
@@ -276,7 +259,5 @@ def preprocess(
         embedding_dim=384,
         files=[catalog_file],
     )
-    (output_dir / "manifest.json").write_text(
-        manifest.model_dump_json(indent=2), encoding="utf-8"
-    )
+    (output_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
     typer.echo(f"Wrote {count} products to {out_path}")

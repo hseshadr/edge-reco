@@ -1,4 +1,5 @@
 """EventBuffer drops oldest events past maxlen."""
+
 from __future__ import annotations
 
 from edgereco.catalog.models import InteractionEvent

@@ -1,4 +1,5 @@
 """Events endpoint: ingest interaction events, update session profile."""
+
 from __future__ import annotations
 
 import logging
@@ -37,9 +38,7 @@ def post_events(
     return {"received": len(body.events)}
 
 
-def _updater(
-    product: Product, event_type: EventType
-) -> Callable[[SessionProfile], SessionProfile]:
+def _updater(product: Product, event_type: EventType) -> Callable[[SessionProfile], SessionProfile]:
     def update(profile: SessionProfile) -> SessionProfile:
         return apply_interaction(profile, product, event_type)
 

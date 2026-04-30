@@ -1,4 +1,5 @@
 """FastAPI dependency injection: ServiceContainer + get_container()."""
+
 from __future__ import annotations
 
 import uuid

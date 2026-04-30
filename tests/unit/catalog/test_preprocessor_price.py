@@ -1,4 +1,5 @@
 """amazon_row_to_product treats None as missing price; preserves 0.0."""
+
 from __future__ import annotations
 
 from typing import Any
