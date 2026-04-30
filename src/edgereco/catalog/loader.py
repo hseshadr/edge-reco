@@ -1,4 +1,4 @@
-"""Load product catalogs from various file formats."""
+"""Load product catalogs from JSONL."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,15 +16,4 @@ def load_jsonl(path: Path) -> list[Product]:
         line = line.strip()
         if line:
             products.append(Product.model_validate_json(line))
-    return products
-
-
-def load_csv(path: Path, *, limit: int | None = None) -> list[Product]:
-    """Load products from a CSV file using Polars for performance."""
-    import polars as pl
-
-    df = pl.read_csv(path, n_rows=limit)
-    products: list[Product] = []
-    for row in df.iter_rows(named=True):
-        products.append(Product.model_validate(row))
     return products
