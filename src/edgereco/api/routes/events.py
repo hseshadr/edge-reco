@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from edgereco.api.deps import ServiceContainer, get_container
+from edgereco.api.deps import ServiceContainer, get_container, get_session_id
 from edgereco.catalog.models import InteractionEvent
 from edgereco.reco.signals import apply_interaction
 
@@ -21,14 +20,10 @@ class EventsBody(BaseModel):
     events: list[InteractionEvent]
 
 
-def _session_id(x_session_id: Annotated[str | None, Header()] = None) -> str:
-    return x_session_id if x_session_id else str(uuid.uuid4())
-
-
 @router.post("/events")
 def post_events(
     body: EventsBody,
-    session_id: Annotated[str, Depends(_session_id)] = "",
+    session_id: Annotated[str, Depends(get_session_id)] = "",
     container: Annotated[ServiceContainer, Depends(get_container)] = ...,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     for event in body.events:

@@ -124,29 +124,12 @@ def serve(  # pragma: no cover
 
     from edgereco.api.app import create_app
     from edgereco.api.deps import ServiceContainer
-    from edgereco.catalog.loader import load_jsonl
-    from edgereco.embeddings.encoder import ProductEncoder
-    from edgereco.embeddings.index import VectorIndex
-    from edgereco.search.keyword import KeywordSearcher
-    from edgereco.search.vector import VectorSearcher
 
-    products = load_jsonl(cache_dir / "products.jsonl")
-    vector_index = VectorIndex.load(index_dir / "vector")
-    encoder = ProductEncoder()
-    keyword = KeywordSearcher.build(products)
-    vector = VectorSearcher(vector_index)
-    by_id = {p.id: p for p in products}
-
-    container = ServiceContainer(
-        catalog=products,
-        by_id=by_id,
-        keyword=keyword,
-        vector=vector,
-        encoder=encoder,
-    )
-
+    container = ServiceContainer.from_dirs(cache_dir, index_dir)
     fastapi_app = create_app(container)
-    typer.echo(f"Serving on http://{host}:{port}  (catalog: {len(products)} products)")
+    typer.echo(
+        f"Serving on http://{host}:{port}  (catalog: {len(container.catalog)} products)"
+    )
     uvicorn.run(fastapi_app, host=host, port=port)
 
 
@@ -170,29 +153,11 @@ def search(
 ) -> None:
     """Search the catalog and print results."""
     from edgereco.api.deps import ServiceContainer
-    from edgereco.catalog.loader import load_jsonl
     from edgereco.catalog.models import SearchResult, SessionProfile
-    from edgereco.embeddings.encoder import ProductEncoder
-    from edgereco.embeddings.index import VectorIndex
     from edgereco.reco.reranker import rerank
     from edgereco.search.hybrid import reciprocal_rank_fusion
-    from edgereco.search.keyword import KeywordSearcher
-    from edgereco.search.vector import VectorSearcher
 
-    products = load_jsonl(cache_dir / "products.jsonl")
-    vector_index = VectorIndex.load(index_dir / "vector")
-    encoder = ProductEncoder()
-    keyword = KeywordSearcher.build(products)
-    vector = VectorSearcher(vector_index)
-    by_id = {p.id: p for p in products}
-
-    container = ServiceContainer(
-        catalog=products,
-        by_id=by_id,
-        keyword=keyword,
-        vector=vector,
-        encoder=encoder,
-    )
+    container = ServiceContainer.from_dirs(cache_dir, index_dir)
 
     k = max(limit * 3, 30)
     keyword_hits = container.keyword.search(query, k=k)
@@ -202,7 +167,7 @@ def search(
 
     results: list[SearchResult] = []
     for pid, score in fused:
-        product = by_id.get(pid)
+        product = container.by_id.get(pid)
         if product is not None:
             results.append(SearchResult(product=product, score=score))
 

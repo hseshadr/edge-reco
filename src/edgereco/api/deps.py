@@ -1,9 +1,12 @@
 """FastAPI dependency injection: ServiceContainer + get_container()."""
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Annotated
 
-from fastapi import Request
+from fastapi import Header, Request
 
 from edgereco.api.sessions import SessionStore
 from edgereco.catalog.models import CatalogManifest, Product
@@ -48,6 +51,33 @@ class ServiceContainer:
             manifest=manifest,
         )
 
+    @classmethod
+    def from_dirs(cls, cache_dir: Path, index_dir: Path) -> ServiceContainer:
+        """Build a container from a synced cache dir and a pre-built index dir."""
+        from edgereco.catalog.loader import load_jsonl
+        from edgereco.catalog.manifest import parse_manifest
+
+        catalog = load_jsonl(cache_dir / "products.jsonl")
+        manifest = parse_manifest(cache_dir / "manifest.json")
+        encoder = ProductEncoder()
+        vector_index = VectorIndex.load(index_dir / "vector")
+        keyword = KeywordSearcher.build(catalog)
+        vector = VectorSearcher(vector_index)
+        by_id = {p.id: p for p in catalog}
+        return cls(
+            catalog=catalog,
+            by_id=by_id,
+            keyword=keyword,
+            vector=vector,
+            encoder=encoder,
+            manifest=manifest,
+        )
+
 
 def get_container(request: Request) -> ServiceContainer:
     return request.app.state.container  # type: ignore[no-any-return]
+
+
+def get_session_id(x_session_id: Annotated[str | None, Header()] = None) -> str:
+    """FastAPI dependency: return X-Session-Id header value or generate a new UUID."""
+    return x_session_id if x_session_id else str(uuid.uuid4())

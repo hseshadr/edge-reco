@@ -25,17 +25,36 @@ MINI_CATALOG = FIXTURES_DIR / "mini_catalog.jsonl"
 
 @pytest.fixture(scope="module")
 def index_dirs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    import hashlib
+
+    from edgereco.catalog.models import CatalogFile, CatalogManifest
+
     base = tmp_path_factory.mktemp("cli_cov")
     cache_dir = base / "cache"
     index_dir = base / "index"
     cache_dir.mkdir()
     shutil.copy2(MINI_CATALOG, cache_dir / "products.jsonl")
-    products = load_jsonl(cache_dir / "products.jsonl")
+    products_path = cache_dir / "products.jsonl"
+    products = load_jsonl(products_path)
+
+    # Write a minimal manifest.json so from_dirs can parse it
+    checksum = "sha256:" + hashlib.sha256(products_path.read_bytes()).hexdigest()
+    manifest = CatalogManifest(
+        catalog_id="test-catalog",
+        version="2026-04-24T00:00:00Z",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dim=384,
+        files=[CatalogFile(
+            path="products.jsonl", file_type="products", checksum=checksum, rows=len(products)
+        )],
+    )
+    (cache_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+
     encoder = ProductEncoder()
     embeddings = encoder.encode(products)
     vi = VectorIndex.build(embeddings, [p.id for p in products], dim=encoder.dim)
     vi.save(index_dir / "vector")
-    shutil.copy2(cache_dir / "products.jsonl", index_dir / "products.jsonl")
+    shutil.copy2(products_path, index_dir / "products.jsonl")
     return cache_dir, index_dir
 
 

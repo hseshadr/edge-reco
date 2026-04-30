@@ -1,12 +1,11 @@
 """Search endpoint: hybrid BM25 + FAISS + RRF, optional session rerank."""
 from __future__ import annotations
 
-import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Query
 
-from edgereco.api.deps import ServiceContainer, get_container
+from edgereco.api.deps import ServiceContainer, get_container, get_session_id
 from edgereco.catalog.models import SearchResult
 from edgereco.reco.reranker import rerank
 from edgereco.search.hybrid import reciprocal_rank_fusion
@@ -14,16 +13,12 @@ from edgereco.search.hybrid import reciprocal_rank_fusion
 router = APIRouter()
 
 
-def _session_id(x_session_id: Annotated[str | None, Header()] = None) -> str:
-    return x_session_id if x_session_id else str(uuid.uuid4())
-
-
 @router.get("/search")
 def search(
     q: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
     category: Annotated[str | None, Query()] = None,
-    session_id: Annotated[str, Depends(_session_id)] = "",
+    session_id: Annotated[str, Depends(get_session_id)] = "",
     container: Annotated[ServiceContainer, Depends(get_container)] = ...,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     if not q.strip():

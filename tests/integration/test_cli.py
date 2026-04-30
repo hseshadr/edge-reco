@@ -28,18 +28,32 @@ MINI_CATALOG = FIXTURES_DIR / "mini_catalog.jsonl"
 @pytest.fixture(scope="session")
 def cli_index_dirs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     """Build cache_dir + index_dir from mini_catalog once per session."""
+    import shutil
+
     base = tmp_path_factory.mktemp("cli_session")
     cache_dir = base / "cache"
     index_dir = base / "index"
     cache_dir.mkdir()
 
     # Copy mini_catalog as products.jsonl
-    import shutil
-
     shutil.copy2(MINI_CATALOG, cache_dir / "products.jsonl")
 
+    # Write a minimal manifest.json so from_dirs can parse it
+    products_path = cache_dir / "products.jsonl"
+    checksum = "sha256:" + hashlib.sha256(products_path.read_bytes()).hexdigest()
+    products = load_jsonl(products_path)
+    manifest = CatalogManifest(
+        catalog_id="test-catalog",
+        version="2026-04-24T00:00:00Z",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dim=384,
+        files=[CatalogFile(
+            path="products.jsonl", file_type="products", checksum=checksum, rows=len(products)
+        )],
+    )
+    (cache_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+
     # Build index directly (avoids running CLI for this setup step)
-    products = load_jsonl(cache_dir / "products.jsonl")
     encoder = ProductEncoder()
     embeddings = encoder.encode(products)
     ids = [p.id for p in products]
@@ -47,7 +61,7 @@ def cli_index_dirs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path
     vi.save(index_dir / "vector")
 
     # Copy products.jsonl to index_dir (mirrors what `edgereco index` does)
-    shutil.copy2(cache_dir / "products.jsonl", index_dir / "products.jsonl")
+    shutil.copy2(products_path, index_dir / "products.jsonl")
 
     return cache_dir, index_dir
 
