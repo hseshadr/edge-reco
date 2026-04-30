@@ -6,7 +6,6 @@ def test_default_settings() -> None:
     assert settings.catalog_url == ""
     assert settings.cache_dir.name == ".edgereco"
     assert settings.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
-    assert settings.embedding_dim == 384
     assert settings.search_limit == 10
     assert settings.rrf_k == 60
 

@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     catalog_url: str = ""
     cache_dir: Path = Path.home() / ".edgereco"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_dim: int = 384
     search_limit: int = 10
     rrf_k: int = 60
     api_host: str = "0.0.0.0"  # noqa: S104
