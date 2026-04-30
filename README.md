@@ -1,5 +1,11 @@
 # EdgeReco
 
+> **Sync once. Run anywhere. Zero backend calls.**
+
+[![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+
 A Python-first local product discovery engine. Edge nodes sync a manifest-described catalog, build local indexes, and serve hybrid search + session-aware recommendations — zero backend calls after sync.
 
 ## Why
@@ -94,6 +100,17 @@ The repo follows strict TDD/BDD: unit tests in `tests/unit/`, BDD scenarios in `
 - [`docs/superpowers/specs/edgereco-python-v1.md`](docs/superpowers/specs/edgereco-python-v1.md) — design spec.
 - [`docs/superpowers/plans/edgereco-python-v1.md`](docs/superpowers/plans/edgereco-python-v1.md) — 26-task implementation plan (executed via `superpowers:subagent-driven-development`).
 
+## Repo layout
+
+- `src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `telemetry/` `api/` `edge/` `cli.py` `config.py`
+- `features/` — Gherkin BDD specs, decoupled from step implementations
+- `tests/` — `unit/` `bdd/` `integration/` `e2e/`
+- `deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
+- `examples/catalog/` — synthetic 1000-product demo data + manifest
+- `scripts/generate_demo_catalog.py` — deterministic demo catalog generator
+- `docs/superpowers/` — current spec + plans
+- `docs/legacy/` — pre-pivot TS/WASM design (archive only)
+
 ## License
 
-MIT.
+[MIT](LICENSE).
