@@ -1695,8 +1695,10 @@ git commit -m "test(bdd): add recommendations and session tracking feature files
 
 ```python
 # tests/unit/catalog/test_manifest.py
+import hashlib
 import json
 from pathlib import Path
+
 from edgereco.catalog.manifest import parse_manifest, validate_checksum
 
 def test_parse_manifest_from_json(tmp_path: Path) -> None:
@@ -1714,7 +1716,6 @@ def test_parse_manifest_from_json(tmp_path: Path) -> None:
 def test_validate_checksum_passes(tmp_path: Path) -> None:
     file_path = tmp_path / "test.txt"
     file_path.write_text("hello")
-    import hashlib
     expected = "sha256:" + hashlib.sha256(b"hello").hexdigest()
     assert validate_checksum(file_path, expected) is True
 
@@ -1739,13 +1740,11 @@ from .models import CatalogManifest
 
 
 def parse_manifest(path: Path) -> CatalogManifest:
-    """Parse a manifest.json file."""
     data = json.loads(path.read_text(encoding="utf-8"))
     return CatalogManifest.model_validate(data)
 
 
 def validate_checksum(file_path: Path, expected: str) -> bool:
-    """Validate a file's SHA-256 checksum against expected 'sha256:...' value."""
     if not expected.startswith("sha256:"):
         return False
     expected_hash = expected[7:]
@@ -1755,7 +1754,7 @@ def validate_checksum(file_path: Path, expected: str) -> bool:
 
 ```python
 # src/edgereco/edge/client.py
-"""Edge catalog client protocol and implementations."""
+"""Edge catalog client protocol."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -1765,8 +1764,6 @@ from edgereco.catalog.models import CatalogManifest
 
 
 class EdgeCatalogClient(Protocol):
-    """Protocol for fetching catalog files from an edge server."""
-
     def fetch_manifest(self, base_url: str) -> CatalogManifest: ...
     def fetch_file(self, base_url: str, path: str, local_path: Path) -> None: ...
 ```
