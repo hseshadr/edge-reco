@@ -2223,26 +2223,25 @@ git commit -m "infra: add Dockerfile + docker-compose + Caddy edge cache + entry
 
 ### Task 22: Preprocessed demo catalog
 
+**Scope reduction (implemented):** 1000 synthetic products (5 categories × 200 each). Amazon Kaggle CSV is not bundled; `amazon_row_to_product` remains available for users who download it. Embeddings are NOT pre-shipped — `edgereco index` builds the vector index at demo startup.
+
 **Files:**
-- Create: `examples/catalog/products.jsonl` — 10K Amazon products (or generate synthetically if Kaggle CSV not available)
-- Create: `examples/catalog/manifest.json`
-- Create: `examples/catalog/embeddings.npy` (precomputed)
+- Create: `scripts/generate_demo_catalog.py` — reproducible generator (seed=42)
+- Create: `examples/catalog/products.jsonl` — 1000 synthetic products (~349 KB)
+- Create: `examples/catalog/manifest.json` — manifest with real sha256 checksum
 
 The implementer should:
-1. If Amazon CSV is available: run the preprocessor script
-2. If not: generate a synthetic 10K catalog using realistic product data
-3. Generate embeddings using the encoder
-4. Write manifest.json with correct checksums
-5. Commit the demo catalog (~10-20MB for 10K products + embeddings)
+1. Run `uv run python scripts/generate_demo_catalog.py` to produce JSONL + manifest
+2. Verify checksum via `validate_checksum` from `edgereco.catalog.manifest`
+3. Commit both generated files + the script
 
-NOTE: If the embeddings file is too large for git, create a `.gitattributes` with Git LFS tracking, or generate embeddings at build time instead of committing them.
+NOTE: No embeddings.npy needed — the demo container's entrypoint runs `edgereco index` which builds the FAISS index from products at startup. No Git LFS required.
 
-- [ ] **Step 1: Generate or preprocess demo catalog**
-- [ ] **Step 2: Generate embeddings**
-- [ ] **Step 3: Write manifest with checksums**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Generate synthetic catalog** (seed=42, 1000 products, 5 categories × 200)
+- [x] **Step 2: Write manifest with real sha256 checksum**
+- [x] **Step 3: Commit**
 ```bash
-git commit -m "data: add 10K preprocessed Amazon product demo catalog"
+git commit -m "data: add 1000-product synthetic demo catalog with manifest"
 ```
 
 ---
