@@ -39,7 +39,6 @@ def origin_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "checksum": checksum,
             "rows": 50,
         }],
-        "deltas": [],
     }
     (origin / "manifest.json").write_text(json.dumps(manifest))
     return origin

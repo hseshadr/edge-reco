@@ -5,6 +5,5 @@
   "embedding_dim": 384,
   "files": [
     {"path": "mini_catalog.jsonl", "file_type": "products", "checksum": "sha256:placeholder", "rows": 50}
-  ],
-  "deltas": []
+  ]
 }
