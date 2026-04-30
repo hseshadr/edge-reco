@@ -6,7 +6,6 @@ Writes: examples/catalog/products.jsonl + examples/catalog/manifest.json
 from __future__ import annotations
 
 import hashlib
-import json
 import random
 from pathlib import Path
 
@@ -100,7 +99,7 @@ CATEGORIES = {
 
 
 def generate_products(seed: int = 42) -> list[Product]:
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311 - reproducible fixture, not crypto
     products: list[Product] = []
     pid = 1
     for category, spec in CATEGORIES.items():
