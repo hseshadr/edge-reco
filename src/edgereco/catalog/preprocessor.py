@@ -51,7 +51,11 @@ def amazon_row_to_product(
         subcategories=subcategories,
         tags=tags,
         brand="",
-        price=float(row["price"]) if row.get("price") else None,
+        price=(
+            float(row["price"])
+            if "price" in row and row["price"] is not None
+            else None
+        ),
         popularity_score=normalize_score(pop_raw, min_val=pop_min, max_val=pop_max),
         freshness_score=normalize_score(
             float(row.get("boughtInLastMonth", 0)),
