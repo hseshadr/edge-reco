@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Header, Request
+from fastapi import Depends, Header, Request
 
 from edgereco.api.sessions import SessionStore
 from edgereco.catalog.models import CatalogManifest, Product
@@ -81,3 +81,6 @@ def get_container(request: Request) -> ServiceContainer:
 def get_session_id(x_session_id: Annotated[str | None, Header()] = None) -> str:
     """FastAPI dependency: return X-Session-Id header value or generate a new UUID."""
     return x_session_id if x_session_id else str(uuid.uuid4())
+
+
+Container = Annotated[ServiceContainer, Depends(get_container)]

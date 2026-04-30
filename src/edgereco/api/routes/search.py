@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from edgereco.api.deps import ServiceContainer, get_container, get_session_id
+from edgereco.api.deps import Container, get_session_id
 from edgereco.catalog.models import SearchResult
 from edgereco.reco.reranker import rerank
 from edgereco.search.hybrid import reciprocal_rank_fusion
@@ -15,11 +15,11 @@ router = APIRouter()
 
 @router.get("/search")
 def search(
+    container: Container,
     q: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
     category: Annotated[str | None, Query()] = None,
     session_id: Annotated[str, Depends(get_session_id)] = "",
-    container: Annotated[ServiceContainer, Depends(get_container)] = ...,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     if not q.strip():
         return {"results": [], "query": "", "total": 0}

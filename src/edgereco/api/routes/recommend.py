@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from edgereco.api.deps import ServiceContainer, get_container, get_session_id
+from edgereco.api.deps import Container, get_session_id
 from edgereco.catalog.models import SearchResult
 from edgereco.reco.reranker import rerank
 
@@ -14,9 +14,9 @@ router = APIRouter()
 
 @router.get("/recommend")
 def recommend(
+    container: Container,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
     session_id: Annotated[str, Depends(get_session_id)] = "",
-    container: Annotated[ServiceContainer, Depends(get_container)] = ...,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     profile = container.sessions.get(session_id)
     candidates = [

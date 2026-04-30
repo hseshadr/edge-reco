@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from edgereco.api.deps import ServiceContainer, get_container, get_session_id
+from edgereco.api.deps import Container, get_session_id
 from edgereco.catalog.models import InteractionEvent
 from edgereco.reco.signals import apply_interaction
 
@@ -23,8 +23,8 @@ class EventsBody(BaseModel):
 @router.post("/events")
 def post_events(
     body: EventsBody,
+    container: Container,
     session_id: Annotated[str, Depends(get_session_id)] = "",
-    container: Annotated[ServiceContainer, Depends(get_container)] = ...,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     for event in body.events:
         product = container.by_id.get(event.product_id)
