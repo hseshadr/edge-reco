@@ -83,6 +83,10 @@ Positioned as an OSS reference architecture for stateful, edge-first product dis
                    └─────────────┘
 ```
 
+### Architecture notes
+
+v1 ships an **all-Pydantic** model layer throughout — both wire and domain types use `BaseModel`. A future wire/domain split (`@dataclass` for domain, Pydantic only at API boundaries) is a potential v2 evolution when performance becomes a concern, but is YAGNI for the 10K-product demo. Protocol-based DI (`EdgeCatalogClient` in `edge.client`) is implemented and enforced.
+
 ### Module responsibilities
 
 | Module | Does | Depends on |

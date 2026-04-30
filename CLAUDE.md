@@ -24,7 +24,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - **Scoring formula**: `0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`
 - **Hybrid search**: BM25 + FAISS vector + Reciprocal Rank Fusion
 - **Catalog sync**: manifest-based with checksums; Caddy edge cache
-- **Architecture**: hexagonal — wire types (generated/Pydantic) vs domain types (`@dataclass`); Protocol-based DI for infrastructure
+- **Architecture**: all-Pydantic models throughout v1 (wire/domain split is a future concern); Protocol-based DI for infrastructure
 - **Zero backend calls after sync** — runtime is offline-capable
 
 ## Workflow
