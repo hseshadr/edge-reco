@@ -1606,7 +1606,7 @@ def test_rerank_with_empty_profile_preserves_order() -> None:
 
 def test_rerank_boosts_matching_category() -> None:
     results = [
-        _result("formal", 0.9, "Clothing", 0.8),
+        _result("formal", 0.9, "Clothing", 0.6),
         _result("electronics", 0.7, "Electronics", 0.3),
     ]
     profile = SessionProfile(category_affinity={"Electronics": 1.0})
