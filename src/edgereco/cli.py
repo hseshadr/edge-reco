@@ -195,11 +195,30 @@ def search(
 # ---------------------------------------------------------------------------
 
 
+DEFAULT_PREPROCESS_CATEGORIES = (
+    "Electronics",
+    "Clothing",
+    "Home & Kitchen",
+    "Sports",
+    "Books",
+)
+
+
 @app.command()
 def preprocess(
     input_path: Annotated[Path, typer.Argument(help="Path to Amazon CSV")],
     output_dir: Annotated[Path, typer.Argument(help="Output directory")],
     limit: Annotated[int, typer.Option(help="Max products to output")] = 10000,
+    category: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--category",
+            help=(
+                "Top-level category to keep (repeatable). "
+                "Defaults to the 5 demo categories."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Convert Amazon CSV to EdgeReco JSONL + manifest."""
     import hashlib
@@ -209,7 +228,7 @@ def preprocess(
     from edgereco.catalog.models import CatalogFile, CatalogManifest
     from edgereco.catalog.preprocessor import amazon_row_to_product
 
-    target_categories = {"Electronics", "Clothing", "Home & Kitchen", "Sports", "Books"}
+    target_categories = set(category) if category else set(DEFAULT_PREPROCESS_CATEGORIES)
 
     typer.echo(f"Reading {input_path}...")
     df = pl.read_csv(input_path)
