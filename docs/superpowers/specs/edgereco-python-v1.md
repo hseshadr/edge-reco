@@ -37,7 +37,7 @@ Positioned as an OSS reference architecture for stateful, edge-first product dis
 
 **Source:** Kaggle Amazon Products Dataset 2023 (1.4M products, ODC-By license)
 
-**Preprocessing pipeline** (`examples/scripts/preprocess_amazon.py`):
+**Preprocessing pipeline** (`edgereco preprocess` — see `src/edgereco/cli.py:preprocess`):
 
 | Step | Action |
 |---|---|
