@@ -1664,16 +1664,16 @@ git commit -m "feat(reco): add session-aware reranker (TDD)"
 - Create: `tests/bdd/test_recommendations.py`
 - Create: `tests/bdd/test_session_tracking.py`
 
-- [ ] **Step 1: Write feature files** — copy from spec §12 BDD section
+- [x] **Step 1: Write feature files** — author scenarios directly: affinity shift after clicks, repetition penalty, fresh session (recommendations); click/favorite/cart bumps, favorite > click, recently-viewed ordering (session tracking). Spec §12 only describes coverage; scenarios are authored from domain logic.
 
-- [ ] **Step 2: Write step implementations** for both features, referencing the `bdd_` fixtures from conftest.py and using the signals, scorer, and reranker modules
+- [x] **Step 2: Write step implementations** for both features, referencing the `bdd_` fixtures from conftest.py and using the signals, scorer, and reranker modules
 
-- [ ] **Step 3: Run BDD tests**
+- [x] **Step 3: Run BDD tests**
 ```bash
 uv run pytest tests/bdd/ -v --tb=short
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add features/ tests/bdd/
 git commit -m "test(bdd): add recommendations and session tracking feature files"
