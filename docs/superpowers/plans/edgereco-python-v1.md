@@ -1908,9 +1908,12 @@ git commit -m "feat(edge): add HTTP + filesystem catalog adapters (TDD)"
 
 ```python
 # tests/unit/catalog/test_sync.py
-import json
 import hashlib
+import json
 from pathlib import Path
+
+import pytest
+
 from edgereco.catalog.sync import sync_catalog
 from edgereco.edge.adapters.filesystem import FilesystemAdapter
 
@@ -2008,7 +2011,7 @@ def sync_catalog(
     return manifest
 ```
 
-- [ ] **Step 3: Write BDD feature file** — copy from spec (catalog_sync.feature)
+- [ ] **Step 3: Write BDD feature file** — author `features/catalog_sync.feature` (initial sync + checksum validation; delta sync is a follow-up, not in v1 scope)
 
 - [ ] **Step 4: Write BDD step implementations**
 
