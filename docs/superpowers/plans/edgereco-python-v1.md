@@ -395,7 +395,6 @@ class InteractionEvent(BaseModel):
 """Load product catalogs from various file formats."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from .models import Product
