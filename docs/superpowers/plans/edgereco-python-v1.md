@@ -2070,22 +2070,24 @@ Each integration test should set up a `ServiceContainer` with the mini catalog f
 ### Task 19: Typer CLI (TDD)
 
 **Files:**
-- Create: `src/edgereco/cli.py`
-- Create: `tests/integration/test_cli.py`
+- `src/edgereco/cli.py`
+- `tests/integration/test_cli.py`
 
-The implementer should:
-1. Create a Typer app with commands: `sync`, `index`, `serve`, `search`, `preprocess`
-2. Each command reads config from environment / CLI args
-3. Write integration tests using `typer.testing.CliRunner`
-4. Test at minimum: `edgereco --help`, `edgereco search "test" --limit 5` (with pre-built fixtures)
+**Implementation:** `src/edgereco/cli.py` exports a Typer `app` with five commands:
+- `sync MANIFEST_URL CACHE_DIR [--http|--filesystem] [--file-base-url]` — calls `sync_catalog()` with auto-detected or forced adapter
+- `index CACHE_DIR INDEX_DIR` — encodes embeddings, saves FAISS index + id_map to `INDEX_DIR/vector/`, copies products.jsonl for keyword rebuild
+- `serve CACHE_DIR INDEX_DIR [--host] [--port]` — loads catalog + vector index, builds `ServiceContainer`, starts uvicorn
+- `search QUERY CACHE_DIR INDEX_DIR [--limit] [--category] [--json]` — one-shot search, human-readable table or JSON output
+- `preprocess INPUT.csv OUTPUT_DIR [--limit]` — Amazon CSV → products.jsonl + manifest (same logic as `examples/scripts/preprocess_amazon.py`)
 
-- [ ] **Step 1: Implement CLI**
-- [ ] **Step 2: Write tests**
-- [ ] **Step 3: Run tests — should PASS**
-- [ ] **Step 4: Commit**
-```bash
-git commit -m "feat(cli): add Typer CLI with sync, index, serve, search commands"
-```
+All ML imports (sentence-transformers, FAISS) are lazy inside each command to avoid 5–10s startup cost on `--help`.
+
+Tests cover `--help`, `sync --filesystem`, `index`, `search --json`, and `preprocess --help` via `typer.testing.CliRunner`.
+
+- [x] **Step 1: Implement CLI**
+- [x] **Step 2: Write tests**
+- [x] **Step 3: Run tests — PASSED (84 total)**
+- [x] **Step 4: Commit**
 
 ---
 
