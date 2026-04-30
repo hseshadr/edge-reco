@@ -167,15 +167,14 @@ def test_default_settings() -> None:
 
 def test_settings_from_env(monkeypatch: object) -> None:
     import pytest
-    mp = pytest.MonkeyPatch()
-    mp.setenv("EDGERECO_CATALOG_URL", "http://edge:8081/manifest.json")
-    mp.setenv("EDGERECO_CACHE_DIR", "/tmp/test-cache")
-    mp.setenv("EDGERECO_SEARCH_LIMIT", "20")
-    settings = Settings()
-    assert settings.catalog_url == "http://edge:8081/manifest.json"
-    assert str(settings.cache_dir) == "/tmp/test-cache"
-    assert settings.search_limit == 20
-    mp.undo()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("EDGERECO_CATALOG_URL", "http://edge:8081/manifest.json")
+        mp.setenv("EDGERECO_CACHE_DIR", "/tmp/test-cache")
+        mp.setenv("EDGERECO_SEARCH_LIMIT", "20")
+        settings = Settings()
+        assert settings.catalog_url == "http://edge:8081/manifest.json"
+        assert str(settings.cache_dir) == "/tmp/test-cache"
+        assert settings.search_limit == 20
 ```
 
 - [ ] **Step 2: Run test — should FAIL**
