@@ -1232,9 +1232,9 @@ git commit -m "feat(search): add vector search + RRF hybrid fusion (TDD)"
 - Create: `tests/bdd/test_product_search.py`
 - Create: `tests/bdd/test_hybrid_search.py`
 
-- [ ] **Step 1: Write feature files** — copy from spec §12 BDD section (product_search.feature and hybrid_search.feature)
+- [x] **Step 1: Write feature files** — author scenarios to match the spec §12 coverage list (semantic search, category filter, empty query, no matches, RRF fusion, exact-title match). The spec lists what each feature covers but does not provide Gherkin; scenarios are authored directly.
 
-- [ ] **Step 2: Write BDD conftest** with shared fixtures for search scenarios
+- [x] **Step 2: Write BDD conftest** with shared fixtures for search scenarios — all fixtures are `scope="session"` (encoder loads once, embeddings computed once; not function-scope as shown in the skeleton below)
 
 ```python
 # tests/bdd/conftest.py
@@ -1286,7 +1286,7 @@ def bdd_product_map(bdd_catalog: list[Product]) -> dict[str, Product]:
     return {p.id: p for p in bdd_catalog}
 ```
 
-- [ ] **Step 3: Write step implementations** for product_search.feature
+- [x] **Step 3: Write step implementations** for product_search.feature and hybrid_search.feature
 
 ```python
 # tests/bdd/test_product_search.py
@@ -1309,16 +1309,9 @@ scenarios("../../features/product_search.feature")
 
 NOTE: The exact step implementations depend on the Gherkin wording. The implementer should match each `Given/When/Then` step to a Python function using `@given`, `@when`, `@then` decorators from `pytest_bdd`.
 
-- [ ] **Step 4: Run BDD tests**
-```bash
-uv run pytest tests/bdd/ -v --tb=short
-```
+- [x] **Step 4: Run BDD tests** — 6/6 pass; 35/35 total (29 unit + 6 BDD); mypy clean; ruff clean.
 
-- [ ] **Step 5: Commit**
-```bash
-git add features/ tests/bdd/
-git commit -m "test(bdd): add product search and hybrid search feature files with steps"
-```
+- [x] **Step 5: Commit**
 
 ---
 
