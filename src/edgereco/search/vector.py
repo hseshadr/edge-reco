@@ -11,6 +11,10 @@ class VectorSearcher:
     def __init__(self, index: VectorIndex) -> None:
         self._index = index
 
+    @property
+    def ntotal(self) -> int:
+        return self._index.ntotal
+
     def search(
         self,
         query_embedding: NDArray[np.float32],

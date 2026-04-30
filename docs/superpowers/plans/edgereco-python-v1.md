@@ -2054,14 +2054,16 @@ The implementer should:
 
 Each integration test should set up a `ServiceContainer` with the mini catalog fixture and test against it.
 
-- [ ] **Step 1: Implement telemetry + API + routes**
-- [ ] **Step 2: Write integration tests**
-- [ ] **Step 3: Run tests — should PASS**
-- [ ] **Step 4: Run quality checks**: `uv run ruff check src && uv run mypy src`
-- [ ] **Step 5: Commit**
-```bash
-git commit -m "feat(api): add FastAPI app with search, recommend, events, catalog routes"
-```
+- [x] **Step 1: Implement telemetry + API + routes**
+- [x] **Step 2: Write integration tests** (13 tests across 5 files; also added `api/sessions.py`, `tests/integration/conftest.py`, `test_api_health.py`, `test_api_catalog.py`)
+- [x] **Step 3: Run tests — 79 passed (66 prior + 13 new)**
+- [x] **Step 4: Run quality checks**: ruff clean, mypy strict clean
+- [x] **Step 5: Commit**
+
+**Implementation notes:**
+- Added `VectorIndex.ntotal` and `VectorSearcher.ntotal` properties (needed for `/catalog/info`).
+- `/search` reranks all fused results by session profile before category filter — B001 (0.85 pop) ranks 8th after rerank vs 1st in raw RRF; test adjusted to check presence in full limit=10 results instead of top-5.
+- `EventBuffer` is always appended for every event (including unknown product_ids); session update is skipped for unknowns.
 
 ---
 

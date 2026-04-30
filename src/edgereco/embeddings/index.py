@@ -27,6 +27,10 @@ class VectorIndex:
             index.add(embeddings)
         return cls(index, list(ids))
 
+    @property
+    def ntotal(self) -> int:
+        return int(self._index.ntotal)
+
     def search(
         self,
         query: NDArray[np.float32],
