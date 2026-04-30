@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Pin Python
+        run: uv python install 3.13
+      - name: Sync
+        run: uv sync --group dev --frozen
+      - name: Ruff
+        run: uv run ruff check src tests
+      - name: Mypy
+        run: uv run mypy src
+      - name: Tests with coverage
+        run: uv run pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90

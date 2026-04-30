@@ -1,0 +1,48 @@
+services:
+  origin:
+    image: python:3.13-slim
+    container_name: edgereco-origin
+    working_dir: /catalog
+    volumes:
+      - ../examples/catalog:/catalog:ro
+    command: ["python", "-m", "http.server", "8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/manifest.json')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  edge:
+    image: caddy:2-alpine
+    container_name: edgereco-edge
+    depends_on:
+      origin:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/manifest.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  demo:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: edgereco-demo
+    depends_on:
+      edge:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  caddy_data:
+  caddy_config:

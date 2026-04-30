@@ -23,6 +23,9 @@ htmlcov/
 # Docker
 .docker/
 
+# uv
+.uv/
+
 # Environment
 .env
 .env.local
