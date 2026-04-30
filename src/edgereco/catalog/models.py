@@ -72,7 +72,7 @@ class SearchResult(BaseModel):
     score_components: dict[str, float] = {}
 
 
-EventType = Literal["click", "view", "favorite", "cart"]
+type EventType = Literal["click", "view", "favorite", "cart"]
 
 
 class InteractionEvent(BaseModel):
