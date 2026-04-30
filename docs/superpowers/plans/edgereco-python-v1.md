@@ -1459,7 +1459,7 @@ git commit -m "feat(reco): add session signal tracker with interaction weights (
 ```python
 # tests/unit/reco/test_scorer.py
 from edgereco.catalog.models import Product, SessionProfile
-from edgereco.reco.scorer import score_product, SCORING_WEIGHTS
+from edgereco.reco.scorer import score_product
 
 def _product(**kwargs: object) -> Product:
     defaults = {"id": "P1", "title": "T", "category": "Electronics", "tags": ["wireless"],

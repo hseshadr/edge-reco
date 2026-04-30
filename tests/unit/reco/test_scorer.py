@@ -1,5 +1,5 @@
 from edgereco.catalog.models import Product, SessionProfile
-from edgereco.reco.scorer import SCORING_WEIGHTS, score_product  # noqa: F401
+from edgereco.reco.scorer import score_product
 
 
 def _product(**kwargs: object) -> Product:
