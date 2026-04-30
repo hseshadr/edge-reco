@@ -1301,7 +1301,7 @@ from edgereco.search.hybrid import reciprocal_rank_fusion
 from edgereco.embeddings.index import VectorIndex
 from edgereco.embeddings.encoder import ProductEncoder
 
-scenarios("../../features/product_search.feature")
+scenarios("product_search.feature")  # pytest-bdd prepends bdd_features_base_dir
 
 # Steps will reference the bdd_ fixtures from conftest.py
 # Implement @given, @when, @then steps matching the Gherkin scenarios
