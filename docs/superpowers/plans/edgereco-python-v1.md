@@ -1875,19 +1875,22 @@ class HttpAdapter:
         """Download a file from the edge server."""
         url = urljoin(base_url.rstrip("/") + "/", path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(timeout=self._timeout) as client:
-            with client.stream("GET", url) as response:
-                response.raise_for_status()
-                with local_path.open("wb") as f:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        f.write(chunk)
+        with httpx.Client(timeout=self._timeout) as client, \
+             client.stream("GET", url) as response:
+            response.raise_for_status()
+            with local_path.open("wb") as f:
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    f.write(chunk)
 ```
 
 - [ ] **Step 3: Run tests — should PASS**
 
+> **Note:** `HttpAdapter` has no unit tests here — `httpx.Client` requires a live server or mock.
+> It is exercised via BDD/integration tests in Tasks 17 and 23. Carry-forward accepted.
+
 - [ ] **Step 4: Commit**
 ```bash
-git add src/edgereco/edge/ tests/unit/edge/
+git add src/edgereco/edge/ tests/unit/edge/ docs/superpowers/plans/edgereco-python-v1.md
 git commit -m "feat(edge): add HTTP + filesystem catalog adapters (TDD)"
 ```
 
