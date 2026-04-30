@@ -289,7 +289,7 @@ FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 
 def test_load_jsonl_returns_products() -> None:
     products = load_jsonl(FIXTURES / "mini_catalog.jsonl")
-    assert len(products) == 5
+    assert len(products) == 50
     assert products[0].id == "B001"
     assert products[0].category == "Electronics"
 
