@@ -18,7 +18,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - `features/` — Gherkin feature files, **decoupled** from step implementations
 - `tests/` — unit · bdd · integration · e2e
 - `deploy/` — Dockerfile · docker-compose.yml · Caddy config
-- `examples/catalog/` — preprocessed Amazon product demo data (10K subset)
+- `examples/catalog/` — synthetic 1000-product demo catalog (5 categories × 200; Amazon CSV processing available via `edgereco preprocess`)
 
 ## Invariants (don't break without updating the spec)
 - **Scoring formula**: `0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`
