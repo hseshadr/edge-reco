@@ -8,7 +8,7 @@ Python v1 pivot — spec + plan approved, implementation on `python-v1-edge-disc
 ## Docs
 - [`docs/superpowers/specs/edgereco-python-v1.md`](docs/superpowers/specs/edgereco-python-v1.md) — current spec (authoritative)
 - [`docs/superpowers/plans/edgereco-python-v1.md`](docs/superpowers/plans/edgereco-python-v1.md) — 26-task execution plan
-- [`docs/PRD.md`](docs/PRD.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/TECH_SPEC.md`](docs/TECH_SPEC.md), [`docs/MVP_ROADMAP.md`](docs/MVP_ROADMAP.md) — legacy (TS/WASM era, kept for reference)
+- [`docs/legacy/`](docs/legacy/) — pre-pivot TS/WASM design (kept for reference)
 
 ## Stack
 Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAPI · Typer · pytest-bdd · uv · Ruff · mypy strict · Docker Compose (origin + Caddy edge + app)
