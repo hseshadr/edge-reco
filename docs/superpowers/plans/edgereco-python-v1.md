@@ -1861,12 +1861,17 @@ from edgereco.catalog.models import CatalogManifest
 class HttpAdapter:
     """Fetch catalog files from an HTTP edge server."""
 
-    def __init__(self, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        timeout: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self._timeout = timeout
+        self._transport = transport  # injectable for tests (httpx.MockTransport)
 
     def fetch_manifest(self, base_url: str) -> CatalogManifest:
         """Fetch and parse manifest.json from the edge server."""
-        with httpx.Client(timeout=self._timeout) as client:
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
             response = client.get(base_url)
             response.raise_for_status()
             return CatalogManifest.model_validate(response.json())
@@ -1875,7 +1880,7 @@ class HttpAdapter:
         """Download a file from the edge server."""
         url = urljoin(base_url.rstrip("/") + "/", path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(timeout=self._timeout) as client, \
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client, \
              client.stream("GET", url) as response:
             response.raise_for_status()
             with local_path.open("wb") as f:
@@ -1885,8 +1890,10 @@ class HttpAdapter:
 
 - [ ] **Step 3: Run tests — should PASS**
 
-> **Note:** `HttpAdapter` has no unit tests here — `httpx.Client` requires a live server or mock.
-> It is exercised via BDD/integration tests in Tasks 17 and 23. Carry-forward accepted.
+> **Note (updated Task 24):** `HttpAdapter` now accepts an optional `transport` parameter
+> (`httpx.BaseTransport | None = None`) for dependency injection in tests. Unit tests use
+> `httpx.MockTransport`. `telemetry/events.py` was deleted (dead re-export). `serve` CLI command
+> is marked `# pragma: no cover` (spawns uvicorn, impractical to test).
 
 - [ ] **Step 4: Commit**
 ```bash
@@ -2034,7 +2041,7 @@ git commit -m "feat(catalog): add manifest-based catalog sync with checksum vali
 
 **Files:**
 - Create: `src/edgereco/telemetry/__init__.py`
-- Create: `src/edgereco/telemetry/events.py`
+- ~~Create: `src/edgereco/telemetry/events.py`~~ — deleted (dead re-export; use `edgereco.catalog.models.InteractionEvent` directly)
 - Create: `src/edgereco/telemetry/buffer.py`
 - Create: `src/edgereco/api/__init__.py`
 - Create: `src/edgereco/api/app.py`

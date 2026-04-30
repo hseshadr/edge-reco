@@ -113,7 +113,7 @@ def index(
 
 
 @app.command()
-def serve(
+def serve(  # pragma: no cover
     cache_dir: Annotated[Path, typer.Argument(help="Cache directory with products.jsonl")],
     index_dir: Annotated[Path, typer.Argument(help="Directory with vector/ index")],
     host: Annotated[str, typer.Option(help="Bind host")] = "0.0.0.0",  # noqa: S104

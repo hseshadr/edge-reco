@@ -10,11 +10,16 @@ from edgereco.catalog.models import CatalogManifest
 
 
 class HttpAdapter:
-    def __init__(self, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        timeout: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self._timeout = timeout
+        self._transport = transport
 
     def fetch_manifest(self, base_url: str) -> CatalogManifest:
-        with httpx.Client(timeout=self._timeout) as client:
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
             response = client.get(base_url)
             response.raise_for_status()
             return CatalogManifest.model_validate(response.json())
@@ -22,7 +27,7 @@ class HttpAdapter:
     def fetch_file(self, base_url: str, path: str, local_path: Path) -> None:
         url = urljoin(base_url.rstrip("/") + "/", path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(timeout=self._timeout) as client, \
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client, \
              client.stream("GET", url) as response:
             response.raise_for_status()
             with local_path.open("wb") as f:
