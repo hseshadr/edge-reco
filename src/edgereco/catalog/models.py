@@ -1,6 +1,8 @@
 """Data models for EdgeReco product catalog."""
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -70,10 +72,13 @@ class SearchResult(BaseModel):
     score_components: dict[str, float] = {}
 
 
+EventType = Literal["click", "view", "favorite", "cart"]
+
+
 class InteractionEvent(BaseModel):
     """A user interaction event."""
 
-    event_type: str
+    event_type: EventType
     product_id: str
     timestamp: str
     metadata: dict[str, str] = {}
