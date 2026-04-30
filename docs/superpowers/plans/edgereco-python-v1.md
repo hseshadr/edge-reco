@@ -529,7 +529,6 @@ git commit -m "test: expand mini catalog to 50 products with shared fixtures"
 
 ```python
 # tests/unit/catalog/test_preprocessor.py
-import math
 from edgereco.catalog.preprocessor import normalize_score, amazon_row_to_product
 
 def test_normalize_score_range() -> None:
@@ -641,22 +640,19 @@ def amazon_row_to_product(
 """Preprocess Amazon Kaggle CSV into EdgeReco catalog format.
 
 Usage:
-    python examples/scripts/preprocess_amazon.py --input amazon.csv --output examples/catalog/ --limit 10000
+    uv run python examples/scripts/preprocess_amazon.py products.csv examples/catalog/ --limit 10000
 """
 from __future__ import annotations
 
-import json
-import sys
+import hashlib
 from pathlib import Path
+from typing import Annotated
 
 import polars as pl
 import typer
 
-# Add src to path for direct script execution
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
 from edgereco.catalog.models import CatalogFile, CatalogManifest
-from edgereco.catalog.preprocessor import amazon_row_to_product, compute_popularity_raw
+from edgereco.catalog.preprocessor import amazon_row_to_product
 
 app = typer.Typer()
 
@@ -665,18 +661,19 @@ TARGET_CATEGORIES = {"Electronics", "Clothing", "Home & Kitchen", "Sports", "Boo
 
 @app.command()
 def preprocess(
-    input_path: Path = typer.Argument(..., help="Path to Amazon CSV"),
-    output_dir: Path = typer.Argument(..., help="Output directory"),
-    limit: int = typer.Option(10000, help="Max products to output"),
+    input_path: Annotated[Path, typer.Argument(help="Path to Amazon CSV")],
+    output_dir: Annotated[Path, typer.Argument(help="Output directory")],
+    limit: Annotated[int, typer.Option(help="Max products to output")] = 10000,
 ) -> None:
     """Convert Amazon CSV to EdgeReco JSONL + manifest."""
     typer.echo(f"Reading {input_path}...")
     df = pl.read_csv(input_path)
 
-    # Compute global min/max for normalization
-    df = df.with_columns([
-        (pl.col("stars").cast(pl.Float64) * (pl.col("reviews").cast(pl.Float64) + 1).log()).alias("pop_raw"),
-    ])
+    pop_expr = (
+        pl.col("stars").cast(pl.Float64)
+        * (pl.col("reviews").cast(pl.Float64) + 1).log()
+    )
+    df = df.with_columns([pop_expr.alias("pop_raw")])
     pop_min = float(df["pop_raw"].min() or 0)
     pop_max = float(df["pop_raw"].max() or 1)
     fresh_min = float(df["boughtInLastMonth"].min() or 0)
@@ -686,7 +683,7 @@ def preprocess(
     out_path = output_dir / "products.jsonl"
 
     count = 0
-    with out_path.open("w") as f:
+    with out_path.open("w", encoding="utf-8") as f:
         for row in df.iter_rows(named=True):
             cat_parts = str(row.get("category_id", "")).split(">")
             top_cat = cat_parts[0].strip() if cat_parts else ""
@@ -701,17 +698,20 @@ def preprocess(
             if count >= limit:
                 break
 
-    # Write manifest
-    import hashlib
     checksum = "sha256:" + hashlib.sha256(out_path.read_bytes()).hexdigest()
+    catalog_file = CatalogFile(
+        path="products.jsonl", file_type="products", checksum=checksum, rows=count
+    )
     manifest = CatalogManifest(
         catalog_id="amazon-demo",
         version="2026-04-24T00:00:00Z",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=384,
-        files=[CatalogFile(path="products.jsonl", file_type="products", checksum=checksum, rows=count)],
+        files=[catalog_file],
     )
-    (output_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2))
+    (output_dir / "manifest.json").write_text(
+        manifest.model_dump_json(indent=2), encoding="utf-8"
+    )
     typer.echo(f"Wrote {count} products to {out_path}")
 
 
