@@ -2109,48 +2109,114 @@ uv run pytest -v --tb=short
 
 **Files:**
 - Create: `deploy/Dockerfile`
+- Create: `deploy/entrypoint.sh`
 - Create: `deploy/docker-compose.yml`
 - Create: `deploy/caddy/Caddyfile`
 
-- [ ] **Step 1: Create Dockerfile**
+**Note:** `edgereco serve` requires positional `CACHE_DIR` and `INDEX_DIR` args (Task 19 CLI), so the container cannot use a bare `CMD`. An entrypoint script runs sync → index → serve with the correct positional args.
+
+- [x] **Step 1: Create Dockerfile**
 
 ```dockerfile
 FROM python:3.13-slim
 
+ENV PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    EDGERECO_CACHE_DIR=/data/cache \
+    EDGERECO_INDEX_DIR=/data/index \
+    EDGERECO_MANIFEST_URL=http://edge:8081/manifest.json \
+    EDGERECO_FILE_BASE_URL=http://edge:8081
+
 WORKDIR /app
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev
-
 COPY src/ src/
-COPY examples/ examples/
+RUN uv sync --no-dev --frozen
 
-RUN uv pip install -e .
+COPY deploy/entrypoint.sh /usr/local/bin/edgereco-entrypoint
+RUN chmod +x /usr/local/bin/edgereco-entrypoint
 
 EXPOSE 8000
-CMD ["edgereco", "serve", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["edgereco-entrypoint"]
 ```
 
-- [ ] **Step 2: Create docker-compose.yml** — as specified in spec §11
+- [x] **Step 2: Create entrypoint.sh**
 
-- [ ] **Step 3: Create Caddyfile**
+```sh
+#!/usr/bin/env sh
+set -e
+
+mkdir -p "$EDGERECO_CACHE_DIR" "$EDGERECO_INDEX_DIR"
+
+echo "[edgereco] syncing catalog from $EDGERECO_MANIFEST_URL"
+uv run edgereco sync "$EDGERECO_MANIFEST_URL" "$EDGERECO_CACHE_DIR" --http \
+    --file-base-url "$EDGERECO_FILE_BASE_URL"
+
+echo "[edgereco] building indexes"
+uv run edgereco index "$EDGERECO_CACHE_DIR" "$EDGERECO_INDEX_DIR"
+
+echo "[edgereco] starting API server on 0.0.0.0:8000"
+exec uv run edgereco serve "$EDGERECO_CACHE_DIR" "$EDGERECO_INDEX_DIR" \
+    --host 0.0.0.0 --port 8000
+```
+
+- [x] **Step 3: Create docker-compose.yml**
+
+```yaml
+services:
+  origin:
+    image: python:3.13-slim
+    container_name: edgereco-origin
+    working_dir: /catalog
+    volumes:
+      - ../examples/catalog:/catalog:ro
+    command: ["python", "-m", "http.server", "8080"]
+
+  edge:
+    image: caddy:2-alpine
+    container_name: edgereco-edge
+    depends_on:
+      - origin
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  demo:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: edgereco-demo
+    depends_on:
+      - edge
+    ports:
+      - "8000:8000"
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+- [x] **Step 4: Create Caddyfile**
 
 ```
 :8081 {
-  encode gzip zstd
-  header {
-    Cache-Control "public, max-age=300"
-    Access-Control-Allow-Origin "*"
-  }
-  reverse_proxy origin:8080
+    encode gzip zstd
+    header {
+        Cache-Control "public, max-age=300"
+        Access-Control-Allow-Origin "*"
+    }
+    reverse_proxy origin:8080
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 5: Commit**
 ```bash
-git add deploy/
-git commit -m "infra: add Dockerfile + docker-compose + Caddy edge cache"
+git add deploy/ docs/superpowers/plans/edgereco-python-v1.md
+git commit -m "infra: add Dockerfile + docker-compose + Caddy edge cache + entrypoint"
 ```
 
 ---
