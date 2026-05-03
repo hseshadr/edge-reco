@@ -17,9 +17,9 @@ Positioned as an OSS reference architecture for stateful, edge-first product dis
 
 ## 2. Goals
 
-1. **Hybrid search** over a real Amazon product catalog (~10K products shipped, 1.4M processable) combining BM25 keyword matching and sentence-transformer vector similarity via Reciprocal Rank Fusion.
+1. **Hybrid search** over a real Amazon product catalog (1000 synthetic products shipped, 1.4M Amazon CSV processable) combining BM25 keyword matching and sentence-transformer vector similarity via Reciprocal Rank Fusion.
 2. **Session-aware recommendations** that shift in real-time as the user clicks, views, and favorites products.
-3. **Catalog sync** with manifest-based versioning, checksum validation, and delta support from an edge cache (Caddy).
+3. **Catalog sync** with manifest-based versioning and checksum validation from an edge cache (Caddy). (Delta-sync is deferred to v2 — schema removed in v0.1; v1 ships full re-sync only.)
 4. **Docker Compose demo** that proves the full architecture in one command: origin → edge cache → EdgeReco runtime.
 5. **Professional test suite** with BDD feature files (Gherkin, decoupled), TDD unit tests, integration tests, E2E tests, and ≥90% line coverage.
 6. **OSS-grade quality**: strict typing (mypy), comprehensive linting (ruff), clean architecture (Protocol-based DI), HN-quality README.
@@ -37,20 +37,20 @@ Positioned as an OSS reference architecture for stateful, edge-first product dis
 
 **Source:** Kaggle Amazon Products Dataset 2023 (1.4M products, ODC-By license)
 
-**Preprocessing pipeline** (`examples/scripts/preprocess_amazon.py`):
+**Preprocessing pipeline** (`edgereco preprocess` — see `src/edgereco/cli.py:preprocess`):
 
 | Step | Action |
 |---|---|
 | 1 | Read Kaggle CSV (asin, title, imgUrl, productURL, stars, reviews, price, listPrice, category_id, isBestSeller, boughtInLastMonth) |
 | 2 | Normalize to EdgeReco `Product` model |
-| 3 | Filter to 5 categories: Electronics, Clothing, Home & Kitchen, Sports, Books (~10K for demo) |
+| 3 | Filter to 5 categories: Electronics, Clothing, Home & Kitchen, Sports, Books (~10K Amazon-derived; the shipped synthetic demo is 1000) |
 | 4 | Compute `popularity_score` = normalize(stars * log(reviews + 1)) to [0, 1] |
 | 5 | Compute `freshness_score` = normalize(boughtInLastMonth) to [0, 1] |
 | 6 | Extract tags from category hierarchy |
 | 7 | Write `products.jsonl` + `manifest.json` |
 | 8 | Generate embeddings with all-MiniLM-L6-v2 → `embeddings.npy` |
 
-**Shipped demo:** A preprocessed 10K-product subset in `examples/catalog/` so `docker compose up` works without Kaggle access. The preprocessing script is included for users who want the full 1.4M.
+**Shipped demo:** A 1000-product synthetic catalog in `examples/catalog/` (`scripts/generate_demo_catalog.py`) so `docker compose up` works without Kaggle access. The preprocessing script is included for users who want the full 1.4M Amazon dataset.
 
 ## 5. Architecture
 
@@ -85,17 +85,17 @@ Positioned as an OSS reference architecture for stateful, edge-first product dis
 
 ### Architecture notes
 
-v1 ships an **all-Pydantic** model layer throughout — both wire and domain types use `BaseModel`. A future wire/domain split (`@dataclass` for domain, Pydantic only at API boundaries) is a potential v2 evolution when performance becomes a concern, but is YAGNI for the 10K-product demo. Protocol-based DI (`EdgeCatalogClient` in `edge.client`) is implemented and enforced.
+v1 ships an **all-Pydantic** model layer throughout — both wire and domain types use `BaseModel`. A future wire/domain split (`@dataclass` for domain, Pydantic only at API boundaries) is a potential v2 evolution when performance becomes a concern, but is YAGNI for the 1000-product demo. Protocol-based DI (`EdgeCatalogClient` in `edge.client`) is implemented and enforced.
 
 ### Module responsibilities
 
 | Module | Does | Depends on |
 |---|---|---|
-| `catalog.models` | Pydantic models: Product, CatalogManifest, CatalogFile, DeltaFile | — |
+| `catalog.models` | Pydantic models: Product, CatalogManifest, CatalogFile | — |
 | `catalog.loader` | Load products from JSONL/CSV/Parquet → `list[Product]` | `models`, Polars |
 | `catalog.preprocessor` | Amazon CSV → EdgeReco JSONL normalization | `models`, Polars |
 | `catalog.manifest` | Parse manifest.json, validate checksums | `models` |
-| `catalog.sync` | Fetch manifest + files from edge URL, apply deltas | `manifest`, `loader`, `edge.client` |
+| `catalog.sync` | Fetch manifest + files from edge URL (full re-sync) | `manifest`, `loader`, `edge.client` |
 | `embeddings.encoder` | Encode product text → float32 vectors | sentence-transformers |
 | `embeddings.index` | FAISS index: build, save, load, k-NN search | faiss-cpu, numpy |
 | `search.keyword` | BM25 search over product title + category + tags | rank-bm25 |
@@ -138,19 +138,12 @@ class CatalogFile(BaseModel):
     checksum: str                    # "sha256:..."
     rows: int | None = None
 
-class DeltaFile(BaseModel):
-    path: str
-    from_version: str
-    to_version: str
-    checksum: str
-
 class CatalogManifest(BaseModel):
     catalog_id: str
     version: str                     # ISO timestamp
     embedding_model: str
     embedding_dim: int = 384
     files: list[CatalogFile]
-    deltas: list[DeltaFile] = []
 
 class SessionProfile(BaseModel):
     category_affinity: dict[str, float] = {}
@@ -229,16 +222,13 @@ All affinities capped at 1.0.
 
 ```json
 {
-  "catalog_id": "amazon-demo",
+  "catalog_id": "edgereco-demo",
   "version": "2026-04-24T00:00:00Z",
   "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
   "embedding_dim": 384,
   "files": [
-    {"path": "products.jsonl", "file_type": "products", "checksum": "sha256:abc...", "rows": 10000},
+    {"path": "products.jsonl", "file_type": "products", "checksum": "sha256:abc...", "rows": 1000},
     {"path": "embeddings.npy", "file_type": "embeddings", "checksum": "sha256:def..."}
-  ],
-  "deltas": [
-    {"path": "deltas/delta-20260424.jsonl", "from_version": "2026-04-23T00:00:00Z", "to_version": "2026-04-24T00:00:00Z", "checksum": "sha256:ghi..."}
   ]
 }
 ```
@@ -247,11 +237,11 @@ All affinities capped at 1.0.
 
 1. Fetch `manifest.json` from edge URL
 2. Compare local manifest version with remote
-3. If no local manifest: full sync (download all files)
-4. If local version < remote and delta exists: apply delta
-5. If local version < remote and no delta: full sync
-6. Validate checksums after download
-7. Rebuild indexes after sync
+3. If no local manifest or local version < remote: full sync (download all files)
+4. Validate checksums after download
+5. Rebuild indexes after sync
+
+(Delta-sync deferred to v2; v1 always does a full re-sync when versions differ.)
 
 ### Edge adapter protocol
 
@@ -311,7 +301,7 @@ curl "http://localhost:8000/recommend?limit=5"
 | `hybrid_search.feature` | RRF fusion beats keyword-only, exact match still works |
 | `recommendations.feature` | Affinity shift after clicks, mixed interactions, session reset |
 | `session_tracking.feature` | Click/view/favorite/cart signal tracking, profile updates |
-| `catalog_sync.feature` | Initial sync, delta sync, checksum validation |
+| `catalog_sync.feature` | Initial sync, checksum validation (delta sync deferred to v2) |
 
 Step implementations in `tests/bdd/` — one file per feature, shared fixtures in `tests/bdd/conftest.py`.
 

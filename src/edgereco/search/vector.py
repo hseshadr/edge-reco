@@ -1,4 +1,5 @@
 """Vector similarity search using FAISS index."""
+
 from __future__ import annotations
 
 import numpy as np

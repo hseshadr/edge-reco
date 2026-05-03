@@ -1,14 +1,19 @@
-"""Append-only in-memory event buffer."""
+"""Capped in-memory event buffer."""
+
 from __future__ import annotations
+
+from collections import deque
 
 from edgereco.catalog.models import InteractionEvent
 
+EVENT_BUFFER_MAXLEN = 10_000
+
 
 class EventBuffer:
-    """Thread-unsafe in-memory buffer for interaction events (v1: single process)."""
+    """Thread-unsafe single-process ring buffer for interaction events."""
 
-    def __init__(self) -> None:
-        self._events: list[InteractionEvent] = []
+    def __init__(self, maxlen: int = EVENT_BUFFER_MAXLEN) -> None:
+        self._events: deque[InteractionEvent] = deque(maxlen=maxlen)
 
     def append(self, event: InteractionEvent) -> None:
         self._events.append(event)

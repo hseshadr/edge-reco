@@ -1,4 +1,5 @@
 """Step impls for features/session_tracking.feature."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -36,13 +37,17 @@ def _record_event(ctx: dict[str, Any], event_type: str, product_id: str) -> None
     ctx["profile"] = apply_interaction(ctx["profile"], product, event_type)
 
 
-@when(parsers.parse('I record a "{event_type}" interaction with product "{product_id}" in profile A'))  # noqa: E501
+@when(
+    parsers.parse('I record a "{event_type}" interaction with product "{product_id}" in profile A')
+)
 def _record_a(ctx: dict[str, Any], event_type: str, product_id: str) -> None:
     product = ctx["by_id"][product_id]
     ctx["profile_a"] = apply_interaction(ctx["profile_a"], product, event_type)
 
 
-@when(parsers.parse('I record a "{event_type}" interaction with product "{product_id}" in profile B'))  # noqa: E501
+@when(
+    parsers.parse('I record a "{event_type}" interaction with product "{product_id}" in profile B')
+)
 def _record_b(ctx: dict[str, Any], event_type: str, product_id: str) -> None:
     product = ctx["by_id"][product_id]
     ctx["profile_b"] = apply_interaction(ctx["profile_b"], product, event_type)
@@ -57,7 +62,11 @@ def _record_three_clicks(ctx: dict[str, Any], a: str, b: str, c: str) -> None:
     ctx["profile"] = profile
 
 
-@then(parsers.parse('the session profile should have a category affinity for "{category}" greater than 0'))  # noqa: E501
+@then(
+    parsers.parse(
+        'the session profile should have a category affinity for "{category}" greater than 0'
+    )
+)
 def _has_cat_affinity(ctx: dict[str, Any], category: str) -> None:
     assert ctx["profile"].category_affinity.get(category, 0.0) > 0
 
@@ -67,12 +76,18 @@ def _has_tag_affinity(ctx: dict[str, Any], tag: str) -> None:
     assert ctx["profile"].tag_affinity.get(tag, 0.0) > 0
 
 
-@then(parsers.parse('the session profile should have a brand affinity for "{brand}" greater than 0'))  # noqa: E501
+@then(
+    parsers.parse('the session profile should have a brand affinity for "{brand}" greater than 0')
+)
 def _has_brand_affinity(ctx: dict[str, Any], brand: str) -> None:
     assert ctx["profile"].brand_affinity.get(brand, 0.0) > 0
 
 
-@then(parsers.parse("profile B's category affinity for \"{category}\" should be greater than profile A's"))  # noqa: E501
+@then(
+    parsers.parse(
+        "profile B's category affinity for \"{category}\" should be greater than profile A's"
+    )
+)
 def _b_greater_than_a(ctx: dict[str, Any], category: str) -> None:
     a = ctx["profile_a"].category_affinity.get(category, 0.0)
     b = ctx["profile_b"].category_affinity.get(category, 0.0)

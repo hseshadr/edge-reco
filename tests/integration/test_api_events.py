@@ -1,4 +1,5 @@
 """Integration tests: POST /events endpoint."""
+
 from __future__ import annotations
 
 import uuid
@@ -22,8 +23,11 @@ def test_post_events_unknown_product_id_still_200(client: TestClient) -> None:
     session_id = str(uuid.uuid4())
     payload = {
         "events": [
-            {"event_type": "click", "product_id": "UNKNOWN_XYZ",
-             "timestamp": "2026-04-26T00:00:00Z"},
+            {
+                "event_type": "click",
+                "product_id": "UNKNOWN_XYZ",
+                "timestamp": "2026-04-26T00:00:00Z",
+            },
         ]
     }
     response = client.post("/events", json=payload, headers={"X-Session-Id": session_id})

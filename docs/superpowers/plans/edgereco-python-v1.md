@@ -1,5 +1,7 @@
 # EdgeReco Python v1 Implementation Plan
 
+> **HISTORICAL — executed 2026-04-30, commit `6d63ab9`.** This document describes the original 26-task v1 build and reflects the state as it was implemented. Subsequent cleanup on the `polish/northstar-tier1-3` branch removed `DeltaFile`/`deltas`, `load_csv`, and `examples/scripts/preprocess_amazon.py`, and changed the demo `catalog_id` to `edgereco-demo` (with 1000 synthetic rows). See [`./2026-04-30-northstar-polish.md`](./2026-04-30-northstar-polish.md) and the [CHANGELOG](../../../CHANGELOG.md) for the post-v0.1 evolution.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Each subagent MUST use `superpowers:test-driven-development`.
 
 **Goal:** Build a Python-first edge product discovery engine with hybrid search (BM25 + FAISS), session-aware recommendations, catalog sync, BDD test suite, and Docker Compose demo over real Amazon product data.

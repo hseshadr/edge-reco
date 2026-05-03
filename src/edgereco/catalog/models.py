@@ -1,5 +1,8 @@
 """Data models for EdgeReco product catalog."""
+
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -32,15 +35,6 @@ class CatalogFile(BaseModel):
     rows: int | None = None
 
 
-class DeltaFile(BaseModel):
-    """A delta update file in a catalog manifest."""
-
-    path: str
-    from_version: str
-    to_version: str
-    checksum: str
-
-
 class CatalogManifest(BaseModel):
     """Manifest describing a catalog version and its files."""
 
@@ -49,7 +43,6 @@ class CatalogManifest(BaseModel):
     embedding_model: str
     embedding_dim: int = 384
     files: list[CatalogFile]
-    deltas: list[DeltaFile] = []
 
 
 class SessionProfile(BaseModel):
@@ -70,10 +63,13 @@ class SearchResult(BaseModel):
     score_components: dict[str, float] = {}
 
 
+type EventType = Literal["click", "view", "favorite", "cart"]
+
+
 class InteractionEvent(BaseModel):
     """A user interaction event."""
 
-    event_type: str
+    event_type: EventType
     product_id: str
     timestamp: str
     metadata: dict[str, str] = {}

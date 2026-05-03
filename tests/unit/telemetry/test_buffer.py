@@ -1,4 +1,5 @@
 """Unit tests for EventBuffer."""
+
 from __future__ import annotations
 
 from edgereco.catalog.models import InteractionEvent

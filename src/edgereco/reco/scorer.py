@@ -1,4 +1,5 @@
 """Product scoring using session profile affinities."""
+
 from __future__ import annotations
 
 from edgereco.catalog.models import Product, SearchResult, SessionProfile

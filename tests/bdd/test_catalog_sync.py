@@ -1,4 +1,5 @@
 """Step impls for features/catalog_sync.feature."""
+
 from __future__ import annotations
 
 import hashlib
@@ -29,8 +30,10 @@ def _seed_origin(ctx: dict[str, Any], *, corrupt_checksum: bool) -> None:
     if corrupt_checksum:
         checksum = "sha256:wrong"
     manifest = {
-        "catalog_id": "bdd-origin", "version": "v1",
-        "embedding_model": "model", "embedding_dim": 384,
+        "catalog_id": "bdd-origin",
+        "version": "v1",
+        "embedding_model": "model",
+        "embedding_dim": 384,
         "files": [
             {"path": "products.jsonl", "file_type": "products", "checksum": checksum, "rows": 1},
         ],

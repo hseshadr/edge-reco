@@ -9,14 +9,17 @@ def test_rrf_merges_two_lists() -> None:
     assert "b" in ids[:2]
     assert "a" in ids[:3]
 
+
 def test_rrf_handles_empty_keyword() -> None:
     merged = reciprocal_rank_fusion([], [("a", 0.9)], k=60)
     assert len(merged) == 1
     assert merged[0][0] == "a"
 
+
 def test_rrf_handles_empty_vector() -> None:
     merged = reciprocal_rank_fusion([("a", 5.0)], [], k=60)
     assert len(merged) == 1
+
 
 def test_rrf_deduplicates() -> None:
     merged = reciprocal_rank_fusion(

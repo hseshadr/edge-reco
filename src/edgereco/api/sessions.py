@@ -1,4 +1,5 @@
 """In-memory session store: session_id -> SessionProfile."""
+
 from __future__ import annotations
 
 import threading

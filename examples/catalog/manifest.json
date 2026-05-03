@@ -10,6 +10,5 @@
       "checksum": "sha256:026b7a0831d9242a5d1867f2f3d15bc11a3bca334eeb7e7337c1984957e89af0",
       "rows": 1000
     }
-  ],
-  "deltas": []
+  ]
 }

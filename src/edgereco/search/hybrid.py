@@ -1,4 +1,5 @@
 """Reciprocal Rank Fusion for combining keyword and vector search results."""
+
 from __future__ import annotations
 
 

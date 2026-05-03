@@ -1,4 +1,5 @@
 """Focused CLI tests to close coverage gaps on cli.py."""
+
 from __future__ import annotations
 
 import shutil
@@ -44,9 +45,11 @@ def index_dirs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
         version="2026-04-24T00:00:00Z",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=384,
-        files=[CatalogFile(
-            path="products.jsonl", file_type="products", checksum=checksum, rows=len(products)
-        )],
+        files=[
+            CatalogFile(
+                path="products.jsonl", file_type="products", checksum=checksum, rows=len(products)
+            )
+        ],
     )
     (cache_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 

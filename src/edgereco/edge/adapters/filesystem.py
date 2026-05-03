@@ -1,4 +1,5 @@
 """Filesystem catalog adapter for testing and local development."""
+
 from __future__ import annotations
 
 import json

@@ -44,10 +44,6 @@ def test_similar_products_have_higher_cosine_similarity() -> None:
     ]
     embeddings = encoder.encode(products)
     q_norm = np.linalg.norm(query)
-    sim_headphones = float(
-        np.dot(query, embeddings[0]) / (q_norm * np.linalg.norm(embeddings[0]))
-    )
-    sim_dogfood = float(
-        np.dot(query, embeddings[1]) / (q_norm * np.linalg.norm(embeddings[1]))
-    )
+    sim_headphones = float(np.dot(query, embeddings[0]) / (q_norm * np.linalg.norm(embeddings[0])))
+    sim_dogfood = float(np.dot(query, embeddings[1]) / (q_norm * np.linalg.norm(embeddings[1])))
     assert sim_headphones > sim_dogfood

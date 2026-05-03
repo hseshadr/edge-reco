@@ -1,4 +1,5 @@
 """Unit tests for catalog sync."""
+
 from __future__ import annotations
 
 import hashlib
@@ -18,8 +19,10 @@ def _setup_origin(tmp_path: Path) -> Path:
     (origin / "products.jsonl").write_text(products)
     checksum = "sha256:" + hashlib.sha256(products.encode()).hexdigest()
     manifest = {
-        "catalog_id": "test", "version": "v1",
-        "embedding_model": "model", "embedding_dim": 384,
+        "catalog_id": "test",
+        "version": "v1",
+        "embedding_model": "model",
+        "embedding_dim": 384,
         "files": [
             {"path": "products.jsonl", "file_type": "products", "checksum": checksum, "rows": 1},
         ],

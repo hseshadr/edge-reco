@@ -1,4 +1,5 @@
 """Integration tests: /healthz endpoint."""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
