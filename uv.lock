@@ -203,10 +203,55 @@ nvtx = [
 ]
 
 [[package]]
+name = "edge-proc"
+version = "0.1.0"
+source = { directory = "../edgeproc" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "shared-libs-python" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+localvec = [
+    { name = "faiss-cpu" },
+    { name = "numpy" },
+    { name = "rank-bm25" },
+    { name = "sentence-transformers" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "faiss-cpu", marker = "extra == 'localvec'", specifier = ">=1.9" },
+    { name = "httpx", marker = "extra == 'bundles'", specifier = ">=0.27" },
+    { name = "numpy", marker = "extra == 'localvec'", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "rank-bm25", marker = "extra == 'localvec'", specifier = ">=0.2" },
+    { name = "sentence-transformers", marker = "extra == 'localvec'", specifier = ">=3.3" },
+    { name = "shared-libs-python", editable = "../shared-libs-python" },
+    { name = "structlog", marker = "extra == 'bundles'", specifier = ">=24.4" },
+    { name = "typer", specifier = ">=0.15" },
+]
+provides-extras = ["localvec", "bundles"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.11" },
+    { name = "poethepoet", specifier = ">=0.30" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "pytest-cov", specifier = ">=6.0" },
+    { name = "radon", specifier = ">=6.0" },
+    { name = "ruff", specifier = ">=0.6" },
+    { name = "xenon", specifier = ">=0.9" },
+]
+
+[[package]]
 name = "edgereco"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "edge-proc", extra = ["localvec"] },
     { name = "faiss-cpu" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -232,6 +277,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "edge-proc", extras = ["localvec"], directory = "../edgeproc" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
@@ -1386,6 +1432,43 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0d/1c/73e719955c59b8e424d015ab450f51c0af856ae46ea2da83eba51cc88de1/setuptools-81.0.0.tar.gz", hash = "sha256:487b53915f52501f0a79ccfd0c02c165ffe06631443a886740b91af4b7a5845a", size = 1198299, upload-time = "2026-02-06T21:10:39.601Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/e3/c164c88b2e5ce7b24d667b9bd83589cf4f3520d97cad01534cd3c4f55fdb/setuptools-81.0.0-py3-none-any.whl", hash = "sha256:fdd925d5c5d9f62e4b74b30d6dd7828ce236fd6ed998a08d81de62ce5a6310d6", size = 1062021, upload-time = "2026-02-06T21:10:37.175Z" },
+]
+
+[[package]]
+name = "shared-libs-python"
+version = "0.1.1"
+source = { editable = "../shared-libs-python" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
+    { name = "numpy", marker = "extra == 'pgvector'", specifier = ">=1.26.0" },
+    { name = "pgvector", marker = "extra == 'pgvector'", specifier = ">=0.2.4" },
+    { name = "poethepoet", marker = "extra == 'dev'", specifier = ">=0.30.0" },
+    { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.3" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.1" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
+    { name = "radon", marker = "extra == 'dev'", specifier = ">=6.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.6" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'pgvector'", specifier = ">=2.0.23" },
+    { name = "xenon", marker = "extra == 'dev'", specifier = ">=0.9.0" },
+]
+provides-extras = ["pgvector", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.7.0" },
+    { name = "poethepoet", specifier = ">=0.30.0" },
+    { name = "pytest", specifier = ">=7.4.3" },
+    { name = "pytest-asyncio", specifier = ">=0.21.1" },
+    { name = "pytest-cov", specifier = ">=4.1.0" },
+    { name = "radon", specifier = ">=6.0.0" },
+    { name = "ruff", specifier = ">=0.1.6" },
+    { name = "xenon", specifier = ">=0.9.0" },
 ]
 
 [[package]]

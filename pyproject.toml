@@ -17,6 +17,7 @@ dependencies = [
   "httpx>=0.27",
   "numpy>=2.0",
   "structlog>=24.4",
+  "edge-proc[localvec]",
 ]
 
 [dependency-groups]
@@ -30,6 +31,11 @@ dev = [
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+# Local built install (not editable) so the package + its py.typed marker land in
+# site-packages where mypy resolves them — mirrors consuming the published edge-proc.
+edge-proc = { path = "../edgeproc" }
 
 [project.scripts]
 edgereco = "edgereco.cli:app"
@@ -65,6 +71,7 @@ ignore_missing_imports = true
 line-length = 100
 target-version = "py313"
 src = ["src", "tests"]
+exclude = [".deps"]  # CI-only sibling checkouts
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF"]

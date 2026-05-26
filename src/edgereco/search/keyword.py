@@ -1,17 +1,18 @@
-"""BM25-based keyword search over products."""
+"""BM25 keyword search over products.
+
+The BM25 engine now comes from EdgeProc (``edge-proc[localvec]``); this module keeps
+only the reco-specific projection — how a Product becomes searchable text — and
+adapts it to EdgeProc's domain-agnostic ``KeywordSearcher.from_texts``.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from rank_bm25 import BM25Okapi
+from edgeproc.localvec.searcher import KeywordSearcher as _EdgeProcKeywordSearcher
 
 if TYPE_CHECKING:
     from edgereco.catalog.models import Product
-
-
-def _tokenize(text: str) -> list[str]:
-    return text.lower().split()
 
 
 def _product_tokens(product: Product) -> list[str]:
@@ -19,29 +20,20 @@ def _product_tokens(product: Product) -> list[str]:
     parts.extend(product.tags)
     if product.brand:
         parts.append(product.brand)
-    return _tokenize(" ".join(parts))
+    return " ".join(parts).lower().split()
 
 
 class KeywordSearcher:
-    def __init__(self, bm25: BM25Okapi, ids: list[str]) -> None:
-        self._bm25 = bm25
-        self._ids = ids
+    """Reco adapter over EdgeProc's BM25 searcher."""
+
+    def __init__(self, inner: _EdgeProcKeywordSearcher) -> None:
+        self._inner = inner
 
     @classmethod
     def build(cls, products: list[Product]) -> KeywordSearcher:
-        corpus = [_product_tokens(p) for p in products]
+        texts = [" ".join(_product_tokens(p)) for p in products]
         ids = [p.id for p in products]
-        bm25 = BM25Okapi(corpus) if corpus else BM25Okapi([[""]])
-        return cls(bm25, ids)
+        return cls(_EdgeProcKeywordSearcher.from_texts(texts, ids))
 
     def search(self, query: str, *, k: int = 10) -> list[tuple[str, float]]:
-        if not query.strip():
-            return []
-        tokens = _tokenize(query)
-        scores = self._bm25.get_scores(tokens)
-        ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        results: list[tuple[str, float]] = []
-        for idx, score in ranked[:k]:
-            if score > 0:
-                results.append((self._ids[idx], float(score)))
-        return results
+        return self._inner.search(query, k=k)
