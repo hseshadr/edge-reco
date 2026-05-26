@@ -9,6 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Checkout private sibling repos so ../edgeproc and ../shared-libs-python
+      # resolve identically to the local dev layout (~/dev/oss/ siblings).
+      # Requires a PAT with read access to both private repos stored as
+      # secrets.PORTFOLIO_PAT (Settings -> Secrets -> Actions in this repo).
+      # Scopes needed: repo (read) for hseshadr/edgeproc + hseshadr/shared-libs-python.
+      - name: Checkout edgeproc (private sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: hseshadr/edgeproc
+          token: ${{ secrets.PORTFOLIO_PAT }}
+          path: ../edgeproc
+
+      - name: Checkout shared-libs-python (private sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: hseshadr/shared-libs-python
+          token: ${{ secrets.PORTFOLIO_PAT }}
+          path: ../shared-libs-python
+
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
