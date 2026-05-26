@@ -137,7 +137,8 @@ def test_cli_index(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert (index_dir / "vector" / "index.faiss").exists()
-    assert (index_dir / "vector" / "id_map.json").exists()
+    # Sidecar is EdgeProc's FaissVectorIndex state (id map + tombstones + metadata).
+    assert (index_dir / "vector" / "state.json").exists()
 
 
 # ---------------------------------------------------------------------------
