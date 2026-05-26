@@ -26,6 +26,9 @@ htmlcov/
 # uv
 .uv/
 
+# CI-only sibling checkouts (never present in local dev)
+.deps/
+
 # Environment
 .env
 .env.local

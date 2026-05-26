@@ -10,32 +10,65 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Checkout private sibling repos so ../edgeproc and ../shared-libs-python
-      # resolve identically to the local dev layout (~/dev/oss/ siblings).
-      # Requires a PAT with read access to both private repos stored as
-      # secrets.PORTFOLIO_PAT (Settings -> Secrets -> Actions in this repo).
-      # Scopes needed: repo (read) for hseshadr/edgeproc + hseshadr/shared-libs-python.
+      # Checkout private sibling repos inside the workspace (.deps/) so
+      # actions/checkout path restrictions are satisfied (must stay within
+      # $GITHUB_WORKSPACE). A Python step below patches the uv path sources
+      # in pyproject.toml to point at these in-workspace locations before
+      # uv sync runs. Local dev is unaffected (pyproject.toml is patched
+      # in memory only — the on-disk file is restored by git clean, or just
+      # never committed since CI never pushes).
+      #
+      # REQUIRED: create a GitHub Actions secret named PORTFOLIO_PAT with a
+      # Personal Access Token (classic or fine-grained) that has read access
+      # to hseshadr/edgeproc and hseshadr/shared-libs-python.
+      # Settings -> Secrets and variables -> Actions -> New repository secret.
       - name: Checkout edgeproc (private sibling)
         uses: actions/checkout@v4
         with:
           repository: hseshadr/edgeproc
           token: ${{ secrets.PORTFOLIO_PAT }}
-          path: ../edgeproc
+          path: .deps/edgeproc
 
       - name: Checkout shared-libs-python (private sibling)
         uses: actions/checkout@v4
         with:
           repository: hseshadr/shared-libs-python
           token: ${{ secrets.PORTFOLIO_PAT }}
-          path: ../shared-libs-python
+          path: .deps/shared-libs-python
+
+      - name: Patch uv path sources for CI layout
+        # edge-reco's pyproject.toml has: edge-proc = { path = "../edgeproc" }
+        # In CI the sibling is at .deps/edgeproc (inside $GITHUB_WORKSPACE).
+        # edgeproc's own pyproject has shared-libs-python = { path = "../shared-libs-python" }
+        # which from .deps/edgeproc/ resolves to .deps/shared-libs-python — correct as-is.
+        # Only edge-reco's source needs patching.
+        run: |
+          python3 - <<'PYEOF'
+          import re, pathlib
+          p = pathlib.Path("pyproject.toml")
+          txt = p.read_text()
+          txt = re.sub(
+              r'(edge-proc\s*=\s*\{[^}]*path\s*=\s*")[^"]*(")',
+              r'\g<1>.deps/edgeproc\g<2>',
+              txt,
+          )
+          p.write_text(txt)
+          print("Patched: edge-proc path -> .deps/edgeproc")
+          PYEOF
 
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
       - name: Pin Python
         run: uv python install 3.13
+      # --frozen is dropped here because the uv.lock records ../edgeproc and
+      # ../shared-libs-python path sources which would still resolve to the
+      # missing original paths. Without --frozen, uv re-resolves using the
+      # patched pyproject.toml that points at .deps/. The lock is not
+      # committed from CI so non-path deps remain pinned by the checked-in lock
+      # on local dev; CI just builds a fresh resolution for its layout.
       - name: Sync
-        run: uv sync --group dev --frozen
+        run: uv sync --group dev
       - name: Ruff format
         run: uv run ruff format --check .
       - name: Ruff lint
