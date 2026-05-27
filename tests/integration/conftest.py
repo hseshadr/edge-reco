@@ -44,6 +44,7 @@ def container(tmp_path_factory: pytest.TempPathFactory) -> ServiceContainer:
         version="v1",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=encoder.dim,
+        embedding_count=len(products),
         product_count=len(products),
     )
     return ServiceContainer.from_synced(

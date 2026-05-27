@@ -74,6 +74,9 @@ def bundle(
         str, typer.Option(help="Embedding model id")
     ] = "sentence-transformers/all-MiniLM-L6-v2",
     embedding_dim: Annotated[int, typer.Option(help="Embedding dimension")] = 384,
+    embedding_count: Annotated[
+        int, typer.Option(help="Number of embedding rows in vector/embeddings.f32")
+    ] = 0,
     product_count: Annotated[int, typer.Option(help="Number of products in the catalog")] = 0,
 ) -> None:
     """Build a signed, content-addressed bundle (FAISS index + catalog) origin."""
@@ -87,6 +90,7 @@ def bundle(
         version=version,
         embedding_model=embedding_model,
         embedding_dim=embedding_dim,
+        embedding_count=embedding_count,
         product_count=product_count,
     )
     typer.echo(f"Built bundle '{catalog_id}' v{version} → {origin_dir}")

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 from edgeproc.localvec.faiss_index import FaissVectorIndex
@@ -19,6 +20,11 @@ from numpy.typing import NDArray
 from shared_libs_python.vector_mgmt.core.types import IndexConfig, VectorEmbedding
 
 _INDEX_NAME = "edgereco"
+
+#: Raw, L2-normalized ``float32`` matrix (``ntotal x dim``, row-major) written next
+#: to ``index.faiss``/``state.json`` so a Python-faiss-less tier (the browser) can do
+#: cosine search directly. Row ``i`` ↔ ``state.json`` ``faiss_ids[i]`` ↔ product id.
+EMBEDDINGS_FILE: Final[str] = "embeddings.f32"
 
 
 class VectorIndex:
@@ -45,8 +51,25 @@ class VectorIndex:
         hits = asyncio.run(self._inner.search(query.tolist(), k))
         return [(entity_id, 1.0 - distance) for entity_id, distance in hits]
 
+    def raw_matrix(self) -> NDArray[np.float32]:
+        """Reconstruct the stored vectors as a contiguous ``ntotal x dim`` float32
+        matrix in id-map order: row ``i`` is the vector for ``faiss_ids[i]``.
+
+        The inputs are L2-normalized at encode time and ``IndexFlatIP`` stores them
+        verbatim, so the reconstruction is the same normalized matrix the browser
+        does cosine search over.
+        """
+        faiss_index = self._inner._faiss  # sync facade owns the inner index
+        ntotal = int(faiss_index.ntotal)
+        if ntotal == 0:
+            return np.empty((0, self._inner.config.dimension), dtype=np.float32)
+        matrix = faiss_index.reconstruct_n(0, ntotal)
+        return np.ascontiguousarray(matrix, dtype=np.float32)
+
     def save(self, directory: Path) -> None:
         self._inner.save(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / EMBEDDINGS_FILE).write_bytes(self.raw_matrix().tobytes())
 
     @classmethod
     def load(cls, directory: Path) -> VectorIndex:

@@ -39,6 +39,7 @@ class CatalogMeta(BaseModel):
     version: str
     embedding_model: str
     embedding_dim: int
+    embedding_count: int
     product_count: int
 
 
@@ -51,6 +52,7 @@ def publish_bundle(
     version: str,
     embedding_model: str,
     embedding_dim: int,
+    embedding_count: int,
     product_count: int,
 ) -> None:
     """Write ``catalog_meta.json`` then build the signed origin from the staging dir."""
@@ -59,6 +61,7 @@ def publish_bundle(
         version=version,
         embedding_model=embedding_model,
         embedding_dim=embedding_dim,
+        embedding_count=embedding_count,
         product_count=product_count,
     )
     (staging_dir / _META_NAME).write_text(meta.model_dump_json(), encoding="utf-8")

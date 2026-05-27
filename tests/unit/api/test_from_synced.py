@@ -52,6 +52,7 @@ def _build_origin(tmp_path: Path) -> tuple[Path, Ed25519Verifier]:
         version="2026-05-27T00:00:00Z",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=_DIM,
+        embedding_count=len(_PRODUCTS),
         product_count=len(_PRODUCTS),
     )
     return origin, Ed25519Verifier(public)

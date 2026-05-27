@@ -29,6 +29,7 @@ runner = CliRunner()
 _PRODUCTS = '{"id":"P1","title":"Widget","category":"Electronics"}\n'
 _FAISS_INDEX = b"\x00FAISS-INDEX-BYTES\x01"
 _FAISS_STATE = b'{"id_map": ["P1"]}'
+_EMBEDDINGS = b"\x00\x00\x80\x3f" * 4  # 4 float32 1.0s — opaque to the producer
 
 
 def _staging(tmp_path: Path) -> Path:
@@ -38,6 +39,7 @@ def _staging(tmp_path: Path) -> Path:
     (staging / "products.jsonl").write_text(_PRODUCTS, encoding="utf-8")
     (staging / "vector" / "index.faiss").write_bytes(_FAISS_INDEX)
     (staging / "vector" / "state.json").write_bytes(_FAISS_STATE)
+    (staging / "vector" / "embeddings.f32").write_bytes(_EMBEDDINGS)
     return staging
 
 
@@ -56,6 +58,7 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
         version="2026-05-27T00:00:00Z",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=384,
+        embedding_count=1,
         product_count=1,
     )
 
@@ -71,10 +74,15 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
     assert materialize_file(cache, manifest, "products.jsonl") == _PRODUCTS.encode("utf-8")
     assert materialize_file(cache, manifest, "vector/index.faiss") == _FAISS_INDEX
     assert materialize_file(cache, manifest, "vector/state.json") == _FAISS_STATE
+    assert materialize_file(cache, manifest, "vector/embeddings.f32") == _EMBEDDINGS
     meta = json.loads(materialize_file(cache, manifest, "catalog_meta.json"))
-    assert {"products.jsonl", "vector/index.faiss", "vector/state.json", "catalog_meta.json"} == {
-        entry.path for entry in manifest.files
-    }
+    assert {
+        "products.jsonl",
+        "vector/index.faiss",
+        "vector/state.json",
+        "vector/embeddings.f32",
+        "catalog_meta.json",
+    } == {entry.path for entry in manifest.files}
     assert meta["catalog_id"] == "amazon-demo"
 
 
@@ -93,6 +101,7 @@ def test_catalog_meta_content(tmp_path: Path) -> None:
         version="2026-05-27T00:00:00Z",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=384,
+        embedding_count=1,
         product_count=1,
     )
 
@@ -111,6 +120,7 @@ def test_catalog_meta_content(tmp_path: Path) -> None:
         "version": "2026-05-27T00:00:00Z",
         "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
         "embedding_dim": 384,
+        "embedding_count": 1,
         "product_count": 1,
     }
 
@@ -134,6 +144,7 @@ def test_signature_fail_closed(tmp_path: Path) -> None:
         version="v1",
         embedding_model="m",
         embedding_dim=384,
+        embedding_count=1,
         product_count=1,
     )
 
@@ -170,6 +181,8 @@ def test_cli_bundle_end_to_end(tmp_path: Path) -> None:
             "sentence-transformers/all-MiniLM-L6-v2",
             "--embedding-dim",
             "384",
+            "--embedding-count",
+            "1",
             "--product-count",
             "1",
         ],

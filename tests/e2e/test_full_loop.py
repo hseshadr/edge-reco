@@ -46,6 +46,7 @@ def signed_origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Ed255
         version="v1",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dim=encoder.dim,
+        embedding_count=len(products),
         product_count=len(products),
     )
     return origin, Ed25519Verifier(public)

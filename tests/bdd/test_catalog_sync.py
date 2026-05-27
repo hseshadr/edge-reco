@@ -40,6 +40,7 @@ def _publish(ctx: dict[str, Any], *, tag: str, version: str) -> Path:
         version=version,
         embedding_model="model",
         embedding_dim=384,
+        embedding_count=1,
         product_count=1,
     )
     return origin
