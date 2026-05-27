@@ -64,6 +64,8 @@ export interface SearchEngine {
 	browse(opts?: BrowseOptions): BrowseResponse;
 	/** Vector-only cosine top-k from a query vector (C2b parity path). */
 	searchVector(queryVec: Float32Array, opts?: SearchOptions): SearchResponse;
+	/** The full catalog in bundle order — the lookup the events path folds clicks over. */
+	catalog(): ReadonlyArray<Product>;
 }
 
 function hydrateFused(
@@ -99,6 +101,10 @@ class HybridSearchEngine implements SearchEngine {
 
 	public get ntotal(): number {
 		return this.#index.ntotal;
+	}
+
+	public catalog(): ReadonlyArray<Product> {
+		return this.#catalog;
 	}
 
 	public async search(

@@ -1,31 +1,27 @@
-# Nimbus demo — docker-compose.
+# Nimbus demo — docker-compose. BACKEND-FREE showcase.
 #
 # ┌─ READ THIS FIRST ──────────────────────────────────────────────────────┐
-# │ `make dev` is the lightest way to iterate on the FRONTEND locally.      │
-# │ This compose file is the full local-first delivery loop:                │
-# │                                                                         │
-# │     origin (static bundle) ──► edge (Caddy CDN :8081)                   │
-# │                                      │ sync (signed, verified)          │
-# │                                      ▼                                   │
-# │     backend (edge-reco engine :8000) ──► frontend (Nimbus :5173)        │
-# │                                                                         │
-# │ The backend SYNCS the signed, content-addressed catalog bundle from the │
-# │ Caddy origin at startup (ServiceContainer.from_synced) and serves the   │
-# │ real 728-product Amazon catalog — no code change to the frontend.       │
-# │                                                                         │
-# │ Docker requires THREE sibling repos checked out side-by-side under one  │
-# │ parent dir (~/dev/oss by default):                                      │
-# │     ~/dev/oss/edge-reco            (this repo)                           │
-# │     ~/dev/oss/edge-proc            (engine dep: ../edge-proc)            │
-# │     ~/dev/oss/shared-libs-python   (edge-proc's dep: ../shared-libs-..)  │
-# │                                                                         │
-# │ The backend's uv local-path sources (../edge-proc,../shared-libs-python)│
-# │ live OUTSIDE this repo, so the backend build context is the PARENT dir  │
-# │ (../.. -> ~/dev/oss) to make all three reachable. See                   │
-# │ demo/backend/Dockerfile for the in-image layout it reconstructs.        │
-# │                                                                         │
-# │ Run from this directory (demo/):  docker compose up --build             │
-# │ Then open the frontend:           http://localhost:5173                 │
+# │ The whole stack runs with NO application backend. The browser does the  │
+# │ search:                                                                  │
+# │                                                                          │
+# │     origin (static signed bundle) ──► edge (Caddy CDN :8081)            │
+# │                                              │                           │
+# │                                              │ sync (signed, verified,   │
+# │                                              ▼  IN THE BROWSER)          │
+# │     frontend (static Nimbus SPA :5173) ── syncs the bundle into OPFS,    │
+# │                                           loads the embedding model, and │
+# │                                           runs edge-reco's hybrid search │
+# │                                           + session re-ranking IN-TAB.   │
+# │                                                                          │
+# │ No FastAPI, no Python server in the request path. The SPA verifies the   │
+# │ bundle ed25519+sha256 against a public key PINNED in its own build       │
+# │ (public/public.key) — it never trusts the bundle origin for the key.     │
+# │                                                                          │
+# │ Run from this directory (demo/):  docker compose up --build              │
+# │ Then open:                        http://localhost:5173                  │
+# │                                                                          │
+# │ This compose file needs ONLY this repo — no sibling repos, no engine     │
+# │ build. (`make dev` is still the lightest way to iterate on the SPA.)     │
 # └─────────────────────────────────────────────────────────────────────────┘
 
 services:
@@ -48,7 +44,8 @@ services:
       start_period: 5s
 
   # Edge CDN: Caddy reverse proxy with the bundle's cache policy (immutable
-  # chunk/manifest, short-TTL `latest`). This is what the device syncs from.
+  # chunk/manifest, short-TTL `latest`) + permissive CORS. This is what the
+  # browser syncs from. Host-mapped on :8081 so the browser can reach it.
   edge:
     image: caddy:2-alpine
     container_name: nimbus-edge
@@ -68,45 +65,21 @@ services:
       retries: 5
       start_period: 5s
 
-  backend:
-    # Context = parent of edge-reco (~/dev/oss) so edge-proc + shared-libs-python
-    # siblings are inside the build context. This compose file lives at
-    # demo/docker-compose.yml, so ../.. == edge-reco -> oss (the parent dir).
-    # Dockerfile path is relative to that context.
-    build:
-      context: ../..
-      dockerfile: edge-reco/demo/backend/Dockerfile
-    container_name: nimbus-backend
-    depends_on:
-      edge:
-        condition: service_healthy
-    environment:
-      DEMO_HOST: 0.0.0.0
-      DEMO_PORT: "8000"
-      # Allow the frontend's served origin through CORS.
-      DEMO_CORS_ORIGINS: http://localhost:5173
-      # Local-first delivery: sync the signed bundle from the Caddy edge and
-      # verify it against the pinned public key, into a writable cache.
-      EDGERECO_BUNDLE_BASE_URL: http://edge:8081
-      EDGERECO_VERIFY_KEY_PATH: /app/public.key
-      EDGERECO_BUNDLE_CACHE_DIR: /tmp/edgereco-bundle
-    volumes:
-      # Pin the public verify key into the image at the path the env points to.
-      - ./../examples/keys/public.key:/app/public.key:ro
-    ports:
-      - "8000:8000"
-
+  # The Nimbus SPA: a static bundle. VITE_BUNDLE_BASE_URL is baked at build time
+  # to the host-mapped edge origin, because the BROWSER (not this container) is
+  # what syncs the signed bundle from it.
   frontend:
     build:
       context: frontend
       dockerfile: Dockerfile
       args:
-        # Browser calls the host-mapped backend port. Baked at build time.
-        VITE_API_BASE: http://localhost:8000
+        VITE_BUNDLE_BASE_URL: http://localhost:8081
+    container_name: nimbus-frontend
     ports:
       - "5173:5173"
     depends_on:
-      - backend
+      edge:
+        condition: service_healthy
 
 volumes:
   caddy_data:

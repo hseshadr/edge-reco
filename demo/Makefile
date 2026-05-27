@@ -1,53 +1,58 @@
-# Nimbus demo — dev run tooling.
+# Nimbus demo — dev run tooling. The demo is BACKEND-FREE: the SPA syncs a signed
+# bundle from the Caddy edge and runs edge-reco's engine in the browser.
 #
 # Quickstart (recommended path):
-#   make install   # one-time: sync python deps + npm install
-#   make dev       # start backend (127.0.0.1:8000) + frontend (localhost:5173)
-#   make test      # backend pytest + frontend vitest
+#   docker compose up --build     # the whole backend-free showcase, one command
 #
-# `make dev` is the supported way to run the demo locally. Docker
-# (docker-compose.yml) is best-effort — see the header in that file.
+# Iterate on the SPA locally:
+#   make install   # one-time: frontend (npm) deps
+#   make edge      # serve the signed bundle from the Caddy edge (:8081)
+#   make frontend  # Vite dev server on localhost:5173 (syncs from the edge)
+#   make dev       # edge + frontend together
+#   make test      # frontend vitest
 #
-# NOTE on paths: all python targets run from the REPO ROOT (one level up from
-# this demo/ dir) because the engine is a `demo.backend.*` module under that
-# root and depends on sibling repos (../edgeproc, ../shared-libs-python) via
-# uv local sources resolved at the repo root.
+# NOTE on paths: python targets (the OPTIONAL API backend) run from the REPO ROOT
+# because the engine is a `demo.backend.*` module under that root and depends on
+# sibling repos (../edge-proc, ../shared-libs-python) via uv local sources.
 
 # Absolute path to demo/ regardless of where make is invoked from.
 DEMO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT_DIR := $(abspath $(DEMO_DIR)/..)
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev backend frontend test
+.PHONY: help install dev edge frontend backend test
 
 help: ## Show this help.
-	@echo "Nimbus demo targets:"
-	@echo "  make install   sync python deps (repo root) + npm install (frontend)"
-	@echo "  make dev       run backend + frontend concurrently (open http://localhost:5173)"
-	@echo "  make test      backend pytest + frontend vitest"
+	@echo "Nimbus demo (backend-free) targets:"
+	@echo "  docker compose up --build   the whole showcase, one command"
+	@echo "  make install   npm install (frontend)"
+	@echo "  make edge       serve the signed bundle from Caddy (:8081)"
+	@echo "  make frontend   Vite dev server (open http://localhost:5173)"
+	@echo "  make dev        edge + frontend together"
+	@echo "  make test       frontend vitest"
+	@echo "  make backend    (optional) the API-server use case (:8000)"
 
-install: ## One-time: install python + frontend dependencies.
-	cd $(ROOT_DIR) && uv sync
+install: ## One-time: install frontend dependencies.
 	cd $(DEMO_DIR)/frontend && npm install
 
-# Start BOTH servers concurrently. The backend is launched in the background;
-# the frontend runs in the foreground. `trap` kills the backend when the
-# frontend exits (Ctrl-C) so we don't leak a port-8000 process.
-dev: ## Run backend + frontend together. Open http://localhost:5173
-	@echo ">> backend  -> http://127.0.0.1:8000  (FAISS build ~8s on first request)"
-	@echo ">> frontend -> http://localhost:5173  <- open this in your browser"
-	@cd $(ROOT_DIR) && uv run python -m demo.backend.serve & \
-		BACKEND_PID=$$!; \
-		trap "kill $$BACKEND_PID 2>/dev/null" EXIT INT TERM; \
-		cd $(DEMO_DIR)/frontend && npm run dev
+# Serve the signed bundle from the Caddy edge so the SPA can sync it in-browser.
+edge: ## Run the origin + Caddy edge (signed bundle on :8081).
+	cd $(DEMO_DIR) && docker compose up -d origin edge
 
-# Individual servers (handy for debugging one side at a time).
-backend: ## Run only the backend launcher (127.0.0.1:8000).
-	cd $(ROOT_DIR) && uv run python -m demo.backend.serve
+# Edge (signed bundle) + the Vite SPA. The edge runs detached; the frontend runs
+# in the foreground; `trap` tears the edge down on Ctrl-C.
+dev: ## Run edge + frontend together. Open http://localhost:5173
+	@echo ">> edge     -> http://localhost:8081  (signed bundle the SPA syncs)"
+	@echo ">> frontend -> http://localhost:5173  <- open this in your browser"
+	@cd $(DEMO_DIR) && docker compose up -d origin edge
+	@trap "cd $(DEMO_DIR) && docker compose stop origin edge >/dev/null 2>&1" EXIT INT TERM; \
+		cd $(DEMO_DIR)/frontend && npm run dev
 
 frontend: ## Run only the Vite dev server (localhost:5173).
 	cd $(DEMO_DIR)/frontend && npm run dev
 
-test: ## Run backend pytest + frontend vitest.
-	cd $(ROOT_DIR) && uv run pytest demo/backend/tests
+backend: ## (Optional) Run the API-server launcher (127.0.0.1:8000) — NOT needed for the demo.
+	cd $(ROOT_DIR) && uv run python -m demo.backend.serve
+
+test: ## Run the frontend vitest units.
 	cd $(DEMO_DIR)/frontend && npm run test

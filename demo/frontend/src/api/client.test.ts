@@ -1,120 +1,144 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { catalogInfo, recommend, search, sendEvent } from "./client";
-import type { InteractionEvent, SearchResponse } from "./types";
+// The data layer is now backend-free: every call runs the in-browser engine over
+// the synced bundle, and sendEvent folds clicks into the in-tab session profile
+// (no network) so the next recommend() re-ranks. These tests bootstrap the client
+// against the REAL committed bundle via an injected fake sync-Worker + a stub
+// embedder, then assert the contract shapes and the live re-rank loop in Node.
 
-const API_BASE = "http://localhost:8000";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { EMBEDDING_DIM, type Embedder } from "../engine/embedder";
+import { catalogFetch } from "../engine/fixtures";
+import { MemoryCacheStore } from "../engine/memoryStore";
+import type { EnginePort } from "../engine/runtime";
+import { materializeFile, syncIndex } from "../engine/sync";
+import type { IndexManifest, SyncResult, Verify } from "../engine/types";
+import {
+	__setRuntimeForTests,
+	bootstrap,
+	browse,
+	catalogInfo,
+	recommend,
+	search,
+	sendEvent,
+} from "./client";
+import type { Product } from "./types";
 
-function jsonResponse(body: unknown, status = 200): Response {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: { "Content-Type": "application/json" },
-	});
+const acceptVerify: Verify = () => Promise.resolve();
+const DECODER = new TextDecoder();
+
+/** A fake sync Worker backed by the real committed bundle (no network, no OPFS). */
+function fakeEnginePort(): EnginePort {
+	const store = new MemoryCacheStore();
+	const { fetchBytes } = catalogFetch();
+	let manifest: IndexManifest | null = null;
+	return {
+		async sync(): Promise<SyncResult> {
+			const result = await syncIndex({
+				baseUrl: "/cat",
+				store,
+				fetchBytes,
+				verify: acceptVerify,
+			});
+			manifest = JSON.parse(
+				DECODER.decode(await store.getManifest(result.manifestHash)),
+			) as IndexManifest;
+			return result;
+		},
+		readFile(path: string): Promise<Uint8Array> {
+			if (manifest === null) {
+				throw new Error("sync first");
+			}
+			return materializeFile(store, manifest, path);
+		},
+	};
 }
 
-function lastCall(): [string, RequestInit] {
-	const mock = globalThis.fetch as ReturnType<typeof vi.fn>;
-	const call = mock.mock.calls.at(-1);
-	if (call === undefined) {
-		throw new Error("fetch was not called");
-	}
-	return [call[0] as string, call[1] as RequestInit];
-}
-
-function headerValue(init: RequestInit, name: string): string | null {
-	return new Headers(init.headers).get(name);
-}
-
-const sampleSearch: SearchResponse = {
-	results: [],
-	query: "headphones",
-	total: 0,
+// A unit query vector — the embedder is unused for the contract assertions, but
+// search() must get a valid 384-d vector to run the vector leg.
+const stubEmbedder: Embedder = {
+	embed(): Promise<Float32Array> {
+		const v = new Float32Array(EMBEDDING_DIM);
+		v[0] = 1;
+		return Promise.resolve(v);
+	},
 };
 
-describe("api client", () => {
-	beforeEach(() => {
-		localStorage.clear();
-		localStorage.setItem("nimbus_session_id", "session-xyz");
-		globalThis.fetch = vi.fn();
+describe("backend-free data layer", () => {
+	beforeEach(async () => {
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+		await bootstrap();
 	});
 
 	afterEach(() => {
-		vi.restoreAllMocks();
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
 	});
 
-	it("search() hits /search with q and the X-Session-Id header", async () => {
-		(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-			jsonResponse(sampleSearch),
-		);
-
-		const result = await search("headphones");
-
-		const [url, init] = lastCall();
-		expect(url).toBe(`${API_BASE}/search?q=headphones`);
-		expect(init.method).toBe("GET");
-		expect(headerValue(init, "X-Session-Id")).toBe("session-xyz");
-		expect(result).toEqual(sampleSearch);
+	it("bootstrap reports stages ending in 'ready'", async () => {
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+		const stages: string[] = [];
+		await bootstrap((stage) => stages.push(stage.kind));
+		expect(stages[0]).toBe("syncing");
+		expect(stages.at(-1)).toBe("ready");
 	});
 
-	it("search() encodes limit and category options", async () => {
-		(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-			jsonResponse(sampleSearch),
-		);
-
-		await search("shoes", { limit: 5, category: "footwear" });
-
-		const [url] = lastCall();
-		expect(url).toBe(`${API_BASE}/search?q=shoes&limit=5&category=footwear`);
+	it("search() returns the SearchResponse shape from the engine", async () => {
+		const res = await search("headphones", { limit: 5 });
+		expect(res.query).toBe("headphones");
+		expect(Array.isArray(res.results)).toBe(true);
+		expect(res.results.length).toBeLessThanOrEqual(5);
+		expect(typeof res.total).toBe("number");
 	});
 
-	it("search() throws on a non-2xx response", async () => {
-		(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-			jsonResponse({ detail: "boom" }, 500),
-		);
-
-		await expect(search("x")).rejects.toThrow(/500/);
+	it("browse() lists products with categories", async () => {
+		const res = await browse({ limit: 8 });
+		expect(res.products).toHaveLength(8);
+		expect(res.categories.length).toBeGreaterThan(0);
 	});
 
-	it("recommend() hits /recommend with limit and parses the body", async () => {
-		(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-			jsonResponse({ results: [], session_clicks: 3 }),
-		);
-
-		const result = await recommend(8);
-
-		const [url, init] = lastCall();
-		expect(url).toBe(`${API_BASE}/recommend?limit=8`);
-		expect(headerValue(init, "X-Session-Id")).toBe("session-xyz");
-		expect(result.session_clicks).toBe(3);
-	});
-
-	it("sendEvent() POSTs a batch envelope to /events", async () => {
-		(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-			jsonResponse({ received: 1 }),
-		);
-		const evt: InteractionEvent = {
-			event_type: "click",
-			product_id: "p1",
-			timestamp: "2026-05-26T00:00:00Z",
-		};
-
-		await sendEvent(evt);
-
-		const [url, init] = lastCall();
-		expect(url).toBe(`${API_BASE}/events`);
-		expect(init.method).toBe("POST");
-		expect(headerValue(init, "Content-Type")).toBe("application/json");
-		expect(JSON.parse(init.body as string)).toEqual({ events: [evt] });
-	});
-
-	it("catalogInfo() GETs /catalog/info", async () => {
-		(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-			jsonResponse({ count: 42 }),
-		);
-
+	it("catalogInfo() reports the catalog size", async () => {
 		const info = await catalogInfo();
+		expect(info.count).toBe((await browse({ limit: 10_000 })).total);
+	});
 
-		const [url] = lastCall();
-		expect(url).toBe(`${API_BASE}/catalog/info`);
-		expect(info).toEqual({ count: 42 });
+	it("a click folds into the profile and re-ranks the next recommend (no network)", async () => {
+		const cold = await recommend(10);
+		expect(cold.session_clicks).toBe(0);
+		const coldOrder = cold.results.map((r) => r.product.id).join(",");
+
+		// Click 3 products in one category — clicks update the IN-TAB profile only.
+		const target = cold.results[0]?.product as Product;
+		const sameCategory = (await browse({ limit: 10_000 })).products
+			.filter((p) => p.category === target.category)
+			.slice(0, 3);
+		for (const product of sameCategory) {
+			await sendEvent({
+				event_type: "click",
+				product_id: product.id,
+				timestamp: new Date().toISOString(),
+			});
+		}
+
+		const warm = await recommend(10);
+		expect(warm.session_clicks).toBe(3);
+		const warmOrder = warm.results.map((r) => r.product.id).join(",");
+		expect(warmOrder).not.toBe(coldOrder);
+	});
+
+	it("ignores clicks on unknown product ids", async () => {
+		await sendEvent({
+			event_type: "click",
+			product_id: "does-not-exist",
+			timestamp: new Date().toISOString(),
+		});
+		const res = await recommend(5);
+		expect(res.session_clicks).toBe(0);
 	});
 });

@@ -904,3 +904,107 @@ input {
 	color: var(--muted);
 	font-size: 14px;
 }
+
+/* =========================================================================
+   BOOT: in-browser engine bootstrap screen (sync bundle / load model)
+   ========================================================================= */
+
+.boot {
+	min-height: 100dvh;
+	display: grid;
+	place-items: center;
+	padding: var(--gut);
+}
+
+.boot__card {
+	width: min(440px, 100%);
+	background: var(--paper-raise);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-card);
+	padding: clamp(24px, 5vw, 40px);
+}
+
+.boot__mark {
+	margin-bottom: 18px;
+}
+
+.boot__lede {
+	font-size: 14px;
+	color: var(--muted);
+	line-height: 1.5;
+	margin: 0 0 22px;
+}
+
+.boot__steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.boot__step {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	transition: opacity 0.2s ease;
+}
+
+.boot__step--pending {
+	opacity: 0.45;
+}
+
+.boot__dot {
+	flex-shrink: 0;
+	width: 12px;
+	height: 12px;
+	margin-top: 3px;
+	border-radius: 50%;
+	border: 2px solid var(--line);
+	background: transparent;
+}
+
+.boot__step--active .boot__dot {
+	border-color: var(--signal);
+	background: var(--signal);
+	box-shadow: 0 0 0 4px var(--signal-soft);
+	animation: pulse 1.1s ease-in-out infinite;
+}
+
+.boot__step--done .boot__dot {
+	border-color: var(--abyss);
+	background: var(--abyss);
+}
+
+.boot__step-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.boot__step-label {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.boot__step-detail {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.boot__error-title {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 16px;
+	margin-bottom: 6px;
+}
+
+.boot__error-copy {
+	font-size: 13.5px;
+	color: var(--muted);
+	line-height: 1.5;
+	margin: 0 0 14px;
+}
