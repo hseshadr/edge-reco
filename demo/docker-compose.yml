@@ -1,0 +1,48 @@
+# Nimbus demo — docker-compose (best-effort).
+#
+# ┌─ READ THIS FIRST ──────────────────────────────────────────────────────┐
+# │ `make dev` is the RECOMMENDED way to run this demo locally.             │
+# │                                                                         │
+# │ Docker requires THREE sibling repos checked out side-by-side under one  │
+# │ parent dir (~/dev/oss by default):                                      │
+# │     ~/dev/oss/edge-reco            (this repo)                           │
+# │     ~/dev/oss/edgeproc             (engine dep: ../edgeproc)             │
+# │     ~/dev/oss/shared-libs-python   (edgeproc's dep: ../shared-libs-..)   │
+# │                                                                         │
+# │ The backend's uv local-path sources (../edgeproc, ../shared-libs-python)│
+# │ live OUTSIDE this repo, so the backend build context is the PARENT dir  │
+# │ (../.. -> ~/dev/oss) to make all three reachable. See                   │
+# │ demo/backend/Dockerfile for the in-image layout it reconstructs.        │
+# │                                                                         │
+# │ Run from this directory (demo/):  docker compose up --build             │
+# │ Then open the frontend:           http://localhost:5173                 │
+# └─────────────────────────────────────────────────────────────────────────┘
+
+services:
+  backend:
+    # Context = parent of edge-reco (~/dev/oss) so edgeproc + shared-libs-python
+    # siblings are inside the build context. This compose file lives at
+    # demo/docker-compose.yml, so ../.. == edge-reco -> oss (the parent dir).
+    # Dockerfile path is relative to that context.
+    build:
+      context: ../..
+      dockerfile: edge-reco/demo/backend/Dockerfile
+    environment:
+      DEMO_HOST: 0.0.0.0
+      DEMO_PORT: "8000"
+      # Allow the frontend's served origin through CORS.
+      DEMO_CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        # Browser calls the host-mapped backend port. Baked at build time.
+        VITE_API_BASE: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend

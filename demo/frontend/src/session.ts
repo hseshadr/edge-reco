@@ -6,7 +6,10 @@ const SESSION_KEY = "nimbus_session_id";
  * host (LAN / Docker edge), it is undefined, so fall back to a random string.
  */
 function generateSessionId(): string {
-	if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+	if (
+		typeof crypto !== "undefined" &&
+		typeof crypto.randomUUID === "function"
+	) {
 		return crypto.randomUUID();
 	}
 	return `nimbus-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;

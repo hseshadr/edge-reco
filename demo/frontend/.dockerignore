@@ -1,0 +1,8 @@
+# Keep the frontend build context small + reproducible.
+node_modules
+dist
+.env
+*.log
+.DS_Store
+Dockerfile
+.dockerignore
