@@ -1,5 +1,6 @@
 import { getSessionId } from "../session";
 import type {
+	BrowseResponse,
 	InteractionEvent,
 	RecommendResponse,
 	SearchResponse,
@@ -10,6 +11,12 @@ const API_BASE: string = import.meta.env.VITE_API_BASE;
 interface SearchOptions {
 	limit?: number;
 	category?: string;
+}
+
+interface BrowseOptions {
+	category?: string;
+	limit?: number;
+	offset?: number;
 }
 
 function buildHeaders(extra?: Record<string, string>): Headers {
@@ -57,6 +64,25 @@ export async function recommend(limit?: number): Promise<RecommendResponse> {
 		headers: buildHeaders(),
 	});
 	return (await response.json()) as RecommendResponse;
+}
+
+export async function browse(opts?: BrowseOptions): Promise<BrowseResponse> {
+	const params = new URLSearchParams();
+	if (opts?.category !== undefined) {
+		params.set("category", opts.category);
+	}
+	if (opts?.limit !== undefined) {
+		params.set("limit", String(opts.limit));
+	}
+	if (opts?.offset !== undefined) {
+		params.set("offset", String(opts.offset));
+	}
+	const query = params.toString();
+	const response = await request(`/products${query ? `?${query}` : ""}`, {
+		method: "GET",
+		headers: buildHeaders(),
+	});
+	return (await response.json()) as BrowseResponse;
 }
 
 export async function sendEvent(evt: InteractionEvent): Promise<void> {

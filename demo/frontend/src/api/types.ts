@@ -41,6 +41,12 @@ export interface RecommendResponse {
 	session_clicks: number;
 }
 
+export interface BrowseResponse {
+	products: Product[];
+	total: number;
+	categories: string[];
+}
+
 export type EventType = "click" | "view" | "favorite" | "cart";
 
 export interface InteractionEvent {

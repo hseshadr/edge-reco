@@ -26,3 +26,17 @@ def test_search_then_click_then_recommend_personalizes() -> None:
     rec = client.get("/recommend", params={"limit": 10}, headers=sid).json()
     assert rec["session_clicks"] >= 1
     assert rec["results"][0]["score_components"] is not None
+
+
+def test_browse_products_paginates_and_lists_categories() -> None:
+    body = client.get("/products", params={"limit": 12}).json()
+    assert len(body["products"]) == 12
+    assert body["total"] >= 12
+    assert body["categories"]  # non-empty facet list
+
+
+def test_browse_filters_by_category() -> None:
+    category = client.get("/products", params={"limit": 1}).json()["categories"][0]
+    body = client.get("/products", params={"category": category, "limit": 50}).json()
+    assert body["products"]
+    assert all(p["category"] == category for p in body["products"])
