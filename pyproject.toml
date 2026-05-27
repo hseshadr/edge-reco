@@ -35,7 +35,7 @@ package = true
 [tool.uv.sources]
 # Local built install (not editable) so the package + its py.typed marker land in
 # site-packages where mypy resolves them — mirrors consuming the published edge-proc.
-edge-proc = { path = "../edgeproc" }
+edge-proc = { path = "../edge-proc" }
 
 [project.scripts]
 edgereco = "edgereco.cli:app"

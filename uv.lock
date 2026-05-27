@@ -205,7 +205,7 @@ nvtx = [
 [[package]]
 name = "edge-proc"
 version = "0.1.0"
-source = { directory = "../edgeproc" }
+source = { directory = "../edge-proc" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -279,7 +279,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "edge-proc", extras = ["localvec"], directory = "../edgeproc" },
+    { name = "edge-proc", extras = ["localvec"], directory = "../edge-proc" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
