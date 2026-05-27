@@ -1,0 +1,12 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "include": ["src", "tests", "demo"],
+  "exclude": [".deps", ".venv", "**/__pycache__"],
+  "extraPaths": [
+    "src",
+    "../edge-proc",
+    "../shared-libs-python"
+  ]
+}

@@ -57,7 +57,18 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 packages = ["edgereco"]
-mypy_path = "src"
+# Source roots for mypy to resolve first-party + non-editable sibling path
+# deps (edgeproc, shared_libs_python) WITHOUT installing them. Both siblings use
+# a flat layout (package dir at repo root), so the repo root is the source root.
+# Local dev uses ../edge-proc and ../shared-libs-python; CI checks the siblings
+# out into .deps/ — both are listed so `python -m mypy src` mirrors CI either way.
+mypy_path = [
+  "src",
+  "../edge-proc",
+  "../shared-libs-python",
+  ".deps/edge-proc",
+  ".deps/shared-libs-python",
+]
 
 [[tool.mypy.overrides]]
 module = ["faiss"]
