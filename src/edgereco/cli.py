@@ -104,6 +104,44 @@ def index(
 
 
 # ---------------------------------------------------------------------------
+# bundle
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def bundle(
+    staging_dir: Annotated[
+        Path, typer.Argument(help="Staging dir: products.jsonl + saved vector/ index")
+    ],
+    origin_dir: Annotated[Path, typer.Argument(help="Output origin dir a device can sync")],
+    private_key_path: Annotated[
+        Path, typer.Argument(help="Raw ed25519 private key (edgeproc keygen)")
+    ],
+    catalog_id: Annotated[str, typer.Option(help="Catalog id")] = "amazon-demo",
+    version: Annotated[str, typer.Option(help="Bundle version string")] = "v1",
+    embedding_model: Annotated[
+        str, typer.Option(help="Embedding model id")
+    ] = "sentence-transformers/all-MiniLM-L6-v2",
+    embedding_dim: Annotated[int, typer.Option(help="Embedding dimension")] = 384,
+    product_count: Annotated[int, typer.Option(help="Number of products in the catalog")] = 0,
+) -> None:
+    """Build a signed, content-addressed bundle (FAISS index + catalog) origin."""
+    from edgereco.catalog.publish import publish_bundle
+
+    publish_bundle(
+        staging_dir=staging_dir,
+        origin_dir=origin_dir,
+        private_key_path=private_key_path,
+        catalog_id=catalog_id,
+        version=version,
+        embedding_model=embedding_model,
+        embedding_dim=embedding_dim,
+        product_count=product_count,
+    )
+    typer.echo(f"Built bundle '{catalog_id}' v{version} → {origin_dir}")
+
+
+# ---------------------------------------------------------------------------
 # serve
 # ---------------------------------------------------------------------------
 

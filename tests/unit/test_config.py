@@ -10,6 +10,9 @@ def test_default_settings() -> None:
     assert settings.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
     assert settings.search_limit == 10
     assert settings.rrf_k == 60
+    assert settings.bundle_base_url is None
+    assert settings.verify_key_path is None
+    assert settings.bundle_cache_dir.name == "bundle"
 
 
 def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:

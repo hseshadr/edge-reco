@@ -32,3 +32,12 @@ htmlcov/
 # Environment
 .env
 .env.local
+
+# Bundle signing keys (NEVER commit private keys) + generated staging/origin dirs
+keys/
+*.key
+private.key
+public.key
+staging/
+origin/
+*.bundle/

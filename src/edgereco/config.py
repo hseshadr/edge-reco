@@ -19,3 +19,7 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     api_host: str = "0.0.0.0"  # noqa: S104
     api_port: int = 8000
+    # Bundle producer/consumer (signed, content-addressed catalog distribution).
+    bundle_base_url: str | None = None
+    verify_key_path: Path | None = None
+    bundle_cache_dir: Path = Path.home() / ".edgereco" / "bundle"
