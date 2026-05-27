@@ -13,6 +13,7 @@ Launch:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -31,6 +32,15 @@ ALLOWED_ORIGINS = (
     "http://localhost:5173",
     "http://localhost:4173",
 )
+
+
+def cors_origins() -> list[str]:
+    """Allowed browser origins. ``DEMO_CORS_ORIGINS`` (comma-separated) overrides the
+    localhost defaults — needed when the frontend is served from a non-localhost host
+    (Docker edge / LAN)."""
+    raw = os.environ.get("DEMO_CORS_ORIGINS", "")
+    configured = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return configured or list(ALLOWED_ORIGINS)
 
 
 class BrowseResponse(BaseModel):
@@ -71,7 +81,7 @@ def build_app() -> FastAPI:
     fastapi_app = create_app(ServiceContainer.from_catalog(catalog))
     fastapi_app.add_middleware(
         CORSMiddleware,
-        allow_origins=list(ALLOWED_ORIGINS),
+        allow_origins=cors_origins(),
         allow_methods=["*"],
         allow_headers=["*"],
     )
