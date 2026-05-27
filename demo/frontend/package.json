@@ -1,0 +1,33 @@
+{
+	"name": "frontend",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc -b && vite build",
+		"lint": "biome check .",
+		"test": "vitest run",
+		"test:e2e": "playwright test",
+		"typecheck": "tsc --noEmit",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"motion": "^12.40.0",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.15",
+		"@playwright/test": "^1.60.0",
+		"@rolldown/binding-darwin-arm64": "^1.0.2",
+		"@types/node": "^24.12.3",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"jsdom": "^26.1.0",
+		"typescript": "~6.0.2",
+		"vite": "^8.0.12",
+		"vitest": "^4.1.7"
+	}
+}

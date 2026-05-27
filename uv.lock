@@ -208,6 +208,7 @@ version = "0.1.0"
 source = { directory = "../edgeproc" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "shared-libs-python" },
     { name = "typer" },
 ]
@@ -226,6 +227,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'bundles'", specifier = ">=0.27" },
     { name = "numpy", marker = "extra == 'localvec'", specifier = ">=2.0" },
     { name = "pydantic", specifier = ">=2.9" },
+    { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "rank-bm25", marker = "extra == 'localvec'", specifier = ">=0.2" },
     { name = "sentence-transformers", marker = "extra == 'localvec'", specifier = ">=3.3" },
     { name = "shared-libs-python", editable = "../shared-libs-python" },
