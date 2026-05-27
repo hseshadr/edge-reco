@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -268,3 +268,55 @@ def preprocess(
     )
     (output_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
     typer.echo(f"Wrote {count} products to {out_path}")
+
+
+# ---------------------------------------------------------------------------
+# build-catalog (scraped-Amazon schema -> products.jsonl)
+# ---------------------------------------------------------------------------
+
+
+def _scraped_score_bounds(rows: list[dict[str, Any]]) -> tuple[float, float, float, float]:
+    """Min/max of raw popularity and freshness across all rows."""
+    from edgereco.catalog.preprocessor import (
+        _parse_int,
+        _parse_rating,
+        compute_scraped_popularity_raw,
+    )
+
+    pops, fresh = [], []
+    for row in rows:
+        stars, count = _parse_rating(row.get("rating_stars"), row.get("rating_count"))
+        pops.append(compute_scraped_popularity_raw(stars, count))
+        fresh.append(float(_parse_int(row.get("recent_purchases"))))
+    return (
+        min(pops, default=0.0),
+        max(pops, default=1.0),
+        min(fresh, default=0.0),
+        max(fresh, default=1.0),
+    )
+
+
+@app.command(name="build-catalog")
+def build_catalog(
+    input_csv: Annotated[Path, typer.Argument(help="Path to scraped-Amazon products.csv")],
+    output_jsonl: Annotated[Path, typer.Argument(help="Output products.jsonl path")],
+) -> None:
+    """Convert a scraped-Amazon CSV to an EdgeReco products.jsonl."""
+    import polars as pl
+
+    from edgereco.catalog.preprocessor import scraped_row_to_product
+
+    typer.echo(f"Reading {input_csv}...")
+    rows = list(pl.read_csv(input_csv, infer_schema_length=0).iter_rows(named=True))
+    pop_min, pop_max, fresh_min, fresh_max = _scraped_score_bounds(rows)
+
+    output_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with output_jsonl.open("w", encoding="utf-8") as f:
+        for row in rows:
+            product = scraped_row_to_product(
+                row, pop_min=pop_min, pop_max=pop_max, fresh_min=fresh_min, fresh_max=fresh_max
+            )
+            f.write(product.model_dump_json() + "\n")
+            count += 1
+    typer.echo(f"Wrote {count} products to {output_jsonl}")
