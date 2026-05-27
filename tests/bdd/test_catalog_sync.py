@@ -1,96 +1,130 @@
-"""Step impls for features/catalog_sync.feature."""
+"""Step impls for features/catalog_sync.feature (signed chunked-bundle sync)."""
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+from edgeproc.bundles.adapters import FilesystemAdapter
+from edgeproc.bundles.cas import FilesystemCacheStore
+from edgeproc.bundles.signing import Ed25519Verifier, SignatureError, generate_keypair
+from edgeproc.bundles.sync import SyncResult, sync_index
 from pytest_bdd import given, scenarios, then, when
 
-from edgereco.catalog.sync import sync_catalog
-from edgereco.edge.adapters.filesystem import FilesystemAdapter
+from edgereco.catalog.publish import publish_bundle
 
 scenarios("catalog_sync.feature")
+
+# A multi-chunk payload: GearCDC needs >= MIN_SIZE (16 KiB) to cut, so make the
+# products line long enough that a tail-only edit leaves head chunks identical.
+_PADDING = "x" * (300 * 1024)
+
+
+def _products(tag: str) -> str:
+    return f'{{"id":"P1","title":"T {tag}","category":"C","description":"{_PADDING}"}}\n'
+
+
+def _publish(ctx: dict[str, Any], *, tag: str, version: str) -> Path:
+    """Stage products + a dummy vector/ dir and publish a signed origin."""
+    staging = ctx["tmp_path"] / f"staging-{version}"
+    (staging / "vector").mkdir(parents=True)
+    (staging / "products.jsonl").write_text(_products(tag), encoding="utf-8")
+    (staging / "vector" / "index.faiss").write_bytes(b"\x00FAISS\x01")
+    origin = ctx["tmp_path"] / f"origin-{version}"
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=ctx["key_path"],
+        catalog_id="bdd-origin",
+        version=version,
+        embedding_model="model",
+        embedding_dim=384,
+        product_count=1,
+    )
+    return origin
 
 
 @pytest.fixture
 def ctx(tmp_path: Path) -> dict[str, Any]:
-    return {"tmp_path": tmp_path}
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+    return {"tmp_path": tmp_path, "key_path": key_path, "public": public}
 
 
-def _seed_origin(ctx: dict[str, Any], *, corrupt_checksum: bool) -> None:
-    origin = ctx["tmp_path"] / "origin"
-    origin.mkdir()
-    products = '{"id":"P1","title":"T","category":"C"}\n'
-    (origin / "products.jsonl").write_text(products)
-    checksum = "sha256:" + hashlib.sha256(products.encode()).hexdigest()
-    if corrupt_checksum:
-        checksum = "sha256:wrong"
-    manifest = {
-        "catalog_id": "bdd-origin",
-        "version": "v1",
-        "embedding_model": "model",
-        "embedding_dim": 384,
-        "files": [
-            {"path": "products.jsonl", "file_type": "products", "checksum": checksum, "rows": 1},
-        ],
-    }
-    (origin / "manifest.json").write_text(json.dumps(manifest))
-    ctx["origin"] = origin
+@given("a signed bundle origin published with a known key")
+def _origin(ctx: dict[str, Any]) -> None:
+    ctx["origin"] = _publish(ctx, tag="v1", version="v1")
 
 
-@given("an origin with a 1-product catalog and a valid checksum")
-def _origin_valid(ctx: dict[str, Any]) -> None:
-    _seed_origin(ctx, corrupt_checksum=False)
-
-
-@given("an origin with a 1-product catalog and a corrupted checksum")
-def _origin_corrupt(ctx: dict[str, Any]) -> None:
-    _seed_origin(ctx, corrupt_checksum=True)
-
-
-@when("I sync the catalog into a fresh cache directory")
-def _sync(ctx: dict[str, Any]) -> None:
-    cache = ctx["tmp_path"] / "cache"
-    ctx["manifest"] = sync_catalog(
-        manifest_url=str(ctx["origin"] / "manifest.json"),
-        cache_dir=cache,
-        client=FilesystemAdapter(),
-        file_base_url=str(ctx["origin"]),
+def _sync(ctx: dict[str, Any], origin: Path, verifier: Ed25519Verifier) -> SyncResult:
+    return sync_index(
+        base_url=str(origin),
+        store=ctx["store"],
+        adapter=FilesystemAdapter(),
+        verifier=verifier,
     )
-    ctx["cache"] = cache
 
 
-@when("I attempt to sync the catalog")
-def _attempt_sync(ctx: dict[str, Any]) -> None:
-    cache = ctx["tmp_path"] / "cache"
+@when("I sync the bundle into a fresh cache")
+def _sync_fresh(ctx: dict[str, Any]) -> None:
+    ctx["store"] = FilesystemCacheStore(ctx["tmp_path"] / "cache")
+    ctx["result"] = _sync(ctx, ctx["origin"], Ed25519Verifier(ctx["public"]))
+
+
+@given("I have already synced it once into a cache")
+def _already_synced(ctx: dict[str, Any]) -> None:
+    ctx["store"] = FilesystemCacheStore(ctx["tmp_path"] / "cache")
+    ctx["first"] = _sync(ctx, ctx["origin"], Ed25519Verifier(ctx["public"]))
+
+
+@when("the origin republishes a bundle that shares most of its content")
+def _republish(ctx: dict[str, Any]) -> None:
+    ctx["origin2"] = _publish(ctx, tag="v2", version="v2")
+
+
+@when("I sync the new version into the same cache")
+def _sync_again(ctx: dict[str, Any]) -> None:
+    ctx["result"] = _sync(ctx, ctx["origin2"], Ed25519Verifier(ctx["public"]))
+
+
+@when("I sync the bundle with the wrong public key")
+def _sync_wrong_key(ctx: dict[str, Any]) -> None:
+    ctx["store"] = FilesystemCacheStore(ctx["tmp_path"] / "cache")
+    _, wrong_public = generate_keypair()
     try:
-        sync_catalog(
-            manifest_url=str(ctx["origin"] / "manifest.json"),
-            cache_dir=cache,
-            client=FilesystemAdapter(),
-            file_base_url=str(ctx["origin"]),
-        )
-    except ValueError as e:
-        ctx["error"] = e
-    ctx["cache"] = cache
+        _sync(ctx, ctx["origin"], Ed25519Verifier(wrong_public))
+    except SignatureError as exc:
+        ctx["error"] = exc
 
 
-@then("the local cache should contain the product file")
-def _cache_has_file(ctx: dict[str, Any]) -> None:
-    assert (ctx["cache"] / "products.jsonl").exists()
+@then("every chunk is fetched and none reused")
+def _all_fetched(ctx: dict[str, Any]) -> None:
+    result: SyncResult = ctx["result"]
+    assert result.chunks_fetched >= 1
+    assert result.chunks_reused == 0
 
 
-@then("the synced manifest catalog_id should match the origin")
-def _catalog_id_match(ctx: dict[str, Any]) -> None:
-    assert ctx["manifest"].catalog_id == "bdd-origin"
+@then("the active version is promoted")
+def _promoted(ctx: dict[str, Any]) -> None:
+    pointer = ctx["store"].read_active()
+    assert pointer is not None
+    assert pointer.version == "v1"
 
 
-@then("a checksum validation error is raised")
-def _error_raised(ctx: dict[str, Any]) -> None:
-    err = ctx.get("error")
-    assert isinstance(err, ValueError)
-    assert "checksum" in str(err).lower()
+@then("at least one chunk is reused from the prior sync")
+def _reused(ctx: dict[str, Any]) -> None:
+    result: SyncResult = ctx["result"]
+    assert result.chunks_reused >= 1, result
+    assert result.version == "v2"
+
+
+@then("a signature error is raised")
+def _sig_error(ctx: dict[str, Any]) -> None:
+    assert isinstance(ctx.get("error"), SignatureError)
+
+
+@then("no version is promoted")
+def _not_promoted(ctx: dict[str, Any]) -> None:
+    assert ctx["store"].read_active() is None

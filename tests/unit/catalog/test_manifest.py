@@ -1,8 +1,15 @@
-import hashlib
+"""Unit tests for catalog manifest parsing.
+
+``validate_checksum`` is gone (the content-addressed store verifies on read), so
+only ``parse_manifest`` — the read-model behind ``/catalog/info`` — remains.
+"""
+
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
-from edgereco.catalog.manifest import parse_manifest, validate_checksum
+from edgereco.catalog.manifest import parse_manifest
 
 
 def test_parse_manifest_from_json(tmp_path: Path) -> None:
@@ -18,16 +25,3 @@ def test_parse_manifest_from_json(tmp_path: Path) -> None:
     manifest = parse_manifest(manifest_path)
     assert manifest.catalog_id == "test"
     assert len(manifest.files) == 1
-
-
-def test_validate_checksum_passes(tmp_path: Path) -> None:
-    file_path = tmp_path / "test.txt"
-    file_path.write_text("hello")
-    expected = "sha256:" + hashlib.sha256(b"hello").hexdigest()
-    assert validate_checksum(file_path, expected) is True
-
-
-def test_validate_checksum_fails(tmp_path: Path) -> None:
-    file_path = tmp_path / "test.txt"
-    file_path.write_text("hello")
-    assert validate_checksum(file_path, "sha256:wrong") is False

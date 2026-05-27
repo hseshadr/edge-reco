@@ -7,10 +7,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
+from edgeproc.bundles.adapters import FetchAdapter, FilesystemAdapter, HttpAdapter
+from edgeproc.bundles.cas import FilesystemCacheStore
+from edgeproc.bundles.manifest import IndexManifest
+from edgeproc.bundles.signing import Verifier
+from edgeproc.bundles.sync import materialize_file, sync_index
 from fastapi import Depends, Header, Request
 
 from edgereco.api.sessions import SessionStore
 from edgereco.catalog.models import CatalogManifest, Product
+from edgereco.catalog.publish import CatalogMeta
 from edgereco.embeddings.encoder import ProductEncoder
 from edgereco.embeddings.index import VectorIndex
 from edgereco.search.keyword import KeywordSearcher
@@ -73,6 +79,78 @@ class ServiceContainer:
             encoder=encoder,
             manifest=manifest,
         )
+
+    @classmethod
+    def from_synced(
+        cls,
+        *,
+        base_url: str,
+        cache_root: Path,
+        verifier: Verifier,
+    ) -> ServiceContainer:
+        """Build a container from a signed, content-addressed bundle origin.
+
+        Sync the bundle (fail-closed on a bad signature / tampered chunk), reassemble
+        each bundled file into a local dir, ``VectorIndex.load`` the prebuilt ``vector/``
+        (zero recompute on the edge), and parse ``catalog_meta.json`` into a
+        ``CatalogManifest`` so ``/catalog/info`` keeps working unchanged.
+        """
+        from edgereco.catalog.loader import load_jsonl
+
+        store, manifest = _sync_and_load_manifest(
+            base_url=base_url, cache_root=cache_root, verifier=verifier
+        )
+        local = _materialize_bundle(store, manifest, cache_root / "materialized")
+        catalog = load_jsonl(local / "products.jsonl")
+        meta = CatalogMeta.model_validate_json((local / "catalog_meta.json").read_bytes())
+        vector = VectorSearcher(VectorIndex.load(local / "vector"))
+        return cls(
+            catalog=catalog,
+            by_id={p.id: p for p in catalog},
+            keyword=KeywordSearcher.build(catalog),
+            vector=vector,
+            encoder=ProductEncoder(),
+            manifest=_manifest_from_meta(meta),
+        )
+
+
+def _sync_and_load_manifest(
+    *, base_url: str, cache_root: Path, verifier: Verifier
+) -> tuple[FilesystemCacheStore, IndexManifest]:
+    """Sync the origin into a fresh store, then load + validate the active manifest."""
+    store = FilesystemCacheStore(cache_root)
+    sync_index(base_url=base_url, store=store, adapter=_select_adapter(base_url), verifier=verifier)
+    pointer = store.read_active()
+    if pointer is None:  # pragma: no cover - sync_index promotes or raises
+        raise RuntimeError("sync completed without promoting an active version")
+    return store, IndexManifest.model_validate_json(store.get_manifest(pointer.manifest_hash))
+
+
+def _materialize_bundle(store: FilesystemCacheStore, manifest: IndexManifest, dest: Path) -> Path:
+    """Reassemble every bundled file (vector/ subdir preserved) into ``dest``."""
+    for entry in manifest.files:
+        out = dest / entry.path
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(materialize_file(store, manifest, entry.path))
+    return dest
+
+
+def _select_adapter(base_url: str) -> FetchAdapter:
+    """HTTP adapter for an http(s) origin, filesystem adapter for a local path."""
+    if base_url.startswith(("http://", "https://")):
+        return HttpAdapter()
+    return FilesystemAdapter()
+
+
+def _manifest_from_meta(meta: CatalogMeta) -> CatalogManifest:
+    """Project bundle ``catalog_meta.json`` onto the legacy ``CatalogManifest`` view."""
+    return CatalogManifest(
+        catalog_id=meta.catalog_id,
+        version=meta.version,
+        embedding_model=meta.embedding_model,
+        embedding_dim=meta.embedding_dim,
+        files=[],
+    )
 
 
 def get_container(request: Request) -> ServiceContainer:

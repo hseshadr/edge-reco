@@ -1,15 +1,23 @@
-Feature: Catalog sync from edge server
+Feature: Catalog sync from a signed, content-addressed bundle origin
   As an edge runtime
-  I want to download a catalog from an HTTP/filesystem origin
-  So that the local indexes can be (re)built without backend roundtrips
+  I want to sync a signed bundle from an HTTP/filesystem origin
+  So that the local indexes are rebuilt from verified chunks without backend roundtrips
 
-  Scenario: Initial sync downloads manifest and product file
-    Given an origin with a 1-product catalog and a valid checksum
-    When I sync the catalog into a fresh cache directory
-    Then the local cache should contain the product file
-    And the synced manifest catalog_id should match the origin
+  Scenario: Initial sync fetches every chunk and promotes the version
+    Given a signed bundle origin published with a known key
+    When I sync the bundle into a fresh cache
+    Then every chunk is fetched and none reused
+    And the active version is promoted
 
-  Scenario: Sync raises when the manifest checksum does not match
-    Given an origin with a 1-product catalog and a corrupted checksum
-    When I attempt to sync the catalog
-    Then a checksum validation error is raised
+  Scenario: Re-syncing a changed bundle reuses unchanged chunks
+    Given a signed bundle origin published with a known key
+    And I have already synced it once into a cache
+    When the origin republishes a bundle that shares most of its content
+    And I sync the new version into the same cache
+    Then at least one chunk is reused from the prior sync
+
+  Scenario: Sync fails closed when the version pointer signature does not verify
+    Given a signed bundle origin published with a known key
+    When I sync the bundle with the wrong public key
+    Then a signature error is raised
+    And no version is promoted

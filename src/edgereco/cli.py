@@ -13,55 +13,6 @@ app = typer.Typer(name="edgereco", help="EdgeReco: edge product discovery engine
 
 
 # ---------------------------------------------------------------------------
-# sync
-# ---------------------------------------------------------------------------
-
-
-@app.command()
-def sync(
-    manifest_url: Annotated[str, typer.Argument(help="URL or path to manifest.json")],
-    cache_dir: Annotated[Path, typer.Argument(help="Local cache directory")],
-    http: Annotated[bool, typer.Option("--http", help="Force HTTP adapter")] = False,
-    filesystem: Annotated[
-        bool, typer.Option("--filesystem", help="Force filesystem adapter")
-    ] = False,
-    file_base_url: Annotated[
-        str | None,
-        typer.Option(help="Override base URL for file downloads"),
-    ] = None,
-) -> None:
-    """Sync a catalog manifest to CACHE_DIR."""
-    from edgereco.catalog.sync import sync_catalog
-    from edgereco.edge.adapters.filesystem import FilesystemAdapter
-    from edgereco.edge.adapters.http import HttpAdapter
-
-    # Auto-detect adapter from scheme if not forced
-    adapter: HttpAdapter | FilesystemAdapter
-    if http or (
-        not filesystem
-        and (manifest_url.startswith("http://") or manifest_url.startswith("https://"))
-    ):
-        adapter = HttpAdapter()
-    else:
-        adapter = FilesystemAdapter()
-
-    # Derive file_base_url: strip /manifest.json from the manifest URL/path
-    if file_base_url is None:
-        if manifest_url.endswith("/manifest.json"):
-            file_base_url = manifest_url[: -len("/manifest.json")]
-        else:
-            file_base_url = str(Path(manifest_url).parent)
-
-    manifest = sync_catalog(
-        manifest_url=manifest_url,
-        cache_dir=cache_dir,
-        client=adapter,
-        file_base_url=file_base_url,
-    )
-    typer.echo(f"Synced catalog '{manifest.catalog_id}' v{manifest.version} → {cache_dir}")
-
-
-# ---------------------------------------------------------------------------
 # index
 # ---------------------------------------------------------------------------
 
@@ -153,13 +104,31 @@ def serve(  # pragma: no cover
     host: Annotated[str, typer.Option(help="Bind host")] = "0.0.0.0",  # noqa: S104
     port: Annotated[int, typer.Option(help="Bind port")] = 8000,
 ) -> None:
-    """Start the EdgeReco API server."""
+    """Start the EdgeReco API server.
+
+    When ``EDGERECO_BUNDLE_BASE_URL`` + ``EDGERECO_VERIFY_KEY_PATH`` are set, the
+    runtime syncs a signed, content-addressed bundle from that origin (HTTP for an
+    http(s) URL, filesystem for a local path) and verifies it against the pinned
+    public key. Otherwise it loads the legacy flat ``cache_dir`` + ``index_dir``.
+    """
     import uvicorn
 
     from edgereco.api.app import create_app
     from edgereco.api.deps import ServiceContainer
+    from edgereco.config import Settings
 
-    container = ServiceContainer.from_dirs(cache_dir, index_dir)
+    settings = Settings()
+    if settings.bundle_base_url and settings.verify_key_path:
+        from edgeproc.bundles.signing import Ed25519Verifier
+
+        verifier = Ed25519Verifier.from_public_bytes(settings.verify_key_path.read_bytes())
+        container = ServiceContainer.from_synced(
+            base_url=settings.bundle_base_url,
+            cache_root=settings.bundle_cache_dir,
+            verifier=verifier,
+        )
+    else:
+        container = ServiceContainer.from_dirs(cache_dir, index_dir)
     fastapi_app = create_app(container)
     typer.echo(f"Serving on http://{host}:{port}  (catalog: {len(container.catalog)} products)")
     uvicorn.run(fastapi_app, host=host, port=port)

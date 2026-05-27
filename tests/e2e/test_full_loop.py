@@ -1,72 +1,67 @@
-"""End-to-end test: sync → index → search → click → recommend."""
+"""End-to-end test: publish signed bundle → from_synced → search → click → recommend."""
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from typing import Any
 
 import pytest
+from edgeproc.bundles.signing import Ed25519Verifier, generate_keypair
 from fastapi.testclient import TestClient
 
 from edgereco.api.app import create_app
 from edgereco.api.deps import ServiceContainer
 from edgereco.catalog.loader import load_jsonl
-from edgereco.catalog.manifest import parse_manifest
-from edgereco.catalog.sync import sync_catalog
-from edgereco.edge.adapters.filesystem import FilesystemAdapter
+from edgereco.embeddings.encoder import ProductEncoder
+from edgereco.embeddings.index import VectorIndex
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.fixture(scope="module")
-def origin_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Stand up a synthetic 'origin' directory with manifest + products.jsonl + checksum."""
+def signed_origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Ed25519Verifier]:
+    """Build a real index over mini_catalog, stage it, publish a signed bundle origin."""
+    staging = tmp_path_factory.mktemp("staging")
+    shutil.copy2(FIXTURES_DIR / "mini_catalog.jsonl", staging / "products.jsonl")
+
+    products = load_jsonl(staging / "products.jsonl")
+    encoder = ProductEncoder()
+    embeddings = encoder.encode(products)
+    index = VectorIndex.build(embeddings, [p.id for p in products], dim=encoder.dim)
+    index.save(staging / "vector")
+
+    private, public = generate_keypair()
+    key_path = tmp_path_factory.mktemp("keys") / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
     origin = tmp_path_factory.mktemp("origin")
-    shutil.copy2(FIXTURES_DIR / "mini_catalog.jsonl", origin / "products.jsonl")
+    from edgereco.catalog.publish import publish_bundle
 
-    import hashlib
-
-    products_bytes = (origin / "products.jsonl").read_bytes()
-    checksum = "sha256:" + hashlib.sha256(products_bytes).hexdigest()
-    manifest = {
-        "catalog_id": "e2e-origin",
-        "version": "v1",
-        "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
-        "embedding_dim": 384,
-        "files": [
-            {
-                "path": "products.jsonl",
-                "file_type": "products",
-                "checksum": checksum,
-                "rows": 50,
-            }
-        ],
-    }
-    (origin / "manifest.json").write_text(json.dumps(manifest))
-    return origin
-
-
-@pytest.fixture(scope="module")
-def synced_cache(origin_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Sync the origin into a fresh cache via FilesystemAdapter."""
-    cache = tmp_path_factory.mktemp("cache")
-    sync_catalog(
-        manifest_url=str(origin_dir / "manifest.json"),
-        cache_dir=cache,
-        client=FilesystemAdapter(),
-        file_base_url=str(origin_dir),
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="e2e-origin",
+        version="v1",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dim=encoder.dim,
+        product_count=len(products),
     )
-    return cache
+    return origin, Ed25519Verifier(public)
 
 
 @pytest.fixture(scope="module")
-def container(synced_cache: Path) -> ServiceContainer:
-    """Build a ServiceContainer from the synced cache (loads encoder + indexes)."""
-    products = load_jsonl(synced_cache / "products.jsonl")
-    manifest = parse_manifest(synced_cache / "manifest.json")
-    return ServiceContainer.from_catalog(products, manifest=manifest)
+def container(
+    signed_origin: tuple[Path, Ed25519Verifier],
+    tmp_path_factory: pytest.TempPathFactory,
+) -> ServiceContainer:
+    """Sync the signed origin and build a container — the edge runtime's real path."""
+    origin, verifier = signed_origin
+    cache_root = tmp_path_factory.mktemp("cache")
+    return ServiceContainer.from_synced(
+        base_url=str(origin), cache_root=cache_root, verifier=verifier
+    )
 
 
 @pytest.fixture(scope="module")
@@ -82,7 +77,7 @@ def test_full_discovery_loop(client: TestClient) -> None:
     assert health.status_code == 200
     assert health.json() == {"status": "ok"}
 
-    # 2. Catalog info reflects synced manifest
+    # 2. Catalog info reflects the synced bundle's catalog_meta.json
     info = client.get("/catalog/info")
     assert info.status_code == 200
     body = info.json()

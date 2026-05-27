@@ -77,46 +77,8 @@ def cli_index_dirs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path
 def test_cli_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("sync", "index", "serve", "search", "preprocess"):
+    for cmd in ("index", "bundle", "serve", "search", "preprocess"):
         assert cmd in result.output
-
-
-# ---------------------------------------------------------------------------
-# test_cli_sync
-# ---------------------------------------------------------------------------
-
-
-def test_cli_sync(tmp_path: Path) -> None:
-    # Build a minimal origin directory
-    origin = tmp_path / "origin"
-    origin.mkdir()
-    products_content = (MINI_CATALOG).read_bytes()
-    (origin / "products.jsonl").write_bytes(products_content)
-    checksum = "sha256:" + hashlib.sha256(products_content).hexdigest()
-
-    catalog_file = CatalogFile(
-        path="products.jsonl", file_type="products", checksum=checksum, rows=50
-    )
-    manifest = CatalogManifest(
-        catalog_id="test",
-        version="2026-01-01T00:00:00Z",
-        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-        embedding_dim=384,
-        files=[catalog_file],
-    )
-    manifest_path = origin / "manifest.json"
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-
-    cache_dir = tmp_path / "cache"
-
-    result = runner.invoke(
-        app,
-        ["sync", str(manifest_path), str(cache_dir), "--filesystem"],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert (cache_dir / "products.jsonl").exists()
-    assert (cache_dir / "manifest.json").exists()
 
 
 # ---------------------------------------------------------------------------
