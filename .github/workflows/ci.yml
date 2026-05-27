@@ -8,7 +8,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Checkout private sibling repos inside the workspace (.deps/) so
       # actions/checkout path restrictions are satisfied (must stay within
@@ -23,14 +23,14 @@ jobs:
       # to hseshadr/edge-proc and hseshadr/shared-libs-python.
       # Settings -> Secrets and variables -> Actions -> New repository secret.
       - name: Checkout edge-proc (private sibling)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: hseshadr/edge-proc
           token: ${{ secrets.PORTFOLIO_PAT }}
           path: .deps/edge-proc
 
       - name: Checkout shared-libs-python (private sibling)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: hseshadr/shared-libs-python
           token: ${{ secrets.PORTFOLIO_PAT }}
@@ -56,7 +56,7 @@ jobs:
           print("Patched: edge-proc path -> .deps/edge-proc")
           PYEOF
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
       - name: Pin Python
