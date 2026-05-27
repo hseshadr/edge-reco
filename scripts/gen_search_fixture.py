@@ -39,7 +39,9 @@ def _materialize(path: str) -> bytes:
     manifest = json.loads(Path(glob.glob(str(CATALOG / "manifest" / "*"))[0]).read_bytes())
     entry = next(f for f in manifest["files"] if f["path"] == path)
     dctx = zstd.ZstdDecompressor()
-    parts = [dctx.decompress((CATALOG / "chunk" / ref["hash"]).read_bytes()) for ref in entry["chunks"]]
+    parts = [
+        dctx.decompress((CATALOG / "chunk" / ref["hash"]).read_bytes()) for ref in entry["chunks"]
+    ]
     blob = b"".join(parts)
     if hashlib.sha256(blob).hexdigest() != entry["file_sha256"]:
         raise ValueError(f"{path} failed reassembly check")
@@ -60,7 +62,11 @@ def _query_vector(embeddings: np.ndarray) -> np.ndarray:
     Not identical to any stored row, so the parity check is non-trivial.
     """
     rng = np.random.default_rng(SEED)
-    raw = 0.6 * embeddings[10] + 0.4 * embeddings[200] + 0.05 * rng.standard_normal(DIM).astype(np.float32)
+    raw = (
+        0.6 * embeddings[10]
+        + 0.4 * embeddings[200]
+        + 0.05 * rng.standard_normal(DIM).astype(np.float32)
+    )
     return (raw / np.linalg.norm(raw)).astype(np.float32)
 
 
@@ -72,7 +78,8 @@ def main() -> None:
         "description": (
             "C2b vector-search parity fixture: a normalized synthetic query vector and the "
             "ordered top-k (id, cosine score) that edge-reco Python VectorSearcher returns over "
-            "the real examples/catalog embeddings.f32. Regenerate with scripts/gen_search_fixture.py."
+            "the real examples/catalog embeddings.f32. "
+            "Regenerate with scripts/gen_search_fixture.py."
         ),
         "embedding_dim": DIM,
         "k": TOP_K,

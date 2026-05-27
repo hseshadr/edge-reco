@@ -23,13 +23,7 @@ from edgeproc.localvec.encoder import TextEncoder
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = (
-    REPO_ROOT
-    / "demo"
-    / "frontend"
-    / "src"
-    / "engine"
-    / "__fixtures__"
-    / "embedding_parity.json"
+    REPO_ROOT / "demo" / "frontend" / "src" / "engine" / "__fixtures__" / "embedding_parity.json"
 )
 DIM = 384
 
@@ -61,9 +55,7 @@ def main() -> None:
         ),
         "model": "sentence-transformers/all-MiniLM-L6-v2",
         "embedding_dim": DIM,
-        "items": [
-            {"text": s, "vector": v.tolist()} for s, v in zip(STRINGS, vectors, strict=True)
-        ],
+        "items": [{"text": s, "vector": v.tolist()} for s, v in zip(STRINGS, vectors, strict=True)],
     }
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     FIXTURE.write_text(json.dumps(fixture, indent="\t") + "\n")

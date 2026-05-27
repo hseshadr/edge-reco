@@ -39,9 +39,7 @@ from edgereco.search.vector import VectorSearcher
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CATALOG = REPO_ROOT / "examples" / "catalog"
-FIXTURE = (
-    REPO_ROOT / "demo" / "frontend" / "src" / "engine" / "__fixtures__" / "hybrid_parity.json"
-)
+FIXTURE = REPO_ROOT / "demo" / "frontend" / "src" / "engine" / "__fixtures__" / "hybrid_parity.json"
 DIM = 384
 LIMIT = 10
 QUERIES = [
@@ -71,17 +69,29 @@ def _load() -> tuple[list[Product], VectorSearcher, KeywordSearcher, ProductEnco
     matrix = np.frombuffer(_materialize("vector/embeddings.f32"), dtype=np.float32)
     embeddings = matrix.reshape(len(faiss_ids), DIM).copy()
     index = VectorIndex.build(embeddings, faiss_ids, dim=DIM)
-    products = [Product.model_validate_json(line) for line in _materialize("products.jsonl").splitlines() if line.strip()]
+    products = [
+        Product.model_validate_json(line)
+        for line in _materialize("products.jsonl").splitlines()
+        if line.strip()
+    ]
     return products, VectorSearcher(index), KeywordSearcher.build(products), ProductEncoder()
 
 
-def _search(query: str, products: list[Product], vector: VectorSearcher, keyword: KeywordSearcher, encoder: ProductEncoder) -> list[SearchResult]:
+def _search(
+    query: str,
+    products: list[Product],
+    vector: VectorSearcher,
+    keyword: KeywordSearcher,
+    encoder: ProductEncoder,
+) -> list[SearchResult]:
     by_id = {p.id: p for p in products}
     k = max(LIMIT * 3, 30)
     keyword_hits = keyword.search(query, k=k)
     vector_hits = vector.search(encoder.encode_query(query), k=k)
     fused = reciprocal_rank_fusion(keyword_hits, vector_hits)
-    results = [SearchResult(product=by_id[pid], score=score) for pid, score in fused if pid in by_id]
+    results = [
+        SearchResult(product=by_id[pid], score=score) for pid, score in fused if pid in by_id
+    ]
     total = len(results)
     results = rerank(results, SessionProfile())
     return results[:LIMIT], total
@@ -96,9 +106,7 @@ def main() -> None:
             {
                 "query": query,
                 "total": total,
-                "expected": [
-                    {"id": r.product.id, "score": r.score} for r in results
-                ],
+                "expected": [{"id": r.product.id, "score": r.score} for r in results],
             }
         )
     fixture = {
