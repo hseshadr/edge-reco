@@ -1,0 +1,190 @@
+{
+	"description": "C3a hybrid-search parity fixture: edge-reco /search top-k (id, reranked score) over examples/catalog for each query, with an empty session profile. Regenerate with scripts/gen_hybrid_fixture.py.",
+	"limit": 10,
+	"cases": [
+		{
+			"query": "polo shirt",
+			"total": 52,
+			"expected": [
+				{
+					"id": "B01GH5JOJY",
+					"score": 0.4455617659133502
+				},
+				{
+					"id": "B01GH5KNR6",
+					"score": 0.3570062103577947
+				},
+				{
+					"id": "B01GH5KOZ2",
+					"score": 0.35689509924668356
+				},
+				{
+					"id": "B07FMZ12CJ",
+					"score": 0.35130031616682506
+				},
+				{
+					"id": "B07TF5NCTY",
+					"score": 0.33633658052294546
+				},
+				{
+					"id": "B08SM3CDLN",
+					"score": 0.33437021435116204
+				},
+				{
+					"id": "B0132MFEA8",
+					"score": 0.33282441483104536
+				},
+				{
+					"id": "B005LCMU00",
+					"score": 0.3197950915665848
+				},
+				{
+					"id": "B06VZ3RCYS",
+					"score": 0.3183144496057145
+				},
+				{
+					"id": "B07BN52FT6",
+					"score": 0.31481100241458915
+				}
+			]
+		},
+		{
+			"query": "men's running shoes",
+			"total": 39,
+			"expected": [
+				{
+					"id": "B000J9YQOS",
+					"score": 0.39643927995650885
+				},
+				{
+					"id": "B087YQCWKG",
+					"score": 0.3887444504558483
+				},
+				{
+					"id": "B07ZSCB99R",
+					"score": 0.38856955820966105
+				},
+				{
+					"id": "B00D881IBG",
+					"score": 0.37615146910692543
+				},
+				{
+					"id": "B01G3LZ0IG",
+					"score": 0.36389503904833226
+				},
+				{
+					"id": "B09XRGG5NV",
+					"score": 0.35428493096889785
+				},
+				{
+					"id": "B09PYTB8SD",
+					"score": 0.34283992186247875
+				},
+				{
+					"id": "B072FBNZHL",
+					"score": 0.3305993380401584
+				},
+				{
+					"id": "B0BHPRRS6C",
+					"score": 0.3210680974343561
+				},
+				{
+					"id": "B0B3TBJ79D",
+					"score": 0.31954001384712444
+				}
+			]
+		},
+		{
+			"query": "cotton t-shirt",
+			"total": 53,
+			"expected": [
+				{
+					"id": "B07VTSD48H",
+					"score": 0.4295684470119983
+				},
+				{
+					"id": "B0BPF1R8KC",
+					"score": 0.36941652927888524
+				},
+				{
+					"id": "B002GHC19I",
+					"score": 0.36918834630765895
+				},
+				{
+					"id": "B07NHW8Z3N",
+					"score": 0.36346780299379644
+				},
+				{
+					"id": "B09S6VVX5B",
+					"score": 0.35382382578289157
+				},
+				{
+					"id": "B07FMZ12CJ",
+					"score": 0.35130031616682506
+				},
+				{
+					"id": "B0CQL15PMH",
+					"score": 0.34117379509110757
+				},
+				{
+					"id": "B00NOY3JKW",
+					"score": 0.3410727476832328
+				},
+				{
+					"id": "B0B728NH19",
+					"score": 0.3407906692342205
+				},
+				{
+					"id": "B00CAXS2Q4",
+					"score": 0.33463351026594196
+				}
+			]
+		},
+		{
+			"query": "moisture wicking golf polo",
+			"total": 45,
+			"expected": [
+				{
+					"id": "B01GH5JOJY",
+					"score": 0.4455617659133502
+				},
+				{
+					"id": "B08F2P8CS9",
+					"score": 0.38811011859614625
+				},
+				{
+					"id": "B01GH5KNR6",
+					"score": 0.3570062103577947
+				},
+				{
+					"id": "B01GH5KOZ2",
+					"score": 0.35689509924668356
+				},
+				{
+					"id": "B0B34WQ6L2",
+					"score": 0.3541319689761058
+				},
+				{
+					"id": "B08DP681C4",
+					"score": 0.33675064551584666
+				},
+				{
+					"id": "B00ACIGNMY",
+					"score": 0.3234383657398163
+				},
+				{
+					"id": "B005LCMU00",
+					"score": 0.3197950915665848
+				},
+				{
+					"id": "B086L1PM8V",
+					"score": 0.31206655238928444
+				},
+				{
+					"id": "B008KWXQ38",
+					"score": 0.30394118679373644
+				}
+			]
+		}
+	]
+}

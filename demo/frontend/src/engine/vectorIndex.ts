@@ -132,6 +132,18 @@ export class VectorIndex {
 		return this.#products.get(id);
 	}
 
+	/** All products, in faiss_ids row order (the catalog order from the bundle). */
+	public products(): ReadonlyArray<Product> {
+		const out: Product[] = [];
+		for (const id of this.#ids) {
+			const product = this.#products.get(id);
+			if (product !== undefined) {
+				out.push(product);
+			}
+		}
+		return out;
+	}
+
 	/**
 	 * Cosine top-k. Stored rows are L2-normalized, so cosine == dot product; the
 	 * query is normalized here so a non-unit input scores correctly. A flat scan

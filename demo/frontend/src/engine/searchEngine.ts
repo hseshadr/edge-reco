@@ -1,21 +1,31 @@
-// Browser search engine: ties the synced bundle (via loadVectorIndex) and RRF
-// (rerank.ts) into a SearchResponse-shaped result that mirrors edge-reco's
-// /search route (src/edgereco/api/routes/search.py).
+// Browser search engine: the full in-browser equivalent of edge-reco's /search
+// and /recommend routes (src/edgereco/api/routes/{search,recommend}.py), driven
+// from a query STRING. Pipeline, matching search.py exactly:
 //
-// Scope (C2b): vector retrieval + RRF over the vector ranking only. The backend
-// route fuses a BM25 keyword ranking with the vector ranking and then applies a
-// session reranker. Both of those need inputs C2b does not have yet:
-//   - BM25 needs the query STRING and a ported BM25Okapi corpus; C2b's search
-//     takes a query VECTOR (query embedding lands in C3), so keyword retrieval is
-//     structurally absent here, not merely deferred for size.
-//   - the session reranker needs a SessionProfile and per-product affinities.
-// So `score` carries the cosine similarity and `score_components` is null until
-// C3 wires the full hybrid + reranker. RRF is still applied (over the single
-// vector list) so the fusion seam exists and matches the backend code path; over
-// one ranked list it is rank-monotone, preserving the cosine top-k ordering.
+//   q -> embed(q) [embedder.ts]            (transformers.js, parity-verified)
+//     -> BM25 top-k [keyword.ts]  +  vector cosine top-k [vectorIndex.ts]
+//     -> RRF fuse [rerank.ts]              (k = max(limit*3, 30))
+//     -> session rerank [reranker.ts]      (always runs; empty profile = pop+fresh)
+//     -> optional category filter -> slice to limit
+//
+// `total` is the pre-category-filter fused count (search.py total_pre_filter).
+// recommend() mirrors recommend.py: a popularity pool of min(limit*5, N) reranked
+// by the session profile. browse() is the catalog-listing path over products.jsonl.
+//
+// The C2b vector-only parity path is preserved as searchVector(queryVec).
 
-import type { SearchResponse, SearchResult } from "../api/types";
+import type {
+	BrowseResponse,
+	Product,
+	RecommendResponse,
+	SearchResponse,
+	SearchResult,
+} from "../api/types";
+import type { Embedder } from "./embedder";
+import { KeywordSearcher } from "./keyword";
 import { reciprocalRankFusion } from "./rerank";
+import { rerank } from "./reranker";
+import { emptyProfile, type SessionProfile } from "./session";
 import {
 	loadVectorIndex,
 	type VectorIndex,
@@ -24,75 +34,171 @@ import {
 
 const DEFAULT_LIMIT = 10;
 
-/** Options for a vector search; `limit` caps the returned results. */
+/** Options for a search; `limit` caps results, `category` filters post-rerank. */
 export interface SearchOptions {
 	readonly limit?: number;
+	readonly category?: string;
+	readonly profile?: SessionProfile;
+}
+
+/** Options for a recommend call. */
+export interface RecommendOptions {
+	readonly limit?: number;
+	readonly profile?: SessionProfile;
+}
+
+/** Options for a catalog browse. */
+export interface BrowseOptions {
+	readonly limit?: number;
+	readonly category?: string;
 }
 
 /** The browser-side search surface over the synced bundle. */
 export interface SearchEngine {
 	readonly ntotal: number;
-	search(queryVec: Float32Array, opts?: SearchOptions): SearchResponse;
+	/** Full hybrid search from a query string (matches /search). */
+	search(query: string, opts?: SearchOptions): Promise<SearchResponse>;
+	/** Session-aware recommendations over the popularity pool (matches /recommend). */
+	recommend(opts?: RecommendOptions): RecommendResponse;
+	/** Catalog listing path (browse/category pages). */
+	browse(opts?: BrowseOptions): BrowseResponse;
+	/** Vector-only cosine top-k from a query vector (C2b parity path). */
+	searchVector(queryVec: Float32Array, opts?: SearchOptions): SearchResponse;
 }
 
-function hydrate(
+function hydrateFused(
 	index: VectorIndex,
-	rankedIds: ReadonlyArray<string>,
-	scoreById: ReadonlyMap<string, number>,
-): ReadonlyArray<SearchResult> {
+	fused: ReadonlyArray<{ readonly id: string; readonly score: number }>,
+): SearchResult[] {
 	const results: SearchResult[] = [];
-	for (const id of rankedIds) {
+	for (const { id, score } of fused) {
 		const product = index.product(id);
-		if (product === undefined) {
-			continue;
+		if (product !== undefined) {
+			results.push({ product, score, score_components: null });
 		}
-		results.push({
-			product,
-			score: scoreById.get(id) ?? 0,
-			// no session reranker in C2b -> no per-signal breakdown yet.
-			score_components: null,
-		});
 	}
 	return results;
 }
 
-class VectorSearchEngine implements SearchEngine {
+class HybridSearchEngine implements SearchEngine {
 	readonly #index: VectorIndex;
+	readonly #keyword: KeywordSearcher;
+	readonly #embedder: Embedder;
+	readonly #catalog: ReadonlyArray<Product>;
 
-	public constructor(index: VectorIndex) {
+	public constructor(
+		index: VectorIndex,
+		keyword: KeywordSearcher,
+		embedder: Embedder,
+	) {
 		this.#index = index;
+		this.#keyword = keyword;
+		this.#embedder = embedder;
+		this.#catalog = index.products();
 	}
 
 	public get ntotal(): number {
 		return this.#index.ntotal;
 	}
 
-	public search(queryVec: Float32Array, opts?: SearchOptions): SearchResponse {
+	public async search(
+		query: string,
+		opts?: SearchOptions,
+	): Promise<SearchResponse> {
 		const limit = opts?.limit ?? DEFAULT_LIMIT;
-		// Match the backend's candidate width: k = max(limit*3, 30).
+		if (query.trim().length === 0) {
+			return { results: [], query: "", total: 0 };
+		}
+		// Candidate width matches the backend: k = max(limit*3, 30).
+		const k = Math.max(limit * 3, 30);
+		const keywordHits = this.#keyword.search(query, k);
+		const queryVec = await this.#embedder.embed(query);
+		const vectorHits = this.#index.search(queryVec, k);
+		const fused = reciprocalRankFusion(keywordHits, vectorHits);
+
+		const fusedResults = hydrateFused(this.#index, fused);
+		const totalPreFilter = fusedResults.length;
+
+		const profile = opts?.profile ?? emptyProfile();
+		let reranked = rerank(fusedResults, profile);
+		if (opts?.category !== undefined) {
+			reranked = reranked.filter((r) => r.product.category === opts.category);
+		}
+		return {
+			results: [...reranked.slice(0, limit)],
+			query,
+			total: totalPreFilter,
+		};
+	}
+
+	public recommend(opts?: RecommendOptions): RecommendResponse {
+		const limit = opts?.limit ?? DEFAULT_LIMIT;
+		const profile = opts?.profile ?? emptyProfile();
+		const poolSize = Math.min(limit * 5, this.#catalog.length);
+		const pool = [...this.#catalog]
+			.sort((a, b) => b.popularity_score - a.popularity_score)
+			.slice(0, poolSize);
+		const candidates: SearchResult[] = pool.map((product) => ({
+			product,
+			score: product.popularity_score,
+			score_components: null,
+		}));
+		const ranked = rerank(candidates, profile);
+		return {
+			results: [...ranked.slice(0, limit)],
+			session_clicks: profile.clickCount,
+		};
+	}
+
+	public browse(opts?: BrowseOptions): BrowseResponse {
+		const limit = opts?.limit ?? DEFAULT_LIMIT;
+		const filtered =
+			opts?.category !== undefined
+				? this.#catalog.filter((p) => p.category === opts.category)
+				: this.#catalog;
+		const categories = [
+			...new Set(this.#catalog.map((p) => p.category)),
+		].sort();
+		return {
+			products: filtered.slice(0, limit),
+			total: filtered.length,
+			categories,
+		};
+	}
+
+	public searchVector(
+		queryVec: Float32Array,
+		opts?: SearchOptions,
+	): SearchResponse {
+		const limit = opts?.limit ?? DEFAULT_LIMIT;
 		const k = Math.max(limit * 3, 30);
 		const hits = this.#index.search(queryVec, k);
 		const cosineById = new Map(hits.map((h) => [h.id, h.score]));
-		// RRF over the single vector ranking (rank-monotone): keeps the cosine
-		// top-k order. The fused score is discarded — we report cosine on the
-		// result, which is what the Python VectorSearcher exposes pre-fusion.
+		// RRF over the single vector ranking is rank-monotone: preserves cosine
+		// order. Report cosine on the result (what VectorSearcher exposes).
 		const fused = reciprocalRankFusion(hits, []);
-		const results = hydrate(
-			this.#index,
-			fused.map((h) => h.id),
-			cosineById,
-		).slice(0, limit);
-		return {
-			results,
-			query: "",
-			total: results.length,
-		};
+		const results: SearchResult[] = [];
+		for (const { id } of fused) {
+			const product = this.#index.product(id);
+			if (product !== undefined) {
+				results.push({
+					product,
+					score: cosineById.get(id) ?? 0,
+					score_components: null,
+				});
+			}
+		}
+		const sliced = results.slice(0, limit);
+		return { results: sliced, query: "", total: sliced.length };
 	}
 }
 
-/** Parse the synced files and return a query-ready SearchEngine. */
+/** Parse the synced files and return a query-ready hybrid SearchEngine. */
 export async function createSearchEngine(
 	files: VectorIndexFiles,
+	embedder: Embedder,
 ): Promise<SearchEngine> {
-	return new VectorSearchEngine(await loadVectorIndex(files));
+	const index = await loadVectorIndex(files);
+	const keyword = KeywordSearcher.fromProducts(index.products());
+	return new HybridSearchEngine(index, keyword, embedder);
 }
