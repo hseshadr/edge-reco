@@ -302,12 +302,16 @@ def build_catalog(
     output_jsonl: Annotated[Path, typer.Argument(help="Output products.jsonl path")],
 ) -> None:
     """Convert a scraped-Amazon CSV to an EdgeReco products.jsonl."""
-    import polars as pl
+    import csv
 
     from edgereco.catalog.preprocessor import scraped_row_to_product
 
     typer.echo(f"Reading {input_csv}...")
-    rows = list(pl.read_csv(input_csv, infer_schema_length=0).iter_rows(named=True))
+    # stdlib csv (not polars): the scraped dataset has un-doubled inch-mark quotes
+    # inside quoted fields (e.g. `6' 1"`), an RFC4180 violation a strict chunked
+    # parser rejects but csv.DictReader recovers from row-by-row.
+    with input_csv.open(newline="", encoding="utf-8") as handle:
+        rows: list[dict[str, Any]] = [dict(r) for r in csv.DictReader(handle)]
     pop_min, pop_max, fresh_min, fresh_max = _scraped_score_bounds(rows)
 
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)

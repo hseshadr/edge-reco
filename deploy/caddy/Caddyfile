@@ -1,8 +1,14 @@
 :8081 {
     encode gzip zstd
-    header {
-        Cache-Control "public, max-age=300"
-        Access-Control-Allow-Origin "*"
-    }
+
+    # Content-addressed paths (chunk/<hash>, manifest/<hash>) are immutable: cache hard.
+    @immutable path /chunk/* /manifest/*
+    header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+    # The `latest` pointer is the one mutable byte-range: short TTL, always revalidate.
+    header Cache-Control "public, max-age=30, must-revalidate"
+
+    header Access-Control-Allow-Origin "*"
+
     reverse_proxy origin:8080
 }

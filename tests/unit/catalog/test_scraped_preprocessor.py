@@ -214,3 +214,35 @@ def test_build_catalog_cli(tmp_path: Path) -> None:
     assert ids == {"B0CLEAN", "B0FALL", "B0BLANK", "B0BAD"}
     blank = next(p for p in products if p.id == "B0BLANK")
     assert blank.category == "Uncategorized"
+
+
+def test_build_catalog_handles_embedded_literal_quotes(tmp_path: Path) -> None:
+    """Regression: the real Amazon dataset has un-doubled inch-mark quotes inside
+    quoted fields (e.g. ``model is 6' 1" tall``) — an RFC4180 violation that desyncs
+    a strict chunked CSV parser. build-catalog must still ingest every row.
+    """
+    csv_path = tmp_path / "products.csv"
+    out_path = tmp_path / "products.jsonl"
+
+    keys = _HEADER.split(",")
+    # Hand-build a row whose about_item carries a lone embedded double-quote (inch
+    # mark) left UN-doubled, exactly like the source data — an RFC4180 violation.
+    dirty = {**_CLEAN, "asin": "B0INCH"}
+    dirty["about_item"] = "The model in the image is 6' 1\" tall, size 32."
+    dirty_line = ",".join(f'"{dirty[k]}"' for k in keys)
+
+    lines = [
+        _HEADER,
+        _csv_row(_CLEAN),
+        dirty_line,
+        _csv_row(_FALLBACK_DESC),
+    ]
+    csv_path.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["build-catalog", str(csv_path), str(out_path)])
+    assert result.exit_code == 0, result.output
+
+    products = load_jsonl(out_path)
+    ids = {p.id for p in products}
+    assert ids == {"B0CLEAN", "B0INCH", "B0FALL"}  # no row lost to a quote desync
