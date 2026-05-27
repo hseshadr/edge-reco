@@ -3,8 +3,9 @@ import { chunkBytes } from "./fixtures";
 import { IntegrityError } from "./integrity";
 import { MemoryCacheStore } from "./memoryStore";
 
+// A real chunk hash from examples/catalog (catalog_meta.json's single chunk).
 const REAL_CHUNK =
-	"90024f64fbfd4c66a53141086d04d8a73eeab23ac96441d6eb99f093f7ad88cd";
+	"baff671db712e38859be1046ef85ae0af6ba86bfa57fe01a69a3d42bcbe7fdda";
 
 describe("MemoryCacheStore content-address integrity", () => {
 	it("ingests a real chunk under its true hash and reads it back", async () => {

@@ -9,7 +9,7 @@
 		"lint": "biome check .",
 		"test": "vitest run",
 		"test:e2e": "playwright test",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc -b",
 		"preview": "vite preview"
 	},
 	"dependencies": {
