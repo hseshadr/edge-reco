@@ -3,14 +3,14 @@
 # IMPORTANT — build context: this Dockerfile MUST be built with the build
 # context rooted at the PARENT of the edge-reco repo (i.e. ~/dev/oss), because
 # the engine depends on TWO sibling repos via uv local path sources:
-#   edge-reco/pyproject.toml      -> edge-proc          = ../edgeproc
-#   edgeproc/pyproject.toml       -> shared-libs-python = ../shared-libs-python
+#   edge-reco/pyproject.toml      -> edge-proc          = ../edge-proc
+#   edge-proc/pyproject.toml      -> shared-libs-python = ../shared-libs-python
 # A context rooted inside edge-reco cannot COPY those siblings. docker-compose.yml
 # sets `build.context: ../../..` so all three repos land side-by-side here.
 #
 # Layout reconstructed inside the image (preserves the ../ relative sources):
 #   /workspace/edge-reco
-#   /workspace/edgeproc
+#   /workspace/edge-proc
 #   /workspace/shared-libs-python
 
 FROM python:3.13-slim AS base
@@ -25,14 +25,14 @@ ENV UV_LINK_MODE=copy \
 WORKDIR /workspace
 
 # Copy all three sibling repos, preserving the relative directory structure the
-# uv local sources (`../edgeproc`, `../shared-libs-python`) expect.
+# uv local sources (`../edge-proc`, `../shared-libs-python`) expect.
 #
 # NOTE: the build context is ~/dev/oss (outside this repo), so there is no
 # .dockerignore at the context root to exclude host artifacts. We therefore
 # scrub host-built virtualenvs, caches and the frontend's node_modules AFTER
 # copy — host .venv dirs are Linux-incompatible and would break `uv sync`, and
 # node_modules/.git just bloat the image. (The backend image needs none of them.)
-COPY edgeproc/ ./edgeproc/
+COPY edge-proc/ ./edge-proc/
 COPY shared-libs-python/ ./shared-libs-python/
 COPY edge-reco/ ./edge-reco/
 

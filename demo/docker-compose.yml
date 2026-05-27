@@ -1,15 +1,25 @@
-# Nimbus demo — docker-compose (best-effort).
+# Nimbus demo — docker-compose.
 #
 # ┌─ READ THIS FIRST ──────────────────────────────────────────────────────┐
-# │ `make dev` is the RECOMMENDED way to run this demo locally.             │
+# │ `make dev` is the lightest way to iterate on the FRONTEND locally.      │
+# │ This compose file is the full local-first delivery loop:                │
+# │                                                                         │
+# │     origin (static bundle) ──► edge (Caddy CDN :8081)                   │
+# │                                      │ sync (signed, verified)          │
+# │                                      ▼                                   │
+# │     backend (edge-reco engine :8000) ──► frontend (Nimbus :5173)        │
+# │                                                                         │
+# │ The backend SYNCS the signed, content-addressed catalog bundle from the │
+# │ Caddy origin at startup (ServiceContainer.from_synced) and serves the   │
+# │ real 728-product Amazon catalog — no code change to the frontend.       │
 # │                                                                         │
 # │ Docker requires THREE sibling repos checked out side-by-side under one  │
 # │ parent dir (~/dev/oss by default):                                      │
 # │     ~/dev/oss/edge-reco            (this repo)                           │
-# │     ~/dev/oss/edgeproc             (engine dep: ../edgeproc)             │
-# │     ~/dev/oss/shared-libs-python   (edgeproc's dep: ../shared-libs-..)   │
+# │     ~/dev/oss/edge-proc            (engine dep: ../edge-proc)            │
+# │     ~/dev/oss/shared-libs-python   (edge-proc's dep: ../shared-libs-..)  │
 # │                                                                         │
-# │ The backend's uv local-path sources (../edgeproc, ../shared-libs-python)│
+# │ The backend's uv local-path sources (../edge-proc,../shared-libs-python)│
 # │ live OUTSIDE this repo, so the backend build context is the PARENT dir  │
 # │ (../.. -> ~/dev/oss) to make all three reachable. See                   │
 # │ demo/backend/Dockerfile for the in-image layout it reconstructs.        │
@@ -19,19 +29,70 @@
 # └─────────────────────────────────────────────────────────────────────────┘
 
 services:
+  # Static-file origin: serves the committed signed bundle (examples/catalog/:
+  # flat `latest`, `manifest/<hash>`, `chunk/<hash>`). Read-only mount.
+  origin:
+    image: python:3.13-slim
+    container_name: nimbus-origin
+    working_dir: /catalog
+    volumes:
+      - ../examples/catalog:/catalog:ro
+    command: ["python", "-m", "http.server", "8080"]
+    healthcheck:
+      # `/latest` is the bundle's version pointer (the old flat `/manifest.json`
+      # is gone in the content-addressed layout).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/latest')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # Edge CDN: Caddy reverse proxy with the bundle's cache policy (immutable
+  # chunk/manifest, short-TTL `latest`). This is what the device syncs from.
+  edge:
+    image: caddy:2-alpine
+    container_name: nimbus-edge
+    depends_on:
+      origin:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    volumes:
+      - ../deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/latest"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   backend:
-    # Context = parent of edge-reco (~/dev/oss) so edgeproc + shared-libs-python
+    # Context = parent of edge-reco (~/dev/oss) so edge-proc + shared-libs-python
     # siblings are inside the build context. This compose file lives at
     # demo/docker-compose.yml, so ../.. == edge-reco -> oss (the parent dir).
     # Dockerfile path is relative to that context.
     build:
       context: ../..
       dockerfile: edge-reco/demo/backend/Dockerfile
+    container_name: nimbus-backend
+    depends_on:
+      edge:
+        condition: service_healthy
     environment:
       DEMO_HOST: 0.0.0.0
       DEMO_PORT: "8000"
       # Allow the frontend's served origin through CORS.
       DEMO_CORS_ORIGINS: http://localhost:5173
+      # Local-first delivery: sync the signed bundle from the Caddy edge and
+      # verify it against the pinned public key, into a writable cache.
+      EDGERECO_BUNDLE_BASE_URL: http://edge:8081
+      EDGERECO_VERIFY_KEY_PATH: /app/public.key
+      EDGERECO_BUNDLE_CACHE_DIR: /tmp/edgereco-bundle
+    volumes:
+      # Pin the public verify key into the image at the path the env points to.
+      - ./../examples/keys/public.key:/app/public.key:ro
     ports:
       - "8000:8000"
 
@@ -46,3 +107,7 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

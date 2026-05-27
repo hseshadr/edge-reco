@@ -3,12 +3,26 @@
 The demo storefront is a browser SPA (Vite dev server on :5173, preview on
 :4173) that calls edge-reco's API directly. The library's ``create_app`` adds
 no CORS and exposes only ``/search`` + ``/recommend``; a storefront also needs a
-plain catalog-browse feed. So this module loads the committed demo catalog, builds
-the engine's ``ServiceContainer``, wraps the app with ``CORSMiddleware``, and mounts
-a typed ``/products`` browse route over the same catalog.
+plain catalog-browse feed. So this module builds the engine's ``ServiceContainer``,
+wraps the app with ``CORSMiddleware``, and mounts a typed ``/products`` browse route.
+
+Catalog source — local-first delivery loop:
+    When ``EDGERECO_BUNDLE_BASE_URL`` + ``EDGERECO_VERIFY_KEY_PATH`` are set (the
+    Docker stack sets both), the backend SYNCS a signed, content-addressed bundle
+    from the Caddy CDN origin at import time via ``ServiceContainer.from_synced`` —
+    proving the real publish→sync→serve loop end-to-end with the 728-product Amazon
+    catalog. Sync fails closed on a bad signature or tampered chunk.
+
+    With no bundle env set (plain ``uv run`` / tests), it falls back to the committed
+    stand-in catalog via ``from_catalog`` so the demo stays runnable offline.
+
+The build runs at import time, BEFORE uvicorn's event loop exists — required because
+both ``from_catalog`` (``VectorIndex.build``) and ``from_synced`` (``VectorIndex.load``)
+call ``asyncio.run`` internally, which raises inside an already-running loop. See
+``serve.py`` for the launcher that imports this pre-built ``app``.
 
 Launch:
-    uv run uvicorn demo.backend.main:app --port 8000
+    uv run python -m demo.backend.serve
 """
 
 from __future__ import annotations
@@ -25,6 +39,7 @@ from edgereco.api.app import create_app
 from edgereco.api.deps import ServiceContainer
 from edgereco.catalog.loader import load_jsonl
 from edgereco.catalog.models import Product
+from edgereco.config import Settings
 
 CATALOG_PATH = Path(__file__).parent / "catalog" / "products.jsonl"
 
@@ -56,6 +71,25 @@ def load_catalog() -> list[Product]:
     return load_jsonl(CATALOG_PATH)
 
 
+def build_container() -> ServiceContainer:
+    """Sync the signed bundle from the CDN when configured, else use the committed catalog.
+
+    Runs at import time (no event loop yet), so the ``asyncio.run`` inside
+    ``VectorIndex.load`` / ``VectorIndex.build`` is safe.
+    """
+    settings = Settings()
+    if settings.bundle_base_url and settings.verify_key_path:
+        from edgeproc.bundles.signing import Ed25519Verifier
+
+        verifier = Ed25519Verifier.from_public_bytes(settings.verify_key_path.read_bytes())
+        return ServiceContainer.from_synced(
+            base_url=settings.bundle_base_url,
+            cache_root=settings.bundle_cache_dir,
+            verifier=verifier,
+        )
+    return ServiceContainer.from_catalog(load_catalog())
+
+
 def _browse_router(products: list[Product]) -> APIRouter:
     """A read-only catalog-browse feed over the in-memory demo catalog."""
     router = APIRouter()
@@ -76,16 +110,16 @@ def _browse_router(products: list[Product]) -> APIRouter:
 
 
 def build_app() -> FastAPI:
-    """Build the edge-reco app over the demo catalog with CORS + browse enabled."""
-    catalog = load_catalog()
-    fastapi_app = create_app(ServiceContainer.from_catalog(catalog))
+    """Build the edge-reco app over the catalog source with CORS + browse enabled."""
+    container = build_container()
+    fastapi_app = create_app(container)
     fastapi_app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins(),
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    fastapi_app.include_router(_browse_router(catalog))
+    fastapi_app.include_router(_browse_router(container.catalog))
     return fastapi_app
 
 

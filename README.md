@@ -25,43 +25,75 @@ Most search/reco stacks are tightly coupled to a remote backend: every query cro
                                                             client
 ```
 
-- **origin** — serves the catalog (`manifest.json` + `products.jsonl`).
-- **edge** — Caddy reverse proxy with HTTP cache.
-- **edgereco runtime** — FastAPI app with BM25 + FAISS indexes, RRF fusion, session-aware reranker.
+- **origin** — serves a signed, content-addressed bundle (a `latest` version pointer + immutable `manifest/<hash>` and `chunk/<hash>` objects). A committed 728-product Amazon bundle lives in `examples/catalog/`.
+- **edge** — Caddy reverse proxy with the bundle cache policy (immutable chunks, short-TTL pointer).
+- **edgereco runtime** — FastAPI app that syncs + verifies the bundle (fail-closed on a bad signature), `VectorIndex.load`s the prebuilt FAISS index (zero recompute on the edge), then serves BM25 + FAISS RRF hybrid search + a session-aware reranker.
 
-## Quickstart (Docker)
+## Quickstart — the Nimbus demo (Docker)
+
+The fastest way to see the full local-first loop: a React storefront over the engine,
+serving the **real 728-product Amazon catalog** synced from the CDN.
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
-curl "http://localhost:8000/search?q=wireless+headphones&limit=5"
-curl "http://localhost:8000/recommend?limit=5" -H "X-Session-Id: demo"
+# from demo/ — brings up origin -> edge(Caddy) -> backend(sync+serve) -> frontend
+cd demo && docker compose up --build
+
+# storefront:
+open http://localhost:5173
+
+# the backend synced the signed bundle from the edge and serves real products:
+# (run inside the network, or hit the host-mapped port)
+#   GET http://localhost:8000/search?q=polo&limit=5      -> real Amazon polo shirts
+#   GET http://localhost:8000/catalog/info               -> 728 products
 ```
 
-The demo container syncs the 1000-product synthetic catalog from the origin, builds vector + keyword indexes locally, then serves the API.
+The backend syncs the signed bundle from the Caddy edge at startup
+(`ServiceContainer.from_synced`), verifies it against the pinned public key, loads the
+prebuilt index, and serves — no backend calls after sync. The frontend is unchanged;
+it just sees the real catalog.
 
-## Quickstart (local)
+> Requires the two sibling repos checked out beside this one (`../edgeproc`,
+> `../shared-libs-python`) — the backend build context is the parent dir. See the
+> header of `demo/docker-compose.yml`.
+
+## Quickstart — publish → sync → serve (local, no Docker)
+
+Reproduce the delivery loop with the bundle CLI:
 
 ```bash
 uv sync --group dev
 
-# generate the demo catalog
-uv run python scripts/generate_demo_catalog.py
+# 1. build a catalog jsonl from a scraped-Amazon CSV
+uv run edgereco build-catalog products.csv /tmp/staging/products.jsonl
 
-# sync into a local cache (filesystem mode), build indexes, serve
-uv run edgereco sync examples/catalog/manifest.json /tmp/cache --filesystem \
-    --file-base-url examples/catalog
-uv run edgereco index /tmp/cache /tmp/index
-uv run edgereco serve /tmp/cache /tmp/index --port 8000
+# 2. build the FAISS vector index into the staging dir
+uv run edgereco index /tmp/staging /tmp/staging
+
+# 3. sign + publish a content-addressed bundle origin
+uv run edgereco bundle /tmp/staging /tmp/origin examples/keys/private.key \
+    --catalog-id amazon-demo --version v1 --product-count 728
+
+# 4. serve by syncing that origin (filesystem URL works too) + verifying the key
+EDGERECO_BUNDLE_BASE_URL=/tmp/origin \
+EDGERECO_VERIFY_KEY_PATH=examples/keys/public.key \
+EDGERECO_BUNDLE_CACHE_DIR=/tmp/bundle-cache \
+    uv run edgereco serve /tmp/staging /tmp/staging --port 8000
 ```
+
+The committed `examples/catalog/` is exactly such an origin (built from the 728-product
+Amazon catalog), so step 4 alone — pointed at it — serves the demo data.
 
 ## CLI
 
 ```
-edgereco sync MANIFEST_URL CACHE_DIR [--http|--filesystem] [--file-base-url URL]
-edgereco index CACHE_DIR INDEX_DIR
+edgereco build-catalog INPUT.csv OUTPUT.jsonl           # scraped-Amazon CSV -> products.jsonl
+edgereco preprocess INPUT.csv OUTPUT_DIR [--limit N]    # Kaggle-schema CSV -> jsonl + manifest
+edgereco index STAGING_DIR INDEX_DIR                    # build FAISS vector/ index
+edgereco bundle STAGING_DIR ORIGIN_DIR PRIVATE_KEY      # sign + publish a bundle origin
 edgereco serve CACHE_DIR INDEX_DIR [--host HOST] [--port PORT]
+    # with EDGERECO_BUNDLE_BASE_URL + EDGERECO_VERIFY_KEY_PATH set, syncs + verifies a
+    # signed bundle from that origin instead of reading the flat CACHE_DIR/INDEX_DIR.
 edgereco search QUERY CACHE_DIR INDEX_DIR [--limit N] [--category CAT] [--json]
-edgereco preprocess INPUT.csv OUTPUT_DIR [--limit N]
 ```
 
 ## How it works
@@ -77,7 +109,7 @@ score = 0.40·popularity + 0.20·category_aff + 0.15·tag_aff
 
 Recently-viewed items get penalized; matching categories/brands/tags get amplified.
 
-**Catalog sync.** The origin publishes a `manifest.json` listing files with sha256 checksums. The edge fetches the manifest, downloads each listed file, validates checksums, and writes them to a local cache. After sync, the runtime is fully offline-capable.
+**Catalog sync.** The origin publishes a signed, content-addressed bundle: a `latest` version pointer (Ed25519-signed) → an immutable `manifest/<hash>` → immutable `chunk/<hash>` objects. The edge fetches `/latest`, verifies its signature against the pinned public key (fail-closed on tampering), pulls the listed chunks, reassembles each bundled file — including the prebuilt FAISS `vector/` index — into a local cache, and `VectorIndex.load`s it (zero recompute). After sync, the runtime is fully offline-capable.
 
 ## Development
 
@@ -93,7 +125,7 @@ The repo follows strict TDD/BDD: unit tests in `tests/unit/`, BDD scenarios in `
 
 ## Data
 
-`scripts/generate_demo_catalog.py` produces a deterministic 1000-product synthetic catalog (5 categories × 200) suitable for the demo. To use real Amazon Products Dataset (Kaggle), pipe a CSV through `edgereco preprocess INPUT.csv OUTPUT_DIR --limit 10000` — the preprocessor normalizes popularity from `stars × log(reviews+1)` and freshness from `boughtInLastMonth`, then writes JSONL + manifest.
+`examples/catalog/` is a committed, signed 728-product **real Amazon catalog** bundle (the demo data). It was produced by `build-catalog` → `index` → `bundle` (see the publish→sync→serve quickstart above). To build your own from raw data: a scraped-Amazon `products.csv` goes through `edgereco build-catalog`, or a Kaggle Amazon Products Dataset CSV through `edgereco preprocess INPUT.csv OUTPUT_DIR --limit 10000` (normalizes popularity from `stars × log(reviews+1)` and freshness from `boughtInLastMonth`); then `index` + `bundle` to sign and publish.
 
 ## Specs
 
@@ -106,8 +138,9 @@ The repo follows strict TDD/BDD: unit tests in `tests/unit/`, BDD scenarios in `
 - `features/` — Gherkin BDD specs, decoupled from step implementations
 - `tests/` — `unit/` `bdd/` `integration/` `e2e/`
 - `deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
-- `examples/catalog/` — synthetic 1000-product demo data + manifest
-- `scripts/generate_demo_catalog.py` — deterministic demo catalog generator
+- `examples/catalog/` — committed signed 728-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
+- `examples/keys/public.key` — pinned Ed25519 verify key for the bundle
+- `demo/` — Nimbus React storefront + FastAPI backend (syncs the bundle from the CDN)
 - `docs/superpowers/` — current spec + plans
 - `docs/legacy/` — pre-pivot TS/WASM design (archive only)
 

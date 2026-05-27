@@ -18,12 +18,14 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - `features/` — Gherkin feature files, **decoupled** from step implementations
 - `tests/` — unit · bdd · integration · e2e
 - `deploy/` — Dockerfile · docker-compose.yml · Caddy config
-- `examples/catalog/` — synthetic 1000-product demo catalog (5 categories × 200; Amazon CSV processing available via `edgereco preprocess`)
+- `examples/catalog/` — committed signed 728-product **real Amazon** catalog bundle (`latest` + `manifest/<hash>` + `chunk/<hash>`); built via `build-catalog` → `index` → `bundle`. Amazon CSV ingest also available via `edgereco preprocess`.
+- `examples/keys/` — `public.key` (pinned verify key, committed) + `private.key` (gitignored)
+- `demo/` — Nimbus React storefront + FastAPI backend; the backend syncs + verifies the bundle from the Caddy CDN (`ServiceContainer.from_synced`)
 
 ## Invariants (don't break without updating the spec)
 - **Scoring formula**: `0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`
 - **Hybrid search**: BM25 + FAISS vector + Reciprocal Rank Fusion
-- **Catalog sync**: manifest-based with checksums; Caddy edge cache
+- **Catalog sync**: signed, content-addressed bundle (`latest` → `manifest/<hash>` → `chunk/<hash>`), Ed25519-verified fail-closed; Caddy edge cache. Bundle ships the prebuilt FAISS `vector/` (zero recompute on the edge).
 - **Architecture**: all-Pydantic models throughout v1 (wire/domain split is a future concern); Protocol-based DI for infrastructure
 - **Zero backend calls after sync** — runtime is offline-capable
 

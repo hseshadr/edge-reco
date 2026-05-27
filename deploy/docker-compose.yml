@@ -7,7 +7,9 @@ services:
       - ../examples/catalog:/catalog:ro
     command: ["python", "-m", "http.server", "8080"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/manifest.json')"]
+      # `/latest` is the bundle's version pointer (the flat `/manifest.json` is
+      # gone in the content-addressed bundle layout).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/latest')"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -26,7 +28,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/manifest.json"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/latest"]
       interval: 5s
       timeout: 3s
       retries: 5

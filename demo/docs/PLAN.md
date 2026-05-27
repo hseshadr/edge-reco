@@ -28,12 +28,14 @@
 - Create: `demo/.gitignore` (ignore `data/raw/*` except `.gitkeep`, `frontend/node_modules`, `frontend/dist`, `__pycache__`)
 - Create: `demo/backend/catalog/products.jsonl` (stand-in)
 
-- [ ] **Step 1:** Generate the stand-in catalog from edge-reco's existing generator into the demo, taking a manageable subset.
-
-Run: `cd /Users/harish/dev/oss/edge-reco && uv run python scripts/generate_demo_catalog.py` (writes `examples/catalog/products.jsonl`), then copy the first 300 lines to `demo/backend/catalog/products.jsonl`:
+- [ ] **Step 1:** Provide a committed stand-in catalog at `demo/backend/catalog/products.jsonl` (the offline fallback for plain `uv run` / tests). The live demo no longer reads this file — when `EDGERECO_BUNDLE_BASE_URL` + `EDGERECO_VERIFY_KEY_PATH` are set, the backend syncs the real signed bundle from `examples/catalog/` via the Caddy edge (`ServiceContainer.from_synced`). To regenerate the stand-in from the real bundle, materialize it with the bundle CLI rather than the (removed) flat `products.jsonl`:
 ```bash
-head -n 300 examples/catalog/products.jsonl > demo/backend/catalog/products.jsonl
-wc -l demo/backend/catalog/products.jsonl   # expect 300
+# verify-and-extract the committed bundle, then take a manageable subset
+EDGERECO_BUNDLE_BASE_URL=examples/catalog \
+EDGERECO_VERIFY_KEY_PATH=examples/keys/public.key \
+EDGERECO_BUNDLE_CACHE_DIR=/tmp/standin \
+    uv run edgereco serve /tmp/standin /tmp/standin --port 0  # syncs -> /tmp/standin/materialized
+head -n 300 /tmp/standin/materialized/products.jsonl > demo/backend/catalog/products.jsonl
 ```
 
 - [ ] **Step 2:** Write `demo/.gitignore`:
