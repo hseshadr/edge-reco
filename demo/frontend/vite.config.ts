@@ -9,7 +9,7 @@ export default defineConfig({
 	test: {
 		environment: "jsdom",
 		globals: false,
-		// Playwright owns tests/e2e; keep Vitest to unit specs only.
-		exclude: [...configDefaults.exclude, "tests/e2e/**"],
+		// Playwright owns tests/e2e + tests/e2e-c1; keep Vitest to unit specs only.
+		exclude: [...configDefaults.exclude, "tests/e2e/**", "tests/e2e-c1/**"],
 	},
 });

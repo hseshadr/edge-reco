@@ -17,8 +17,8 @@ const SIGNAL_ROWS: SignalRow[] = [
 	{ key: "freshness", label: "Freshness", tone: "abyss" },
 ];
 
-/** Clamps a raw component score to a 0..1 bar width. */
-function widthPct(value: number): number {
+/** Clamps a raw component score to a 0..1 bar width as a CSS percentage. */
+function widthPct(value: number): string {
 	return `${Math.max(0, Math.min(1, Math.abs(value))) * 100}`.concat("%");
 }
 
