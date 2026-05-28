@@ -1,5 +1,5 @@
 // The data layer — backend-free. Every call that used to hit the FastAPI backend
-// now runs the in-browser engine (src/engine/*) over the synced signed bundle:
+// now runs the in-browser engine (@edgeproc/browser) over the synced signed bundle:
 //
 //   search()   -> engine.search(query)        (embed in-tab -> BM25⊕vector -> RRF -> rerank)
 //   recommend()-> engine.recommend()          (popularity pool reranked by the live profile)
@@ -15,18 +15,16 @@
 // bootstrap() must resolve before any of these calls (App gates the UI on it).
 
 import {
+	applyInteraction,
 	configFromEnv,
 	EngineRuntime,
+	emptyProfile,
 	type OnStage,
 	type RuntimeConfig,
 	type RuntimeDeps,
-} from "../engine/runtime";
-import type { SearchEngine } from "../engine/searchEngine";
-import {
-	applyInteraction,
-	emptyProfile,
+	type SearchEngine,
 	type SessionProfile,
-} from "../engine/session";
+} from "@edgeproc/browser";
 import type {
 	BrowseResponse,
 	InteractionEvent,

@@ -4,13 +4,19 @@
 // against the REAL committed bundle via an injected fake sync-Worker + a stub
 // embedder, then assert the contract shapes and the live re-rank loop in Node.
 
+import {
+	EMBEDDING_DIM,
+	type Embedder,
+	type EnginePort,
+	type IndexManifest,
+	MemoryCacheStore,
+	materializeFile,
+	type SyncResult,
+	syncIndex,
+	type Verify,
+} from "@edgeproc/browser";
+import { catalogFetch } from "@edgeproc/browser/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { EMBEDDING_DIM, type Embedder } from "../engine/embedder";
-import { catalogFetch } from "../engine/fixtures";
-import { MemoryCacheStore } from "../engine/memoryStore";
-import type { EnginePort } from "../engine/runtime";
-import { materializeFile, syncIndex } from "../engine/sync";
-import type { IndexManifest, SyncResult, Verify } from "../engine/types";
 import {
 	__setRuntimeForTests,
 	bootstrap,

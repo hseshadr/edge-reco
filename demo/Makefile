@@ -5,7 +5,7 @@
 #   docker compose up --build     # the whole backend-free showcase, one command
 #
 # Iterate on the SPA locally:
-#   make install   # one-time: frontend (npm) deps
+#   make install   # one-time: npm workspace deps (frontend + @edgeproc/browser)
 #   make edge      # serve the signed bundle from the Caddy edge (:8081)
 #   make frontend  # Vite dev server on localhost:5173 (syncs from the edge)
 #   make dev       # edge + frontend together
@@ -25,15 +25,15 @@ ROOT_DIR := $(abspath $(DEMO_DIR)/..)
 help: ## Show this help.
 	@echo "Nimbus demo (backend-free) targets:"
 	@echo "  docker compose up --build   the whole showcase, one command"
-	@echo "  make install   npm install (frontend)"
+	@echo "  make install   npm install (workspace: frontend + engine package)"
 	@echo "  make edge       serve the signed bundle from Caddy (:8081)"
 	@echo "  make frontend   Vite dev server (open http://localhost:5173)"
 	@echo "  make dev        edge + frontend together"
 	@echo "  make test       frontend vitest"
 	@echo "  make backend    (optional) the API-server use case (:8000)"
 
-install: ## One-time: install frontend dependencies.
-	cd $(DEMO_DIR)/frontend && npm install
+install: ## One-time: install workspace deps (frontend + @edgeproc/browser package).
+	cd $(DEMO_DIR) && npm install
 
 # Serve the signed bundle from the Caddy edge so the SPA can sync it in-browser.
 edge: ## Run the origin + Caddy edge (signed bundle on :8081).

@@ -1,4 +1,4 @@
-import type { BootStage } from "../engine/runtime";
+import type { BootStage } from "@edgeproc/browser";
 
 interface BootScreenProps {
 	stage: BootStage | null;

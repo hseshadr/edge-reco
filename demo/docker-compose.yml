@@ -70,8 +70,10 @@ services:
   # what syncs the signed bundle from it.
   frontend:
     build:
-      context: frontend
-      dockerfile: Dockerfile
+      # Context is the npm-workspace root (demo/) so the build sees the root
+      # lockfile + the @edgeproc/browser package the SPA depends on.
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         VITE_BUNDLE_BASE_URL: http://localhost:8081
     container_name: nimbus-frontend

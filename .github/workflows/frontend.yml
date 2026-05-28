@@ -1,0 +1,46 @@
+name: Frontend CI
+
+# The Nimbus demo + the extracted @edgeproc/browser package live in an npm
+# workspace rooted at demo/. The existing ci.yml covers only the Python core;
+# this workflow closes the long-standing gap where the frontend gate was
+# local-only. It mirrors the verified-green local hard gate exactly:
+# biome -> tsc -> vitest -> production build, across both workspace members.
+# (Playwright e2e stays a documented local step — see demo/README.md.)
+#
+# All run: steps use static commands only — no untrusted ${{ github.event.* }}
+# input is interpolated anywhere, so there is no workflow-injection surface.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # >= 22.12 required by Vite 8
+          cache: npm
+          cache-dependency-path: demo/package-lock.json
+
+      - name: Install workspace
+        run: npm ci
+
+      - name: Lint (biome) — package + demo
+        run: npm run lint --workspaces --if-present
+
+      - name: Typecheck (tsc) — package + demo
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Unit tests (vitest) — package + demo
+        run: npm run test --workspaces --if-present
+
+      - name: Build demo (proves the workspace link resolves)
+        run: npm run build -w frontend
