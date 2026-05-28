@@ -17,22 +17,22 @@
 # │ bundle ed25519+sha256 against a public key PINNED in its own build       │
 # │ (public/public.key) — it never trusts the bundle origin for the key.     │
 # │                                                                          │
-# │ Run from this directory (demo/):  docker compose up --build              │
-# │ Then open:                        http://localhost:5173                  │
+# │ Run from this directory (frontend/): docker compose up --build           │
+# │ Then open:                          http://localhost:5173                │
 # │                                                                          │
 # │ This compose file needs ONLY this repo — no sibling repos, no engine     │
 # │ build. (`make dev` is still the lightest way to iterate on the SPA.)     │
 # └─────────────────────────────────────────────────────────────────────────┘
 
 services:
-  # Static-file origin: serves the committed signed bundle (examples/catalog/:
-  # flat `latest`, `manifest/<hash>`, `chunk/<hash>`). Read-only mount.
+  # Static-file origin: serves the committed signed bundle (../backend/examples/
+  # catalog/: flat `latest`, `manifest/<hash>`, `chunk/<hash>`). Read-only mount.
   origin:
     image: python:3.13-slim
     container_name: nimbus-origin
     working_dir: /catalog
     volumes:
-      - ../examples/catalog:/catalog:ro
+      - ../backend/examples/catalog:/catalog:ro
     command: ["python", "-m", "http.server", "8080"]
     healthcheck:
       # `/latest` is the bundle's version pointer (the old flat `/manifest.json`
@@ -55,7 +55,7 @@ services:
     ports:
       - "8081:8081"
     volumes:
-      - ../deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../backend/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     healthcheck:
@@ -70,10 +70,10 @@ services:
   # what syncs the signed bundle from it.
   frontend:
     build:
-      # Context is the npm-workspace root (demo/) so the build sees the root
+      # Context is the npm-workspace root (frontend/) so the build sees the root
       # lockfile + the @edgeproc/browser package the SPA depends on.
       context: .
-      dockerfile: frontend/Dockerfile
+      dockerfile: app/Dockerfile
       args:
         VITE_BUNDLE_BASE_URL: http://localhost:8081
     container_name: nimbus-frontend

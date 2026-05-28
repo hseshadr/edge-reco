@@ -38,7 +38,7 @@ its own tab and runs hybrid search + session-aware recommendations entirely
 in-browser. **No FastAPI, no Python in the request path.**
 
 ```bash
-cd demo && docker compose up --build
+cd frontend && docker compose up --build
 
 # storefront:
 open http://localhost:5173
@@ -55,7 +55,7 @@ This compose file needs only this repo — no sibling checkouts. The browser doe
 the search.
 
 For the storefront walkthrough, screenshots, and how to iterate with
-`make dev`, see [`demo/README.md`](demo/README.md).
+`make dev`, see [`frontend/README.md`](demo/README.md).
 
 ## Quickstart — publish → sync → serve (Python API, no Docker)
 
@@ -115,45 +115,60 @@ Recently-viewed items get penalized; matching categories/brands/tags get amplifi
 
 **In the browser.** The same pipeline — sync the signed bundle, verify it
 ed25519 + sha256, run BM25 ⊕ vector → RRF → session-rerank — runs in the tab
-via the [`@edgeproc/browser`](demo/packages/edgeproc-browser/README.md)
+via the [`@edgeproc/browser`](frontend/packages/edgeproc-browser/README.md)
 workspace package. The browser embedder is `Xenova/all-MiniLM-L6-v2` via
 transformers.js, the byte-for-byte equivalent of the Python encoder, and the
 top-k is parity-tested against the FastAPI runtime over the same bundle. See
-[`demo/README.md`](demo/README.md) for the storefront over this engine.
+[`frontend/README.md`](demo/README.md) for the storefront over this engine.
 
 ## Development
 
 ```bash
+# Backend (Python recommender)
+cd backend
 uv sync --group dev
 uv run pytest -q                                 # full suite
 uv run pytest --cov=edgereco --cov-fail-under=90 # with coverage gate
-uv run ruff check src tests
+uv run ruff check .
 uv run mypy src
+
+# Frontend (Nimbus storefront + @edgeproc/browser)
+cd ../frontend
+npm install
+npm run lint --workspaces --if-present
+npm run typecheck --workspaces --if-present
+npm run test --workspaces --if-present
+npm run build -w frontend
 ```
 
-The repo follows strict TDD/BDD: unit tests in `tests/unit/`, BDD scenarios in `features/` with steps in `tests/bdd/`, integration tests in `tests/integration/`, end-to-end in `tests/e2e/`.
+The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenarios in `backend/features/` with steps in `backend/tests/bdd/`, integration tests in `backend/tests/integration/`, end-to-end in `backend/tests/e2e/`.
 
 ## Data
 
-`examples/catalog/` is a committed, signed 728-product **real Amazon catalog** bundle (the demo data). It was produced by `build-catalog` → `index` → `bundle` (see the publish→sync→serve quickstart above). To build your own from raw data: a scraped-Amazon `products.csv` goes through `edgereco build-catalog`, or a Kaggle Amazon Products Dataset CSV through `edgereco preprocess INPUT.csv OUTPUT_DIR --limit 10000` (normalizes popularity from `stars × log(reviews+1)` and freshness from `boughtInLastMonth`); then `index` + `bundle` to sign and publish.
+`backend/examples/catalog/` is a committed, signed 728-product **real Amazon catalog** bundle (the demo data). It was produced by `build-catalog` → `index` → `bundle`. To build your own from raw data: a scraped-Amazon `products.csv` goes through `edgereco build-catalog`, or a Kaggle Amazon Products Dataset CSV through `edgereco preprocess INPUT.csv OUTPUT_DIR --limit 10000` (normalizes popularity from `stars × log(reviews+1)` and freshness from `boughtInLastMonth`); then `index` + `bundle` to sign and publish.
 
-## Specs
+## Docs
 
-- [`docs/superpowers/specs/edgereco-python-v1.md`](docs/superpowers/specs/edgereco-python-v1.md) — design spec.
-- [`docs/superpowers/plans/edgereco-python-v1.md`](docs/superpowers/plans/edgereco-python-v1.md) — 26-task implementation plan (executed via `superpowers:subagent-driven-development`).
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture, system context, request lifecycle (with d2 diagrams).
+- [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run the demo end-to-end.
+- [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns.
+- [`docs/diagrams/`](docs/diagrams/) — d2 sources + rendered SVGs.
 
 ## Repo layout
 
-- `src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `telemetry/` `api/` `edge/` `cli.py` `config.py`
-- `features/` — Gherkin BDD specs, decoupled from step implementations
-- `tests/` — `unit/` `bdd/` `integration/` `e2e/`
-- `deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
-- `examples/catalog/` — committed signed 728-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
-- `examples/keys/public.key` — pinned Ed25519 verify key for the bundle
-- `demo/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser) + the optional FastAPI API-server variant
-- `demo/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine (private workspace package)
-- `docs/superpowers/` — current spec + plans
-- `docs/legacy/` — pre-pivot TS/WASM design (archive only)
+- `backend/` — Python project root (`pyproject.toml`, `uv.lock`).
+  - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `telemetry/` `api/` `edge/` `cli.py` `config.py`
+  - `backend/features/` — Gherkin BDD specs, decoupled from step implementations
+  - `backend/tests/` — `unit/` `bdd/` `integration/` `e2e/`
+  - `backend/deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
+  - `backend/examples/catalog/` — committed signed 728-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
+  - `backend/examples/keys/public.key` — pinned Ed25519 verify key for the bundle
+  - `backend/demo_server/` — optional FastAPI API-server launcher (not in main gate)
+  - `backend/scripts/` — fixture generators for browser-tier parity tests
+- `frontend/` — npm workspace root (`package.json`, `package-lock.json`).
+  - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
+  - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine
+- `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `diagrams/` · `archive/`
 
 ## License
 

@@ -1,0 +1,7 @@
+{
+	"name": "edge-reco-frontend",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"workspaces": ["app", "packages/*"]
+}

@@ -1,4 +1,4 @@
-# Build context is the workspace root (demo/). Keep it small + reproducible.
+# Build context is the workspace root (frontend/). Keep it small + reproducible.
 node_modules
 **/node_modules
 **/dist
@@ -7,5 +7,5 @@ node_modules
 .DS_Store
 **/test-results
 **/playwright-report
-frontend/Dockerfile
+app/Dockerfile
 .dockerignore

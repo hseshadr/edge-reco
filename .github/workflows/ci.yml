@@ -7,14 +7,17 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v5
 
       # Checkout private sibling repos inside the workspace (.deps/) so
       # actions/checkout path restrictions are satisfied (must stay within
       # $GITHUB_WORKSPACE). A Python step below patches the uv path sources
-      # in pyproject.toml to point at these in-workspace locations before
-      # uv sync runs. Local dev is unaffected (pyproject.toml is patched
+      # in backend/pyproject.toml to point at these in-workspace locations
+      # before uv sync runs. Local dev is unaffected (pyproject.toml is patched
       # in memory only — the on-disk file is restored by git clean, or just
       # never committed since CI never pushes).
       #
@@ -37,11 +40,9 @@ jobs:
           path: .deps/shared-libs-python
 
       - name: Patch uv path sources for CI layout
-        # edge-reco's pyproject.toml has: edge-proc = { path = "../edge-proc" }
-        # In CI the sibling is at .deps/edge-proc (inside $GITHUB_WORKSPACE).
-        # edge-proc's own pyproject has shared-libs-python = { path = "../shared-libs-python" }
-        # which from .deps/edge-proc/ resolves to .deps/shared-libs-python — correct as-is.
-        # Only edge-reco's source needs patching.
+        # backend/pyproject.toml has: edge-proc = { path = "../../edge-proc" }
+        # In CI the sibling is at .deps/edge-proc at the workspace root, so from
+        # backend/ that's ../.deps/edge-proc.
         run: |
           python3 - <<'PYEOF'
           import re, pathlib
@@ -49,11 +50,11 @@ jobs:
           txt = p.read_text()
           txt = re.sub(
               r'(edge-proc\s*=\s*\{[^}]*path\s*=\s*")[^"]*(")',
-              r'\g<1>.deps/edge-proc\g<2>',
+              r'\g<1>../.deps/edge-proc\g<2>',
               txt,
           )
           p.write_text(txt)
-          print("Patched: edge-proc path -> .deps/edge-proc")
+          print("Patched: edge-proc path -> ../.deps/edge-proc")
           PYEOF
 
       - uses: astral-sh/setup-uv@v8.1.0
@@ -61,10 +62,10 @@ jobs:
           enable-cache: true
       - name: Pin Python
         run: uv python install 3.13
-      # --frozen is dropped here because the uv.lock records ../edge-proc and
-      # ../shared-libs-python path sources which would still resolve to the
+      # --frozen is dropped here because the uv.lock records ../../edge-proc and
+      # ../../shared-libs-python path sources which would still resolve to the
       # missing original paths. Without --frozen, uv re-resolves using the
-      # patched pyproject.toml that points at .deps/. The lock is not
+      # patched pyproject.toml that points at ../.deps/. The lock is not
       # committed from CI so non-path deps remain pinned by the checked-in lock
       # on local dev; CI just builds a fresh resolution for its layout.
       - name: Sync

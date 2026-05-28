@@ -303,7 +303,7 @@ nvtx = [
 [[package]]
 name = "edge-proc"
 version = "0.1.0"
-source = { directory = "../edge-proc" }
+source = { directory = "../../edge-proc" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -335,7 +335,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "rank-bm25", marker = "extra == 'localvec'", specifier = ">=0.2" },
     { name = "sentence-transformers", marker = "extra == 'localvec'", specifier = ">=3.3" },
-    { name = "shared-libs-python", editable = "../shared-libs-python" },
+    { name = "shared-libs-python", editable = "../../shared-libs-python" },
     { name = "structlog", marker = "extra == 'bundles'", specifier = ">=24.4" },
     { name = "typer", specifier = ">=0.15" },
     { name = "zstandard", marker = "extra == 'bundles'", specifier = ">=0.25" },
@@ -385,7 +385,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "edge-proc", extras = ["localvec", "bundles"], directory = "../edge-proc" },
+    { name = "edge-proc", extras = ["localvec", "bundles"], directory = "../../edge-proc" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
@@ -1554,7 +1554,7 @@ wheels = [
 [[package]]
 name = "shared-libs-python"
 version = "0.1.1"
-source = { editable = "../shared-libs-python" }
+source = { editable = "../../shared-libs-python" }
 dependencies = [
     { name = "pydantic" },
 ]

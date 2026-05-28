@@ -8,10 +8,10 @@ records a normalized synthetic query vector together with the ordered top-k
 and asserts its in-browser ``search`` produces the same ordering — proving
 TS<->Python search parity over the real index.
 
-Run from the repo root, then let Biome settle the JSON formatting::
+Run from backend/, then let Biome settle the JSON formatting::
 
     .venv/bin/python3 scripts/gen_search_fixture.py
-    (cd demo/frontend && npx biome check --write src/engine/__fixtures__/search_parity.json)
+    (cd ../frontend/app && npx biome check --write src/engine/__fixtures__/search_parity.json)
 """
 
 from __future__ import annotations
@@ -26,9 +26,10 @@ import zstandard as zstd
 
 from edgereco.embeddings.index import VectorIndex
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-CATALOG = REPO_ROOT / "examples" / "catalog"
-FIXTURE = REPO_ROOT / "demo" / "frontend" / "src" / "engine" / "__fixtures__" / "search_parity.json"
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = BACKEND_ROOT.parent
+CATALOG = BACKEND_ROOT / "examples" / "catalog"
+FIXTURE = REPO_ROOT / "frontend" / "app" / "src" / "engine" / "__fixtures__" / "search_parity.json"
 DIM = 384
 TOP_K = 10
 SEED = 42
@@ -90,7 +91,7 @@ def main() -> None:
     # Tab-indented + trailing newline so the committed fixture already matches the
     # frontend Biome formatter (tab indent style) and stays stable on regeneration.
     FIXTURE.write_text(json.dumps(fixture, indent="\t") + "\n")
-    print(f"wrote {FIXTURE.relative_to(REPO_ROOT)} ({FIXTURE.stat().st_size} bytes)")
+    print(f"wrote {FIXTURE.relative_to(BACKEND_ROOT)} ({FIXTURE.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

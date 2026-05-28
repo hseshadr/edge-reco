@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+# npm workspace: deps hoist to frontend/node_modules; members may keep local ones too.
+node_modules/
+packages/*/node_modules/
+app/node_modules/
+app/dist/
+app/test-results/
+app/playwright-report/
+packages/*/dist/
+.env

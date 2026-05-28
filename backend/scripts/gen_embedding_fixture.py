@@ -7,10 +7,10 @@ test embeds the same strings in-browser with transformers.js and asserts cosine
 >= 0.99 against these vectors — proving the in-browser embedder reproduces the
 Python sentence-transformers embedding the rest of the pipeline is built on.
 
-Run from the repo root::
+Run from backend/::
 
     .venv/bin/python3 scripts/gen_embedding_fixture.py
-    (cd demo/frontend && npx biome check --write \
+    (cd ../frontend/app && npx biome check --write \
         src/engine/__fixtures__/embedding_parity.json)
 """
 
@@ -21,9 +21,10 @@ from pathlib import Path
 
 from edgeproc.localvec.encoder import TextEncoder
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = BACKEND_ROOT.parent
 FIXTURE = (
-    REPO_ROOT / "demo" / "frontend" / "src" / "engine" / "__fixtures__" / "embedding_parity.json"
+    REPO_ROOT / "frontend" / "app" / "src" / "engine" / "__fixtures__" / "embedding_parity.json"
 )
 DIM = 384
 
@@ -59,7 +60,7 @@ def main() -> None:
     }
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     FIXTURE.write_text(json.dumps(fixture, indent="\t") + "\n")
-    print(f"wrote {FIXTURE.relative_to(REPO_ROOT)} ({FIXTURE.stat().st_size} bytes)")
+    print(f"wrote {FIXTURE.relative_to(BACKEND_ROOT)} ({FIXTURE.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

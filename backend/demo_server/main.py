@@ -22,7 +22,7 @@ call ``asyncio.run`` internally, which raises inside an already-running loop. Se
 ``serve.py`` for the launcher that imports this pre-built ``app``.
 
 Launch:
-    uv run python -m demo.backend.serve
+    uv run python -m demo_server.serve
 """
 
 from __future__ import annotations

@@ -1,22 +1,22 @@
 """Generate the C3a end-to-end hybrid-search parity fixture.
 
-Replays edge-reco's /search route (src/edgereco/api/routes/search.py) over the
-REAL committed bundle in examples/catalog — the same files the browser syncs —
-for a set of query strings, and records the ordered top-k product ids + fused
-RRF scores Python returns. The TS engine.search(queryString) test loads this and
-asserts its in-browser pipeline (transformers.js embed -> BM25 + vector -> RRF ->
-empty-profile rerank) reproduces the same top-k, proving server<->browser parity
-for the whole hybrid path, not just the embedder.
+Replays /search (backend/src/edgereco/api/routes/search.py) over the REAL
+committed bundle in backend/examples/catalog — the same files the browser
+syncs — for a set of query strings, and records the ordered top-k product ids
+plus fused RRF scores Python returns. The TS engine.search(queryString) test
+loads this and asserts its in-browser pipeline (transformers.js embed -> BM25
++ vector -> RRF -> empty-profile rerank) reproduces the same top-k, proving
+server<->browser parity for the whole hybrid path, not just the embedder.
 
 The vector index is reconstructed from the stored embeddings.f32 matrix (NOT by
 re-encoding products) so Python and the browser search byte-identical vectors;
 the only cross-engine difference is the query embedder, which C3a's Step-1 gate
 pins at cosine ~ 1.
 
-Run from the repo root::
+Run from backend/::
 
     .venv/bin/python3 scripts/gen_hybrid_fixture.py
-    (cd demo/frontend && npx biome check --write \
+    (cd ../frontend/app && npx biome check --write \
         src/engine/__fixtures__/hybrid_parity.json)
 """
 
@@ -37,9 +37,10 @@ from edgereco.search.hybrid import reciprocal_rank_fusion
 from edgereco.search.keyword import KeywordSearcher
 from edgereco.search.vector import VectorSearcher
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-CATALOG = REPO_ROOT / "examples" / "catalog"
-FIXTURE = REPO_ROOT / "demo" / "frontend" / "src" / "engine" / "__fixtures__" / "hybrid_parity.json"
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = BACKEND_ROOT.parent
+CATALOG = BACKEND_ROOT / "examples" / "catalog"
+FIXTURE = REPO_ROOT / "frontend" / "app" / "src" / "engine" / "__fixtures__" / "hybrid_parity.json"
 DIM = 384
 LIMIT = 10
 QUERIES = [
@@ -120,7 +121,7 @@ def main() -> None:
     }
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     FIXTURE.write_text(json.dumps(fixture, indent="\t") + "\n")
-    print(f"wrote {FIXTURE.relative_to(REPO_ROOT)} ({FIXTURE.stat().st_size} bytes)")
+    print(f"wrote {FIXTURE.relative_to(BACKEND_ROOT)} ({FIXTURE.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

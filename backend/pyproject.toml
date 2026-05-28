@@ -35,7 +35,7 @@ package = true
 [tool.uv.sources]
 # Local built install (not editable) so the package + its py.typed marker land in
 # site-packages where mypy resolves them — mirrors consuming the published edge-proc.
-edge-proc = { path = "../edge-proc" }
+edge-proc = { path = "../../edge-proc" }
 
 [project.scripts]
 edgereco = "edgereco.cli:app"
@@ -64,10 +64,10 @@ packages = ["edgereco"]
 # out into .deps/ — both are listed so `python -m mypy src` mirrors CI either way.
 mypy_path = [
   "src",
-  "../edge-proc",
-  "../shared-libs-python",
-  ".deps/edge-proc",
-  ".deps/shared-libs-python",
+  "../../edge-proc",
+  "../../shared-libs-python",
+  "../.deps/edge-proc",
+  "../.deps/shared-libs-python",
 ]
 
 [[tool.mypy.overrides]]
@@ -82,7 +82,7 @@ ignore_missing_imports = true
 line-length = 100
 target-version = "py313"
 src = ["src", "tests"]
-exclude = [".deps"]  # CI-only sibling checkouts
+exclude = ["../.deps", "demo_server"]  # sibling checkouts only present in CI; demo_server is an optional example launcher
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF"]

@@ -40,7 +40,7 @@ RUN find . \( -name '.venv' -o -name '__pycache__' -o -name '.git' \
         -o -name 'node_modules' -o -name '.pytest_cache' -o -name '.mypy_cache' \) \
         -prune -exec rm -rf {} + 2>/dev/null || true
 
-WORKDIR /workspace/edge-reco
+WORKDIR /workspace/edge-reco/backend
 
 # Install the engine + its sibling deps (edge-proc[localvec] pulled in via the
 # pyproject local source). --no-dev: demo runtime doesn't need test/lint tools.
@@ -56,4 +56,4 @@ EXPOSE 8000
 
 # Use the launcher (NOT bare uvicorn) — the index build calls asyncio.run() at
 # import time, which the launcher handles before any event loop exists.
-CMD ["uv", "run", "python", "-m", "demo.backend.serve"]
+CMD ["uv", "run", "python", "-m", "demo_server.serve"]
