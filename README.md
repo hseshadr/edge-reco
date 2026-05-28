@@ -25,7 +25,7 @@ Most search/reco stacks are tightly coupled to a remote backend: every query cro
               signed bundle, CORS, cache +--------------------------------------+
 ```
 
-- **origin** — serves a signed, content-addressed bundle (a `latest` version pointer + immutable `manifest/<hash>` and `chunk/<hash>` objects). A committed 728-product Amazon bundle lives in `examples/catalog/`.
+- **origin** — serves a signed, content-addressed bundle (a `latest` version pointer + immutable `manifest/<hash>` and `chunk/<hash>` objects). A committed 728-product Amazon bundle lives in `backend/examples/catalog/`.
 - **edge** — Caddy reverse proxy with the bundle cache policy (immutable chunks, short-TTL pointer).
 - **browser tier** — the Nimbus SPA syncs the bundle into OPFS (Worker), verifies it ed25519 + sha256 fail-closed against a SPA-pinned public key, loads `all-MiniLM-L6-v2` via transformers.js, and runs the full hybrid search + session-aware rerank pipeline **in the tab**. No application backend in the request path.
 - **edgereco runtime (Python)** — the same engine packaged as a FastAPI app for the server-side use case. Same scoring formula, same sync + verify, same prebuilt FAISS index — the in-browser engine (`@edgeproc/browser`) is parity-tested against it.
@@ -55,7 +55,7 @@ This compose file needs only this repo — no sibling checkouts. The browser doe
 the search.
 
 For the storefront walkthrough, screenshots, and how to iterate with
-`make dev`, see [`frontend/README.md`](demo/README.md).
+`make dev`, see [`frontend/README.md`](frontend/README.md).
 
 ## Quickstart — publish → sync → serve (Python API, no Docker)
 
@@ -63,6 +63,7 @@ For the **optional** server-side API variant (the FastAPI runtime, not used by
 the headline demo above), reproduce the delivery loop with the bundle CLI:
 
 ```bash
+cd backend
 uv sync --group dev
 
 # 1. build a catalog jsonl from a scraped-Amazon CSV
@@ -82,8 +83,8 @@ EDGERECO_BUNDLE_CACHE_DIR=/tmp/bundle-cache \
     uv run edgereco serve /tmp/staging /tmp/staging --port 8000
 ```
 
-The committed `examples/catalog/` is exactly such an origin (built from the 728-product
-Amazon catalog), so step 4 alone — pointed at it — serves the demo data.
+The committed `backend/examples/catalog/` is exactly such an origin (built from the
+728-product Amazon catalog), so step 4 alone — pointed at it — serves the demo data.
 
 ## CLI
 
@@ -119,7 +120,7 @@ via the [`@edgeproc/browser`](frontend/packages/edgeproc-browser/README.md)
 workspace package. The browser embedder is `Xenova/all-MiniLM-L6-v2` via
 transformers.js, the byte-for-byte equivalent of the Python encoder, and the
 top-k is parity-tested against the FastAPI runtime over the same bundle. See
-[`frontend/README.md`](demo/README.md) for the storefront over this engine.
+[`frontend/README.md`](frontend/README.md) for the storefront over this engine.
 
 ## Development
 

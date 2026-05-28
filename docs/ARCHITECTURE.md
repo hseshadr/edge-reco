@@ -1,366 +1,117 @@
-# EdgeReco — Architecture Document
+# Architecture
 
-| Field | Value |
-|-------|-------|
-| **Version** | 1.0 |
-| **Status** | Draft |
-| **Last Updated** | 2026-02-28 | 
-| **Companion Docs** | [PRD](PRD.md) · [Technical Specification](TECH_SPEC.md) |
+EdgeReco is a hybrid product-discovery engine that runs **the same pipeline on the server and in the browser**. The headline demo runs entirely in the tab; the FastAPI runtime is the same engine packaged as an API server. One source of truth, two execution shapes.
 
----
+Three pieces, one delivery substrate:
 
-> **TLDR** — EdgeReco runs recommendation inference **in the browser** using a WASM engine in a Dedicated Worker, with a SQLite product catalog stored in OPFS. A **Capability Detector** gates local inference at init — devices that lack sufficient hardware skip WASM downloads entirely and route straight to the backend. A **Service Worker** polls a CDN manifest to download, verify (SHA256), and cache immutable artifacts. The **Hybrid Router** decides local vs. backend per-request based on device capability, engine readiness, kill switch, and timeout — with a five-level **degradation ladder** guaranteeing a response even when everything fails. Engine updates deploy via **hot-swap** with automatic rollback. Only anonymous, sampled interaction events are uplinked to close the training flywheel.
+- **`backend/`** — Python build-side. Catalog ingest, embedding, FAISS index build, BM25 build, signed-bundle publish.
+- **`frontend/packages/edgeproc-browser/`** — `@edgeproc/browser`. The in-browser tier: signed-bundle sync into OPFS, transformers.js embedder, hybrid search, session reranker.
+- **`frontend/app/`** — the Nimbus React storefront. Thin UI over `@edgeproc/browser`; no app server in the request path.
 
-## 1. System Overview & Design Philosophy
+The cross-cutting substrate is **[edge-proc](https://github.com/hseshadr/edge-proc)** — a content-addressed, signed-bundle sync engine. EdgeReco uses it to ship the prebuilt index from the build host to every edge / device, fail-closed on signature.
 
-### 1.1 Core Principles
+## System context
 
-**CDN-first** — All artifacts (WASM engines, catalogs, configs) are static, content-addressed files distributed via CDN. No backend involvement in the hot path. Deploys are cache invalidations, not server rollouts.
+![system context](diagrams/system-context.svg)
 
-**Local-first** — The browser is the primary compute environment for recommendations. The backend exists as a fallback, not the default. Storage, inference, and personalization all happen on-device.
+The publisher signs the bundle once. The CDN/edge serves immutable chunks and a short-TTL `latest` pointer. The browser (or the FastAPI runtime) syncs the bundle into OPFS / disk, verifies it against a pinned ed25519 public key, reassembles the FAISS index + product catalog, and runs every query locally. After sync, the runtime is offline-capable.
 
-**Flywheel** — Interaction events captured locally feed back into server-side model training. Better models produce better artifacts. Better artifacts produce better local recommendations. Better recommendations produce richer interaction signals.
+## Request lifecycle
 
-### 1.2 Platform Pluggability
+![recommendation request flow](diagrams/recommendation-request-flow.svg)
 
-EdgeReco is a platform, not a vertical product. The platform is not tightly coupled to any specific codebase or dataset — it defines **stable API contracts** at four layers and treats everything else as swappable input:
+A query goes through three stages, on whichever tier is running it:
 
-| Layer | Contract | What's swappable |
-|-------|----------|-----------------|
-| **Client SDK API** | `EdgeReco` class (`getRecommendations`, `reportInteraction`) | The WASM engine binary, catalog data, embedding model, scoring logic |
-| **Backend REST API** | `POST /v1/recommendations`, `POST /v1/edgereco/events` | The server-side model, training pipeline, catalog source |
-| **Storage schema** | SQLite `products`/`categories` tables | The product dataset, feature dimensionality, category taxonomy |
-| **Engine ABI** | `reco_init`, `reco_query`, `reco_apply_config` | The Rust scoring implementation, model architecture, ranking algorithm |
+1. **Retrieve** — BM25 (keyword) and FAISS (vector) each return top-k candidates over the same id space.
+2. **Fuse** — Reciprocal Rank Fusion (`rrf_score(d) = Σ 1/(k + rank_i)`) merges the two lists without depending on raw scores.
+3. **Rerank** — the session-aware scorer applies the published formula.
 
-The SDK and REST APIs are dataset-agnostic — `RecoRequest`/`RecoResponse` carry generic `placement`, `contextItemIds`, and scored `items[]`. Neither interface encodes anything about a specific product domain. The catalog schema accepts embeddings of any dimensionality (the engine reads the expected dimension from config). The WASM engine is a content-addressed binary swapped via manifest — deploying a new algorithm is a CDN publish, not a code change.
+Same code path in `backend/src/edgereco/search/` and `frontend/packages/edgeproc-browser/src/engine/`. The browser tier is parity-tested against the Python tier over identical bytes from the signed bundle (parity fixtures generated by `backend/scripts/gen_*_fixture.py`).
 
-The prototype uses a specific dataset and embedding model as a concrete example (see [TECH_SPEC §6 — Prototype Reference Dataset](TECH_SPEC.md#6-artifact-formats)), but integrators replace the data, the model, and the scoring logic without modifying any platform code.
+### Scoring formula
 
----
+```
+score = 0.40·popularity
+      + 0.20·category_affinity
+      + 0.15·tag_affinity
+      + 0.10·brand_affinity
+      + 0.10·freshness
+      − 0.25·repetition
+```
 
-## 2. High-Level Architecture
+Recently-viewed products get penalized; matching categories / brands / tags get amplified. Session affinity accumulates per click / view / favorite / cart event in the `SessionProfile`.
 
-The system spans four tiers: the Datalake (training), Backend (fallback + event ingestion), CDN (artifact distribution), and Browser (inference + personalization).
+## Backend tier (Python)
 
-![System Context](diagrams/system-context.svg)
+`backend/src/edgereco/`:
 
----
+| Module | Responsibility |
+|---|---|
+| `catalog/` | Ingest, normalize, and load product catalogs (`build-catalog`, `preprocess`, `loader`, `models`) |
+| `embeddings/` | Sentence-transformers `all-MiniLM-L6-v2` encoder + FAISS `IndexFlatIP` build |
+| `search/` | BM25 keyword search, vector search, hybrid (RRF) fusion |
+| `reco/` | Session-aware reranker, scoring, signals (click/view/favorite/cart) |
+| `api/` | FastAPI routes (`/search`, `/recommend`, `/events`), CORS, deps wiring |
+| `edge/` | Signed-bundle sync (via edge-proc), publish, manifest, materialize |
+| `telemetry/` | Bounded ring buffer of recent envelopes |
+| `cli.py` | Typer entrypoints (`build-catalog`, `preprocess`, `index`, `bundle`, `serve`, `search`) |
+| `config.py` | Pydantic-settings: env-driven bundle URL / verify key / cache dir |
 
-## 3. Component Breakdown
+Publish-side: `edgereco bundle` chunks the index dir under GearCDC, writes each chunk under its sha256, builds a manifest, signs a `/latest` pointer.
 
-### Browser Internals
+Serve-side (when running as API server): `edgereco serve` syncs the signed bundle (or reads a flat dir for tests), constructs the `ServiceContainer`, and exposes the FastAPI app. CORS allows the SPA's origin.
 
-![Browser Internals](diagrams/browser-internals.svg)
+## Browser tier (`@edgeproc/browser`)
 
-### Component Responsibilities
+`frontend/packages/edgeproc-browser/src/`:
 
-| Component | Thread | Responsibility |
-|-----------|--------|----------------|
-| **Capability Detector** | Main | Detects device hardware capability via three-tier approach (API checks + optional micro-benchmark); produces `CapabilityTier` used by Hybrid Router to gate local inference |
-| **Hybrid Router** | Main | Decides local vs. fallback for each request based on device capability, engine readiness, timeout, and kill-switch status |
-| **SDK API Layer** | Main | Public API surface (`init`, `getRecommendations`, `reportInteraction`, `destroy`) |
-| **Service Worker** | SW | Manifest polling, artifact download/caching, background delta-sync |
-| **Manifest Manager** | SW | Parses manifest, determines required artifact updates, handles canary logic |
-| **Artifact Cache Controller** | SW | Manages Cache API entries, evicts old versions, validates content-addressed hashes |
-| **Background Sync Orchestrator** | SW | Coordinates catalog delta-sync, event batch uplink |
-| **WASM Engine** | Compute Worker | Executes recommendation inference: loads model weights, scores items against user context |
-| **SQLite WASM** | Compute Worker | Provides SQL query access to the product catalog stored in OPFS |
-| **Smoke Test Harness** | Compute Worker | Validates a new engine version before activation |
-| **Storage Layer** | — | OPFS for large binaries (catalog, engine), IDB for structured data (state, events, metadata), Cache API for HTTP-cached artifacts |
+![browser internals](diagrams/browser-internals.svg)
 
----
+- **Sync** — Worker that fetches `/latest`, verifies ed25519 against a SPA-pinned public key, diffs the manifest against the OPFS cache, fetches missing chunks, re-checks every chunk's sha256, atomically promotes the new version.
+- **Embedder** — `Xenova/all-MiniLM-L6-v2` via transformers.js. Parity-tested against the Python encoder at cosine ≥ 0.99.
+- **Engine** — same BM25 + vector + RRF + session rerank as the backend, but in TypeScript. Parity-tested against the Python search at top-k identity over the real `examples/catalog` bundle.
+- **Storage** — OPFS for the bundle cache; in-memory for the session profile.
+- **Worker boundary** — sync runs in a Worker so the UI thread is never blocked on a multi-MB bundle fetch.
 
-## 4. Data Flows
+The package is consumed by `frontend/app/` via the npm workspace link (`@edgeproc/browser` in app's package.json resolves to `frontend/packages/edgeproc-browser/`).
 
-### 4.1 Artifact Distribution Flow
+## Frontend tier (Nimbus storefront)
 
-![Artifact Distribution Flow](diagrams/artifact-distribution-flow.svg)
+`frontend/app/`:
 
-### 4.2 Recommendation Request Flow
+A React + Vite SPA over `@edgeproc/browser`. The UI is intentionally simple — a 728-product Amazon catalog grid with a search box and a "Recommended for you" rail that re-ranks live as the user clicks. The headline demo (`cd frontend && docker compose up`) brings up the static signed-bundle origin + Caddy edge + the SPA; the browser does the search.
 
-![Recommendation Request Flow](diagrams/recommendation-request-flow.svg)
+The SPA pins the verify public key (`public/public.key`) at build time — it never trusts the origin for the key.
 
-### 4.3 Event Uplink Flow
+## Where edge-proc fits in
 
-![Event Uplink Flow](diagrams/event-uplink-flow.svg)
+edge-proc is the **signed-bundle delivery substrate**. EdgeReco depends on it for two things:
 
----
+1. **Publish** — `edgereco bundle` is a thin wrapper over `edgeproc publish`. Chunks → manifest → signed pointer.
+2. **Sync** — both `ServiceContainer.from_synced` (Python) and `BrowserSync` (TypeScript) verify and pull bundles via the same content-addressed contract.
 
-## 5. CDN Strategy
+edge-proc itself is a generic library; EdgeReco is one possible consumer. See [edge-proc/docs/ARCHITECTURE.md](https://github.com/hseshadr/edge-proc/blob/main/docs/ARCHITECTURE.md).
 
-### Artifact Caching Tiers
+## Cross-tier parity
 
-| Artifact | Cache-Control | Mutability | URL Strategy |
-|----------|--------------|------------|-------------|
-| Manifest | `max-age=60, stale-while-revalidate=300` | Mutable (pointer to current versions) | Fixed path: `/edgereco/manifest.json` |
-| WASM Engine | `max-age=31536000, immutable` | Immutable | Content-addressed: `/edgereco/engines/{sha256}.wasm` |
-| Catalog Snapshot | `max-age=31536000, immutable` | Immutable | Content-addressed: `/edgereco/catalogs/{sha256}.db` |
-| Delta Patch | `max-age=31536000, immutable` | Immutable | Content-addressed: `/edgereco/deltas/{sha256}.delta` |
-| Config | `max-age=31536000, immutable` | Immutable | Content-addressed: `/edgereco/configs/{sha256}.json` |
+The two tiers are kept honest by three fixtures generated from the Python source of truth:
 
-### Manifest Design (Architectural View)
+- `embedding_parity.json` — vectors for representative strings; the TS embedder must match each at cosine ≥ 0.99.
+- `search_parity.json` — a synthetic query vector + the ordered top-k that Python returns over the real bundle's `embeddings.f32`.
+- `hybrid_parity.json` — query strings + the full BM25 ⊕ vector → RRF → empty-session-rerank top-k from `/search`.
 
-The manifest is the single mutable pointer in the CDN layer. It tells clients which artifact versions to use:
+Regenerate via `backend/scripts/gen_*_fixture.py`. The browser tests under `frontend/packages/edgeproc-browser/src/engine/` consume them.
 
-- **Current versions** — SHA256 hashes for engine, catalog, config
-- **Delta chain** — Ordered list of delta patches from known base versions to current catalog
-- **Canary rules** — Percentage-based traffic split for A/B engine versions
-- **Feature flags** — Kill switch, experimental features
-- **Minimum client version** — Forces SDK upgrade if needed
+## Invariants (load-bearing rules)
 
-> Full manifest JSON schema is in the [Technical Specification](TECH_SPEC.md#7-manifest-design).
+- **Scoring formula** is the contract between the two tiers. Change it in `backend/src/edgereco/reco/scorer.py` and the corresponding rerank module in `@edgeproc/browser` together; both unit suites and the parity fixtures must update.
+- **Hybrid search**: BM25 + FAISS vector + RRF, in that order.
+- **Catalog sync**: signed, content-addressed, fail-closed on tampering. No exception.
+- **Zero backend calls after sync**: once the bundle is local, the runtime is offline-capable. Don't introduce a runtime backend dep.
 
-### Cache Invalidation
+## Further reading
 
-- Artifacts are immutable and content-addressed — they never need invalidation.
-- The manifest is the only resource that changes. Its short TTL (60s) with `stale-while-revalidate` ensures clients converge within minutes of a publish.
-- For emergency rollback, publishing a new manifest pointing to previous artifact hashes is sufficient. No artifact deletion needed.
-
----
-
-## 6. Versioned Engine Hot-Swap
-
-### Lifecycle
-
-1. **Detect** — Service Worker's manifest poll finds a new engine version.
-2. **Download** — New WASM binary fetched and cached alongside the current version.
-3. **Shadow Load** — Compute Worker instantiates the new engine without deactivating the old one.
-4. **Smoke Test** — Predefined queries run against the new engine. Results validated for shape, count, and latency.
-5. **Activate** — If smoke test passes, new engine replaces old. Old binary evicted from cache.
-6. **Rollback** — If smoke test fails, new engine discarded. Old engine continues. Error event reported.
-
-### Canary Rollout
-
-The manifest can specify two engine versions with a traffic-split percentage:
-
-- Client hashes its anonymous device ID against the canary percentage.
-- Deterministic assignment ensures a client stays in the same group across page loads.
-- Canary percentage can be updated server-side by publishing a new manifest.
-
-### Rollback Guarantees
-
-- The old engine binary is never evicted until the new engine passes its smoke test.
-- If the manifest itself is unreachable, the client continues with the last known good configuration.
-- The kill switch in the manifest bypasses local inference entirely — no engine needed.
-
----
-
-## 7. Identity & Personalization Architecture
-
-### Flywheel Cycle
-
-![Personalization Flywheel](diagrams/personalization-flywheel.svg)
-
-### Two-Level Identity Model
-
-**Level 1 — Anonymous Device ID**
-- Generated on first SDK initialization (random UUID, stored in IDB).
-- Used for event uplink attribution and canary bucketing.
-- Never correlated across origins or devices.
-
-**Level 2 — Authenticated Identity (Optional)**
-- If the user logs in, the site can associate the anonymous ID with an authenticated user ID.
-- This enables server-side profile merging: behavioral signals from multiple devices can inform future model training.
-- The SDK never initiates identity linking — the site explicitly calls the merge API.
-
-### Local State for Personalization
-
-The Compute Worker reads a `user_state` record from IndexedDB containing:
-
-- Recent interactions (bounded circular buffer).
-- Category affinity scores (derived locally from interactions).
-- Session context (current page type, referral source).
-
-This state feeds into the WASM engine as input features alongside the catalog data. The engine's scoring function combines item features, user state, and model weights to produce ranked recommendations.
-
-> Storage schema details are in the [Technical Specification](TECH_SPEC.md#5-storage-layer).
-
----
-
-## 8. Failure Handling & Resilience
-
-### Failure Taxonomy
-
-| Category | Examples |
-|----------|---------|
-| **Artifact failures** | Manifest fetch fails, WASM download corrupt, delta patch mismatched base |
-| **Runtime failures** | WASM trap/crash, SQLite query error, Worker unresponsive |
-| **Storage failures** | Quota exceeded, OPFS unavailable, IDB blocked |
-| **Capability failures** | Device memory < 1GB, benchmark too slow |
-| **Network failures** | Offline, CDN unreachable, backend unreachable |
-
-### Response Matrix
-
-| Failure | Immediate Response | Recovery |
-|---------|-------------------|----------|
-| Manifest fetch fails | Use cached manifest | Retry on next poll interval |
-| WASM download corrupt (hash mismatch) | Discard, keep current engine | Retry on next poll |
-| Smoke test fails | Discard new engine, keep current | Report error event, retry on next manifest version |
-| WASM runtime crash | Route to backend fallback | Restart Compute Worker, reload engine |
-| SQLite query error | Route to backend fallback | Re-download catalog on next sync |
-| Quota exceeded | Evict oldest artifacts, degrade gracefully | Reduce catalog scope in future syncs |
-| Offline | Serve from cached artifacts | Resume sync when online |
-| Device capability insufficient | Skip WASM download + Compute Worker, route to backend | Re-detect on next session or SDK update |
-| Backend fallback unreachable | Return degraded results (popular items from cached catalog) | Retry backend on next request |
-
-### Degradation Ladder
-
-The system degrades gracefully through these levels:
-
-1. **Full local** — WASM engine + fresh catalog + full personalization. *(Ideal state)*
-2. **Stale local** — WASM engine + stale catalog. *(Manifest unreachable, but cached data available)*
-3. **Backend fallback** — Server-side recommendations. *(Local engine unavailable or device capability insufficient)*
-4. **Degraded fallback** — Popular items from cached catalog. *(Both engine and backend unavailable)*
-5. **No recommendations** — Empty state. *(No cached data, no network)*
-
-Each level is a designed state, not an error. The Hybrid Router selects the highest available level and reports the current level via observability events.
-
-### Kill Switch
-
-The manifest contains a `kill_switch` boolean. When `true`:
-
-- The Hybrid Router immediately stops routing to the local engine.
-- All requests go to backend fallback.
-- The Compute Worker is not started.
-- This propagates within CDN TTL (~60s typical).
-
----
-
-## 9. Observability
-
-### Client-Side Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `reco.latency` | Histogram | Time from request to response (labeled by source) |
-| `reco.source` | Counter | Requests by source: `local`, `backend`, `degraded` |
-| `reco.error` | Counter | Errors by type and component |
-| `engine.version` | Gauge | Currently active engine version hash |
-| `engine.swap` | Counter | Engine hot-swap attempts (labeled: `success`, `smoke_fail`, `download_fail`) |
-| `catalog.version` | Gauge | Current catalog version hash |
-| `catalog.sync` | Counter | Sync operations (labeled: `snapshot`, `delta`, `fail`) |
-| `storage.usage` | Gauge | Bytes used in OPFS + IDB |
-| `capability.tier` | Gauge | Device capability tier: `high`, `medium`, `insufficient` |
-| `event.uplink` | Counter | Events sent (labeled: `success`, `fail`, `sampled_out`) |
-
-### Collection
-
-- Events batched and sent via the same event uplink pipeline.
-- Sampling applied to high-frequency metrics (latency histograms).
-- Critical metrics (errors, engine swaps) always reported.
-
-### Alerting Triggers
-
-| Trigger | Condition | Severity |
-|---------|-----------|----------|
-| Local success rate drop | < 90% over 15-minute window | P1 |
-| Engine swap failure spike | > 5% failure rate in 1 hour | P2 |
-| Catalog sync stale | No successful sync in 24 hours (fleet-wide) | P2 |
-| Storage quota warnings | > 10% of clients reporting quota exceeded | P3 |
-
----
-
-## 10. Security Model
-
-### Artifact Integrity
-
-- All artifacts use **content-addressed URLs**: the URL contains the SHA256 hash of the content.
-- The Service Worker verifies the downloaded artifact's hash against the URL before caching.
-- A hash mismatch causes the artifact to be discarded and an error event reported.
-- The manifest itself is fetched over HTTPS from a first-party origin.
-
-### Data at Rest
-
-- OPFS and IndexedDB data is scoped to the origin and protected by the browser's same-origin policy.
-- No encryption at rest beyond what the browser/OS provides (the data is not sensitive — it's product catalog data and anonymous interaction signals).
-- The `destroy()` API wipes all stored data for the origin.
-
-### Data in Transit
-
-- All CDN fetches use HTTPS.
-- Event uplink uses HTTPS to a first-party endpoint.
-- No third-party endpoints are contacted by the SDK.
-
-### Threat Model Summary
-
-| Threat | Mitigation |
-|--------|-----------|
-| CDN compromise / cache poisoning | Content-addressed URLs + hash verification |
-| Malicious WASM execution | Browser sandbox (WASM runs in Worker, no DOM access, no network access) |
-| Local storage tampering | Treated as untrusted; engine validates input shapes; corrupt state triggers re-sync |
-| Event data interception | HTTPS + first-party endpoints only |
-| Cross-origin data access | Browser same-origin policy; no cross-origin storage access |
-
----
-
-## 11. Mobile Runtime Path
-
-### Strategy
-
-The same artifact format (WASM engine, SQLite catalog, JSON config) is used on mobile. The **`IRecoRuntime`** interface defines the contract between the recommendation logic and the platform runtime:
-
-- **Web**: Implemented by the Compute Worker + Service Worker stack described in this document.
-- **iOS/Android**: Implemented by a native SDK that uses the platform's WASM runtime (or a compiled-native equivalent) and local SQLite.
-
-### Shared Artifacts
-
-| Artifact | Web Runtime | Native Runtime |
-|----------|------------|----------------|
-| WASM Engine | Browser WASM runtime in Worker | Platform WASM runtime (e.g., Wasmer, Wasmtime) or AOT-compiled native |
-| Catalog (SQLite) | sql.js / wa-sqlite in Worker | Native SQLite |
-| Config JSON | Parsed in Worker | Parsed natively |
-| Manifest | Fetched by Service Worker | Fetched by native sync manager |
-
-### IRecoRuntime Boundary
-
-The interface abstracts:
-- Engine initialization and teardown
-- Recommendation query execution
-- Catalog synchronization
-- Event reporting
-- Health status
-
-> Full `IRecoRuntime` interface definition is in the [Technical Specification](TECH_SPEC.md#10-mobile-runtime-interface).
-
----
-
-## 12. Architecture Decision Records (Summary)
-
-| ADR | Decision | Rationale |
-|-----|----------|-----------|
-| ADR-001 | WASM over pure JavaScript for inference engine | Predictable performance, language flexibility (Rust), near-native speed for scoring loops, portable to mobile |
-| ADR-002 | Dedicated Worker over Service Worker for compute | Service Workers have lifecycle constraints (idle termination); Dedicated Workers are long-lived and controlled by the page |
-| ADR-003 | OPFS over IndexedDB for large binaries | OPFS provides file-system-like access with better performance for large reads/writes; SQLite WASM can use OPFS as a VFS backend |
-| ADR-004 | Delta patches over full catalog re-downloads | Catalogs change incrementally (price updates, new products); deltas reduce bandwidth by 90%+ for daily updates |
-| ADR-005 | `sendBeacon` for event uplink on page unload | `sendBeacon` is fire-and-forget and survives page navigation; `fetch` with `keepalive` is the fallback |
-| ADR-006 | Manifest-driven rollout over feature flags service | No additional backend dependency; CDN-served manifest is consistent with the CDN-first philosophy; kill switch is a manifest field |
-
----
-
-## 13. Appendix
-
-### A. Glossary
-
-See the [PRD Glossary](PRD.md#12-glossary) for shared terms. Additional architecture-specific terms:
-
-| Term | Definition |
-|------|------------|
-| **Content-addressed URL** | A URL where the path includes the hash of the content, ensuring immutability and cache-friendliness |
-| **Degradation ladder** | The ordered sequence of fallback states from full local inference to no recommendations |
-| **IRecoRuntime** | The platform-agnostic interface for recommendation runtime operations |
-| **Shadow load** | Loading a new engine version alongside the active one for testing before activation |
-| **VFS** | Virtual File System — the abstraction SQLite uses to interact with OPFS |
-
-### B. Browser Compatibility
-
-**Minimum browser targets**: Chrome 90+, Firefox 100+, Safari 16.4+, Edge 90+. See [TECH_SPEC Appendix C](TECH_SPEC.md#c-browser-compatibility--api-fallbacks) for the full compatibility matrix and API fallback details.
-
-### C. Estimated Artifact Sizes
-
-| Artifact | Size (Gzipped) | Size (Raw) | Update Frequency |
-|----------|---------------|------------|-----------------|
-| WASM Engine | ~1-2 MB | ~3-5 MB | Weekly-Monthly |
-| Catalog Snapshot | ~5-10 MB | ~15-30 MB | Weekly (initial + rebase) |
-| Catalog Delta Patch | ~100 KB - 1 MB | ~300 KB - 3 MB | Daily |
-| Config | ~1-5 KB | ~3-15 KB | As needed |
-| Manifest | ~1-2 KB | ~3-5 KB | On every publish |
+- [`QUICKSTART.md`](QUICKSTART.md) — clone → run.
+- [`DEPLOY.md`](DEPLOY.md) — backend-free in-browser vs edge-origin shapes.
+- [`diagrams/`](diagrams/) — the rest of the d2 sources (manifest lifecycle, artifact distribution, event uplink, personalization flywheel).
+- [`archive/`](archive/) — historical phase docs (pre-pivot TS/WASM design, MVP roadmap, PRD, tech spec).
