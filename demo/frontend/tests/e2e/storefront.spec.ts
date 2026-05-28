@@ -18,11 +18,13 @@ import { expect, test } from "@playwright/test";
  *   - REAL: the sync engine (OPFS, signature + chunk verification, reassembly of
  *     the 728-product catalog), the BM25 ⊕ vector → RRF → session-rerank search
  *     engine, and the in-tab session profile / click→re-rank loop.
- *   - STUBBED: only the embedder TRANSPORT. `window.__nimbusEmbedder` returns a
- *     deterministic 384-d vector so the test does not wait on the ~25 MB
- *     transformers.js model download (the single slow/flaky external fetch). The
- *     vector leg still runs against the real index; BM25 keyword matching drives
- *     query-specific search. Everything else is the production path.
+ *   - STUBBED: only the embedder TRANSPORT. The demo's
+ *     `window.__edgeprocDemoTestHooks.makeEmbedder` factory returns a
+ *     deterministic 384-d-vector embedder so the test does not wait on the
+ *     ~25 MB transformers.js model download (the single slow/flaky external
+ *     fetch). The vector leg still runs against the real index; BM25 keyword
+ *     matching drives query-specific search. Everything else is the production
+ *     path.
  *   - Product images (m.media-amazon.com) are blocked so the run is offline +
  *     deterministic; the cards fall back to their gradient tiles.
  */
@@ -35,8 +37,10 @@ const RAIL_TITLE = `${RAIL} .rail-card__title`;
 const EMBEDDING_DIM = 384;
 
 test.beforeEach(async ({ page }) => {
-	// Install a deterministic embedder BEFORE any app script runs, so bootstrap's
-	// default embedder factory picks it up instead of loading the real model.
+	// Install a deterministic embedder factory BEFORE any app script runs, via
+	// the demo's narrow test hook. createDataClient() picks it up instead of
+	// loading the real ~25 MB model. The hook lives in the demo (not in the
+	// engine package) and is the ONLY non-production seam this test relies on.
 	await page.addInitScript((dim: number) => {
 		const seedVec = (text: string): Float32Array => {
 			const v = new Float32Array(dim);
@@ -49,8 +53,18 @@ test.beforeEach(async ({ page }) => {
 			}
 			return v;
 		};
-		(globalThis as { __nimbusEmbedder?: unknown }).__nimbusEmbedder = {
-			embed: (text: string) => seedVec(text),
+		(
+			globalThis as {
+				__edgeprocDemoTestHooks?: {
+					makeEmbedder?: () => {
+						embed: (text: string) => Promise<Float32Array>;
+					};
+				};
+			}
+		).__edgeprocDemoTestHooks = {
+			makeEmbedder: () => ({
+				embed: (text: string) => Promise.resolve(seedVec(text)),
+			}),
 		};
 	}, EMBEDDING_DIM);
 

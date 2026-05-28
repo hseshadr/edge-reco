@@ -3,7 +3,12 @@
 Python-first local product discovery engine. Edge syncs a catalog, builds local indexes, runs hybrid search + session-aware rerank — zero backend calls after sync. OSS reference architecture.
 
 ## Status
-Python v1 pivot — spec + plan approved, implementation on `python-v1-edge-discovery` branch. Main holds docs/scaffolding only. TS/WASM code from prior phases was removed in `a68a83a`.
+Python v1 shipped on `main`: full FastAPI runtime + signed-bundle sync + hybrid
+search + session-aware reranker, 90%+ coverage. The Nimbus demo is **backend-free**:
+the React SPA syncs the signed bundle into OPFS and runs the whole engine in the
+browser via the `@edgeproc/browser` workspace package (`demo/packages/edgeproc-browser/`),
+parity-tested against the Python core. The FastAPI runtime remains available for
+the optional server-side API use case but is not in the default demo path.
 
 ## Docs
 - [`docs/superpowers/specs/edgereco-python-v1.md`](docs/superpowers/specs/edgereco-python-v1.md) — current spec (authoritative)
@@ -20,7 +25,8 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - `deploy/` — Dockerfile · docker-compose.yml · Caddy config
 - `examples/catalog/` — committed signed 728-product **real Amazon** catalog bundle (`latest` + `manifest/<hash>` + `chunk/<hash>`); built via `build-catalog` → `index` → `bundle`. Amazon CSV ingest also available via `edgereco preprocess`.
 - `examples/keys/` — `public.key` (pinned verify key, committed) + `private.key` (gitignored)
-- `demo/` — Nimbus React storefront + FastAPI backend; the backend syncs + verifies the bundle from the Caddy CDN (`ServiceContainer.from_synced`)
+- `demo/` — Nimbus React storefront (backend-free; syncs in-browser via `@edgeproc/browser`) + optional FastAPI API-server variant under `demo/backend/`
+- `demo/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser tier (signed-bundle sync + OPFS + transformers.js embedder + hybrid search engine); private npm workspace member, parity-tested against the Python core
 
 ## Invariants (don't break without updating the spec)
 - **Scoring formula**: `0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`

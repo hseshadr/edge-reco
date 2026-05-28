@@ -7,6 +7,10 @@
 // contract (see ./engine/domain).
 //
 // Primary entry point: EngineRuntime.bootstrap() → SearchEngine.
+//
+// Low-level sync primitives + the local fixture loader live behind the
+// `@edgeproc/browser/testing` subpath. They are test-only seams and not part
+// of the production surface.
 
 // --- the Worker-backed sync client (used by the Playwright C1 harness) ---
 export { EngineClient } from "./engine/client";
@@ -27,13 +31,12 @@ export {
 	EMBEDDING_MODEL,
 	type Embedder,
 } from "./engine/embedder";
-// --- the content-addressed store + sync primitives (Node test seams) ---
-export { MemoryCacheStore } from "./engine/memoryStore";
 // --- runtime: bootstrap the engine over the synced bundle ---
 export {
 	type BootStage,
 	configFromEnv,
 	createEmbedder,
+	defaultRuntimeDeps,
 	type EnginePort,
 	EngineRuntime,
 	type OnStage,
@@ -55,12 +58,5 @@ export {
 	emptyProfile,
 	type SessionProfile,
 } from "./engine/session";
-export { materializeFile, syncIndex } from "./engine/sync";
-export type {
-	CacheStore,
-	FetchBytes,
-	IndexManifest,
-	SyncResult,
-	Verify,
-	VersionPointer,
-} from "./engine/types";
+// --- the SyncResult shape leaks through BootStage; expose its type only ---
+export type { SyncResult } from "./engine/types";

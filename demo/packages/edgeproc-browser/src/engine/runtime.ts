@@ -27,6 +27,9 @@ const STATE_PATH = "vector/state.json";
 const EMBEDDINGS_PATH = "vector/embeddings.f32";
 const PRODUCTS_PATH = "products.jsonl";
 
+/** Any non-empty string warms the ONNX session; content is discarded. */
+const WARMUP_PROMPT = "warm up the model";
+
 /** A bootstrap stage, surfaced to the UI for a real progress story. */
 export type BootStage =
 	| { readonly kind: "syncing" }
@@ -58,33 +61,19 @@ export interface RuntimeDeps {
 	readonly makeEmbedder: () => Embedder;
 }
 
-/**
- * A test-only embedder override on the global, honored by the default embedder
- * factory. The Playwright e2e sets this BEFORE bootstrap so the backend-free
- * loop can be proven against the REAL sync + REAL search engine without waiting
- * on the ~25 MB transformers.js model download (the one slow/flaky external
- * fetch). Production never sets it, so the real Worker embedder is used.
- */
-interface EmbedderOverride {
-	embed(text: string): Promise<Float32Array> | Float32Array;
-}
-declare global {
-	// eslint-disable-next-line no-var
-	var __nimbusEmbedder: EmbedderOverride | undefined;
-}
-
-function makeDefaultEmbedder(): Embedder {
-	const override = globalThis.__nimbusEmbedder;
-	if (override !== undefined) {
-		return { embed: (text: string) => Promise.resolve(override.embed(text)) };
-	}
-	return createWorkerEmbedder(spawnEmbedderWorker());
-}
-
 const defaultDeps: RuntimeDeps = {
 	spawnEngine: () => EngineClient.spawn(),
-	makeEmbedder: makeDefaultEmbedder,
+	makeEmbedder: () => createWorkerEmbedder(spawnEmbedderWorker()),
 };
+
+/**
+ * Build the production runtime deps (real sync Worker + real transformers.js
+ * embedder Worker). Exposed so consumers can compose — e.g. swap one field in
+ * a test without re-implementing the other.
+ */
+export function defaultRuntimeDeps(): RuntimeDeps {
+	return defaultDeps;
+}
 
 async function readBundleFiles(engine: EnginePort): Promise<VectorIndexFiles> {
 	const [meta, state, embeddings, products] = await Promise.all([
@@ -110,8 +99,9 @@ export function configFromEnv(): RuntimeConfig {
  * Idempotent — the first call wins and its result is cached for the tab.
  */
 export class EngineRuntime {
-	#enginePromise: Promise<SearchEngine> | null = null;
 	readonly #deps: RuntimeDeps;
+	#enginePromise: Promise<SearchEngine> | null = null;
+	#ready: SearchEngine | null = null;
 
 	public constructor(deps: RuntimeDeps = defaultDeps) {
 		this.#deps = deps;
@@ -121,8 +111,6 @@ export class EngineRuntime {
 	public engine(): SearchEngine | null {
 		return this.#ready;
 	}
-
-	#ready: SearchEngine | null = null;
 
 	/** Build (or reuse) the engine over the synced bundle, reporting progress. */
 	public bootstrap(
@@ -155,7 +143,7 @@ export class EngineRuntime {
 		const embedder = this.#deps.makeEmbedder();
 		// Force the ~25 MB model download/compile now so "loading-model" reflects
 		// real work and the first user query is fast.
-		await embedder.embed("warm up the model");
+		await embedder.embed(WARMUP_PROMPT);
 
 		const engine = await createSearchEngine(files, embedder);
 		this.#ready = engine;

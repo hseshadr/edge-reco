@@ -2,22 +2,15 @@ import { describe, expect, it } from "vitest";
 import parityFixture from "./__fixtures__/search_parity.json" with {
 	type: "json",
 };
-import type { Embedder } from "./embedder";
 import { catalogFetch, latestBytes } from "./fixtures";
 import { MemoryCacheStore } from "./memoryStore";
-import { createSearchEngine } from "./searchEngine";
+import { __searchVectorForParity } from "./searchEngine";
 import { materializeFile, syncIndex } from "./sync";
 import type { IndexManifest, Verify, VersionPointer } from "./types";
 import type { VectorIndexFiles } from "./vectorIndex";
 
 const acceptVerify: Verify = () => Promise.resolve();
 const DECODER = new TextDecoder();
-
-// The C2b vector-parity path (searchVector) does not call the embedder; a stub
-// keeps createSearchEngine's signature satisfied without loading a model.
-const stubEmbedder: Embedder = {
-	embed: () => Promise.reject(new Error("embedder unused on the vector path")),
-};
 
 interface ParityFixture {
 	readonly embedding_dim: number;
@@ -75,10 +68,10 @@ function scoreGroups(
 describe("createSearchEngine real-bundle parity", () => {
 	it("TS top-k product ids match Python for the same query vector", async () => {
 		const fixture = parityFixture as ParityFixture;
-		const engine = await createSearchEngine(await syncedFiles(), stubEmbedder);
+		const files = await syncedFiles();
 		const query = new Float32Array(fixture.query_vector);
 
-		const response = engine.searchVector(query, { limit: fixture.k });
+		const response = await __searchVectorForParity(files, query, fixture.k);
 
 		// Same top-k by score group (ties may reorder within an equal-score group).
 		expect(
@@ -96,10 +89,14 @@ describe("createSearchEngine real-bundle parity", () => {
 
 	it("shapes results as SearchResult with a hydrated Product", async () => {
 		const fixture = parityFixture as ParityFixture;
-		const engine = await createSearchEngine(await syncedFiles(), stubEmbedder);
-		const top = engine.searchVector(new Float32Array(fixture.query_vector), {
-			limit: 1,
-		}).results[0];
+		const files = await syncedFiles();
+		const top = (
+			await __searchVectorForParity(
+				files,
+				new Float32Array(fixture.query_vector),
+				1,
+			)
+		).results[0];
 		// The top two fixture entries tie on score (duplicate vectors); either is
 		// a correct rank-1 result.
 		const topTied = fixture.expected

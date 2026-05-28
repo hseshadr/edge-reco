@@ -12,7 +12,8 @@
 // recommend() mirrors recommend.py: a popularity pool of min(limit*5, N) reranked
 // by the session profile. browse() is the catalog-listing path over products.jsonl.
 //
-// The C2b vector-only parity path is preserved as searchVector(queryVec).
+// The C2b vector-only parity path is a TEST-ONLY helper, exported separately
+// as `__searchVectorForParity` (not on the public SearchEngine interface).
 
 import type {
 	BrowseResponse,
@@ -62,8 +63,6 @@ export interface SearchEngine {
 	recommend(opts?: RecommendOptions): RecommendResponse;
 	/** Catalog listing path (browse/category pages). */
 	browse(opts?: BrowseOptions): BrowseResponse;
-	/** Vector-only cosine top-k from a query vector (C2b parity path). */
-	searchVector(queryVec: Float32Array, opts?: SearchOptions): SearchResponse;
 	/** The full catalog in bundle order — the lookup the events path folds clicks over. */
 	catalog(): ReadonlyArray<Product>;
 }
@@ -171,32 +170,6 @@ class HybridSearchEngine implements SearchEngine {
 			categories,
 		};
 	}
-
-	public searchVector(
-		queryVec: Float32Array,
-		opts?: SearchOptions,
-	): SearchResponse {
-		const limit = opts?.limit ?? DEFAULT_LIMIT;
-		const k = Math.max(limit * 3, 30);
-		const hits = this.#index.search(queryVec, k);
-		const cosineById = new Map(hits.map((h) => [h.id, h.score]));
-		// RRF over the single vector ranking is rank-monotone: preserves cosine
-		// order. Report cosine on the result (what VectorSearcher exposes).
-		const fused = reciprocalRankFusion(hits, []);
-		const results: SearchResult[] = [];
-		for (const { id } of fused) {
-			const product = this.#index.product(id);
-			if (product !== undefined) {
-				results.push({
-					product,
-					score: cosineById.get(id) ?? 0,
-					score_components: null,
-				});
-			}
-		}
-		const sliced = results.slice(0, limit);
-		return { results: sliced, query: "", total: sliced.length };
-	}
 }
 
 /** Parse the synced files and return a query-ready hybrid SearchEngine. */
@@ -207,4 +180,37 @@ export async function createSearchEngine(
 	const index = await loadVectorIndex(files);
 	const keyword = KeywordSearcher.fromProducts(index.products());
 	return new HybridSearchEngine(index, keyword, embedder);
+}
+
+/**
+ * TEST-ONLY: vector-only top-k from a pre-computed query vector — the C2b
+ * vector-parity path. Skips embed + BM25 + rerank, so it lets a parity test
+ * isolate the vector index against a fixture query vector without needing a
+ * real embedder. NOT exposed on SearchEngine; not on the production surface.
+ */
+export async function __searchVectorForParity(
+	files: VectorIndexFiles,
+	queryVec: Float32Array,
+	limit: number,
+): Promise<SearchResponse> {
+	const index = await loadVectorIndex(files);
+	const k = Math.max(limit * 3, 30);
+	const hits = index.search(queryVec, k);
+	const cosineById = new Map(hits.map((h) => [h.id, h.score]));
+	// RRF over the single vector ranking is rank-monotone: preserves cosine
+	// order. Report cosine on the result (what VectorSearcher exposes).
+	const fused = reciprocalRankFusion(hits, []);
+	const results: SearchResult[] = [];
+	for (const { id } of fused) {
+		const product = index.product(id);
+		if (product !== undefined) {
+			results.push({
+				product,
+				score: cosineById.get(id) ?? 0,
+				score_components: null,
+			});
+		}
+	}
+	const sliced = results.slice(0, limit);
+	return { results: sliced, query: "", total: sliced.length };
 }

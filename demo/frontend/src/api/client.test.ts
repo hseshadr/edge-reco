@@ -8,14 +8,16 @@ import {
 	EMBEDDING_DIM,
 	type Embedder,
 	type EnginePort,
+	type SyncResult,
+} from "@edgeproc/browser";
+import {
+	catalogFetch,
 	type IndexManifest,
 	MemoryCacheStore,
 	materializeFile,
-	type SyncResult,
 	syncIndex,
 	type Verify,
-} from "@edgeproc/browser";
-import { catalogFetch } from "@edgeproc/browser/testing";
+} from "@edgeproc/browser/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	__setRuntimeForTests,

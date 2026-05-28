@@ -15,50 +15,52 @@ Most search/reco stacks are tightly coupled to a remote backend: every query cro
 ## Architecture
 
 ```
-+----------+   manifest+files   +------------+   sync   +-------------+
-|  origin  | ─────────────────► |  edge/CDN  | ───────► |  edgereco   |
-+----------+                    +------------+          |   runtime   |
-                                                         +------+------+
-                                                                │ /search
-                                                                │ /recommend
-                                                                ▼
-                                                            client
+ examples/catalog (signed bundle)        IN THE BROWSER TAB
+ +---------------------------+          +--------------------------------------+
+ | origin (static files)     |          | Nimbus SPA (React)                   |
+ |  latest / manifest / chunk|          |   sync Worker  -> OPFS -> verify+CAS |
+ +------------+--------------+          |   embedder Worker -> all-MiniLM-L6-v2|
+              |                          |   engine: BM25 + vector -> RRF      |
+        edge (Caddy CDN :8081)  <--------|   session profile (clicks, in-tab)  |
+              signed bundle, CORS, cache +--------------------------------------+
 ```
 
 - **origin** — serves a signed, content-addressed bundle (a `latest` version pointer + immutable `manifest/<hash>` and `chunk/<hash>` objects). A committed 728-product Amazon bundle lives in `examples/catalog/`.
 - **edge** — Caddy reverse proxy with the bundle cache policy (immutable chunks, short-TTL pointer).
-- **edgereco runtime** — FastAPI app that syncs + verifies the bundle (fail-closed on a bad signature), `VectorIndex.load`s the prebuilt FAISS index (zero recompute on the edge), then serves BM25 + FAISS RRF hybrid search + a session-aware reranker.
+- **browser tier** — the Nimbus SPA syncs the bundle into OPFS (Worker), verifies it ed25519 + sha256 fail-closed against a SPA-pinned public key, loads `all-MiniLM-L6-v2` via transformers.js, and runs the full hybrid search + session-aware rerank pipeline **in the tab**. No application backend in the request path.
+- **edgereco runtime (Python)** — the same engine packaged as a FastAPI app for the server-side use case. Same scoring formula, same sync + verify, same prebuilt FAISS index — the in-browser engine (`@edgeproc/browser`) is parity-tested against it.
 
-## Quickstart — the Nimbus demo (Docker)
+## Quickstart — the Nimbus demo (Docker, backend-free)
 
-The fastest way to see the full local-first loop: a React storefront over the engine,
-serving the **real 728-product Amazon catalog** synced from the CDN.
+One command brings up the full backend-free showcase: a static signed-bundle
+origin behind a Caddy edge, plus a static Nimbus SPA that syncs the bundle in
+its own tab and runs hybrid search + session-aware recommendations entirely
+in-browser. **No FastAPI, no Python in the request path.**
 
 ```bash
-# from demo/ — brings up origin -> edge(Caddy) -> backend(sync+serve) -> frontend
 cd demo && docker compose up --build
 
 # storefront:
 open http://localhost:5173
-
-# the backend synced the signed bundle from the edge and serves real products:
-# (run inside the network, or hit the host-mapped port)
-#   GET http://localhost:8000/search?q=polo&limit=5      -> real Amazon polo shirts
-#   GET http://localhost:8000/catalog/info               -> 728 products
 ```
 
-The backend syncs the signed bundle from the Caddy edge at startup
-(`ServiceContainer.from_synced`), verifies it against the pinned public key, loads the
-prebuilt index, and serves — no backend calls after sync. The frontend is unchanged;
-it just sees the real catalog.
+You will see the boot screen step through *syncing the signed bundle ->
+reassembling the index -> loading the model*, then the 728-product Amazon
+storefront. Click a few products: the "Recommended for you" rail re-ranks
+toward your taste — **no network round trip per click**. Stop `origin` + `edge`
+and reload: the bundle is in OPFS and the model is in the HTTP cache, so it
+keeps working offline.
 
-> Requires the two sibling repos checked out beside this one (`../edgeproc`,
-> `../shared-libs-python`) — the backend build context is the parent dir. See the
-> header of `demo/docker-compose.yml`.
+This compose file needs only this repo — no sibling checkouts. The browser does
+the search.
 
-## Quickstart — publish → sync → serve (local, no Docker)
+For the storefront walkthrough, screenshots, and how to iterate with
+`make dev`, see [`demo/README.md`](demo/README.md).
 
-Reproduce the delivery loop with the bundle CLI:
+## Quickstart — publish → sync → serve (Python API, no Docker)
+
+For the **optional** server-side API variant (the FastAPI runtime, not used by
+the headline demo above), reproduce the delivery loop with the bundle CLI:
 
 ```bash
 uv sync --group dev
@@ -111,6 +113,14 @@ Recently-viewed items get penalized; matching categories/brands/tags get amplifi
 
 **Catalog sync.** The origin publishes a signed, content-addressed bundle: a `latest` version pointer (Ed25519-signed) → an immutable `manifest/<hash>` → immutable `chunk/<hash>` objects. The edge fetches `/latest`, verifies its signature against the pinned public key (fail-closed on tampering), pulls the listed chunks, reassembles each bundled file — including the prebuilt FAISS `vector/` index — into a local cache, and `VectorIndex.load`s it (zero recompute). After sync, the runtime is fully offline-capable.
 
+**In the browser.** The same pipeline — sync the signed bundle, verify it
+ed25519 + sha256, run BM25 ⊕ vector → RRF → session-rerank — runs in the tab
+via the [`@edgeproc/browser`](demo/packages/edgeproc-browser/README.md)
+workspace package. The browser embedder is `Xenova/all-MiniLM-L6-v2` via
+transformers.js, the byte-for-byte equivalent of the Python encoder, and the
+top-k is parity-tested against the FastAPI runtime over the same bundle. See
+[`demo/README.md`](demo/README.md) for the storefront over this engine.
+
 ## Development
 
 ```bash
@@ -140,7 +150,8 @@ The repo follows strict TDD/BDD: unit tests in `tests/unit/`, BDD scenarios in `
 - `deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
 - `examples/catalog/` — committed signed 728-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
 - `examples/keys/public.key` — pinned Ed25519 verify key for the bundle
-- `demo/` — Nimbus React storefront + FastAPI backend (syncs the bundle from the CDN)
+- `demo/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser) + the optional FastAPI API-server variant
+- `demo/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine (private workspace package)
 - `docs/superpowers/` — current spec + plans
 - `docs/legacy/` — pre-pivot TS/WASM design (archive only)
 
