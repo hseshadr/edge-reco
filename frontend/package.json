@@ -12,8 +12,5 @@
 	},
 	"devDependencies": {
 		"jsdom": "^29.1.1"
-	},
-	"dependencies": {
-		"@rolldown/binding-darwin-arm64": "^1.0.2"
 	}
 }
