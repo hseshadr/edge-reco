@@ -1,6 +1,6 @@
 [project]
 name = "edgereco"
-version = "0.1.0"
+version = "0.3.0"
 description = "Edge product discovery engine — hybrid search + session-aware recommendations"
 requires-python = ">=3.13"
 license = "MIT"
