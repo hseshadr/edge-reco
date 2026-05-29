@@ -46,7 +46,7 @@ the request path for this demo (it remains available for the API-server use case
 
 ## Screenshot
 
-![Nimbus storefront](storefront.png)
+![Nimbus storefront](docs/storefront.png)
 
 *The "Recommended for you" rail (right) re-ranks live as you click; the session badge counts
 the signals captured this session. (Produced by the Playwright e2e run — see `make test`.)*
