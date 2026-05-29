@@ -2,7 +2,7 @@
 // on window so Playwright can drive a REAL browser + REAL OPFS run. Not part of
 // the Nimbus runtime — it exists solely to prove C1 in a real browser.
 
-import { EngineClient } from "@edgeproc/browser";
+import { EngineClient } from "@edgeproc/browser/testing";
 
 interface EngineHarness {
 	sync(baseUrl: string, pubkeyUrl: string): Promise<unknown>;

@@ -9,7 +9,7 @@ dependencies = [
   "pydantic-settings>=2.6",
   "polars>=1.0",
   "faiss-cpu>=1.9",
-  "sentence-transformers>=3.3",
+  "sentence-transformers>=5.5",
   "rank-bm25>=0.2",
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
@@ -22,11 +22,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "pytest>=8.3",
-  "pytest-cov>=6.0",
+  "pytest>=9.0",
+  "pytest-cov>=7.1",
   "pytest-bdd>=8.1",
-  "mypy>=1.11",
+  "mypy>=2.1",
   "ruff>=0.6",
+  "poethepoet>=0.30",
 ]
 
 [tool.uv]
@@ -95,3 +96,12 @@ omit = ["tests/*"]
 [tool.coverage.report]
 fail_under = 90
 show_missing = true
+
+[tool.poe.tasks]
+fmt-check = "ruff format --check ."
+lint = "ruff check ."
+typecheck = "mypy src"
+test = "pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90"
+fmt = "ruff format ."
+# `gate` mirrors CI exactly (format-check + lint + typecheck + test-with-coverage).
+gate = ["fmt-check", "lint", "typecheck", "test"]

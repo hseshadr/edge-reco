@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>edge-proc browser embedder — model-load smoke harness</title>
+	</head>
+	<body>
+		<!-- Test-only page: loads the REAL transformers.js MiniLM model in a real
+		     browser (onnxruntime-web WASM) so Playwright can prove the in-browser
+		     embedding path — the riskiest dependency edge — actually works. -->
+		<p id="status">booting</p>
+		<script type="module" src="/src/harness/embed-main.ts"></script>
+	</body>
+</html>

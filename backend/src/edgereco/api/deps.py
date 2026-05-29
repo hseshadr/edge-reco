@@ -154,7 +154,11 @@ def _manifest_from_meta(meta: CatalogMeta) -> CatalogManifest:
 
 
 def get_container(request: Request) -> ServiceContainer:
-    return request.app.state.container  # type: ignore[no-any-return]
+    container = request.app.state.container
+    if not isinstance(container, ServiceContainer):
+        msg = "app.state.container is not a ServiceContainer; app was not initialized"
+        raise RuntimeError(msg)
+    return container
 
 
 def get_session_id(x_session_id: Annotated[str | None, Header()] = None) -> str:

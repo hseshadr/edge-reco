@@ -1,15 +1,17 @@
-// @edgeproc/browser/testing — test-only seams.
+// @edgeproc/browser/testing — BROWSER-SAFE test-only seams.
 //
-// These are NOT part of the production runtime surface. They expose the
-// lower-level sync primitives (in-memory CAS store, the syncIndex state
-// machine, materializeFile) and the local fixture loader so that consumers'
-// tests can drive an end-to-end sync over the real committed signed bundle
-// without a network or a browser. The production app should depend only on
-// the package root entrypoint.
+// These are NOT part of the production runtime surface, but they ARE safe to
+// import in a browser (e.g. the Playwright C1 harness): the Worker-backed sync
+// client plus the lower-level sync primitives (in-memory CAS store, the
+// syncIndex state machine, materializeFile). The production app should depend
+// only on the package root entrypoint.
+//
+// The NODE-ONLY fixture loader (reads the bundled signed catalog via node:fs)
+// lives behind the separate `@edgeproc/browser/testing/fixtures` subpath so
+// importing this barrel never drags node:fs into a browser bundle.
 
-// --- node fixture loader (the committed signed bundle ships INSIDE the
-//     package; consumers' tests run end-to-end without repo-root files) ---
-export * from "./engine/fixtures";
+// --- the Worker-backed sync client (used by the Playwright C1 harness) ---
+export { EngineClient } from "./engine/client";
 // --- the in-memory content-addressed store ---
 export { MemoryCacheStore } from "./engine/memoryStore";
 // --- the sync state machine + file reassembly ---

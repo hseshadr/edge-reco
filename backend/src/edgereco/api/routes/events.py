@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from edgereco.api.deps import Container, get_session_id
+from edgereco.api.models import EventsResponse
 from edgereco.catalog.models import EventType, InteractionEvent, Product, SessionProfile
 from edgereco.reco.signals import apply_interaction
 
@@ -22,12 +23,12 @@ class EventsBody(BaseModel):
     events: list[InteractionEvent]
 
 
-@router.post("/events")
+@router.post("/events", response_model=EventsResponse)
 def post_events(
     body: EventsBody,
     container: Container,
     session_id: Annotated[str, Depends(get_session_id)] = "",
-) -> dict[str, Any]:
+) -> EventsResponse:
     for event in body.events:
         product = container.by_id.get(event.product_id)
         if product is None:
@@ -35,7 +36,7 @@ def post_events(
         else:
             container.sessions.update(session_id, _updater(product, event.event_type))
         container.events.append(event)
-    return {"received": len(body.events)}
+    return EventsResponse(received=len(body.events))
 
 
 def _updater(product: Product, event_type: EventType) -> Callable[[SessionProfile], SessionProfile]:

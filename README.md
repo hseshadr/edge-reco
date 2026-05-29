@@ -122,16 +122,28 @@ transformers.js, the byte-for-byte equivalent of the Python encoder, and the
 top-k is parity-tested against the FastAPI runtime over the same bundle. See
 [`frontend/README.md`](frontend/README.md) for the storefront over this engine.
 
+## Configuration
+
+Both halves run on safe defaults out of the box — config is opt-in. To see the
+full surface and override anything, copy the example files (nothing in them is a
+secret):
+
+```bash
+cp backend/.env.example backend/.env     # EDGERECO_* recommender + DEMO_* API vars
+cp frontend/.env.example frontend/.env   # VITE_BUNDLE_BASE_URL + test tooling
+```
+
+Vite auto-loads `frontend/.env`. The backend's `EDGERECO_*` vars are read from
+the process environment, so export them first (e.g. `set -a && source .env && set +a`)
+or pass them inline as in the publish→sync→serve quickstart above.
+
 ## Development
 
 ```bash
 # Backend (Python recommender)
 cd backend
 uv sync --group dev
-uv run pytest -q                                 # full suite
-uv run pytest --cov=edgereco --cov-fail-under=90 # with coverage gate
-uv run ruff check .
-uv run mypy src
+uv run poe gate                                  # lint + type-check + tests + coverage gate
 
 # Frontend (Nimbus storefront + @edgeproc/browser)
 cd ../frontend
@@ -158,7 +170,7 @@ The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenar
 ## Repo layout
 
 - `backend/` — Python project root (`pyproject.toml`, `uv.lock`).
-  - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `telemetry/` `api/` `edge/` `cli.py` `config.py`
+  - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `telemetry/` `api/` `cli.py` `config.py`
   - `backend/features/` — Gherkin BDD specs, decoupled from step implementations
   - `backend/tests/` — `unit/` `bdd/` `integration/` `e2e/`
   - `backend/deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config

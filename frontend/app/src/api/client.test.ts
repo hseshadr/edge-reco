@@ -11,13 +11,13 @@ import {
 	type SyncResult,
 } from "@edgeproc/browser";
 import {
-	catalogFetch,
 	type IndexManifest,
 	MemoryCacheStore,
 	materializeFile,
 	syncIndex,
 	type Verify,
 } from "@edgeproc/browser/testing";
+import { catalogFetch } from "@edgeproc/browser/testing/fixtures";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	__setRuntimeForTests,

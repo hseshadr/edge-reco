@@ -105,6 +105,7 @@ def bundle(
 def serve(  # pragma: no cover
     cache_dir: Annotated[Path, typer.Argument(help="Cache directory with products.jsonl")],
     index_dir: Annotated[Path, typer.Argument(help="Directory with vector/ index")],
+    # Bind all interfaces by default so the demo container is reachable from the host.
     host: Annotated[str, typer.Option(help="Bind host")] = "0.0.0.0",  # noqa: S104
     port: Annotated[int, typer.Option(help="Bind port")] = 8000,
 ) -> None:
@@ -204,6 +205,17 @@ DEFAULT_PREPROCESS_CATEGORIES = (
 )
 
 
+def _scalar_as_float(value: object, default: float) -> float:
+    """Coerce a polars aggregate scalar to ``float``, falling back on null/non-numeric.
+
+    ``Series.min()/.max()`` are typed as a broad union (dates, bytes, lists, ...),
+    so we narrow to numeric values explicitly instead of trusting the column dtype.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return float(value)
+
+
 @app.command()
 def preprocess(
     input_path: Annotated[Path, typer.Argument(help="Path to Amazon CSV")],
@@ -232,10 +244,10 @@ def preprocess(
 
     pop_expr = pl.col("stars").cast(pl.Float64) * (pl.col("reviews").cast(pl.Float64) + 1).log()
     df = df.with_columns([pop_expr.alias("pop_raw")])
-    pop_min = float(df["pop_raw"].min() or 0.0)  # type: ignore[arg-type]
-    pop_max = float(df["pop_raw"].max() or 1.0)  # type: ignore[arg-type]
-    fresh_min = float(df["boughtInLastMonth"].min() or 0.0)  # type: ignore[arg-type]
-    fresh_max = float(df["boughtInLastMonth"].max() or 1.0)  # type: ignore[arg-type]
+    pop_min = _scalar_as_float(df["pop_raw"].min(), 0.0)
+    pop_max = _scalar_as_float(df["pop_raw"].max(), 1.0)
+    fresh_min = _scalar_as_float(df["boughtInLastMonth"].min(), 0.0)
+    fresh_max = _scalar_as_float(df["boughtInLastMonth"].max(), 1.0)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "products.jsonl"

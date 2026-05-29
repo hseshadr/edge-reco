@@ -1,5 +1,5 @@
 # Nimbus storefront demo — architecture
-# Render: d2 --theme 1 --pad 32 demo/docs/architecture.d2 demo/docs/architecture.svg
+# Render: d2 --theme 1 --pad 32 docs/diagrams/demo-architecture.d2 docs/diagrams/demo-architecture.svg
 
 direction: down
 
@@ -19,7 +19,7 @@ fe: Nimbus storefront {
   "product grid · search · 'Recommended for you' rail": {shape: text}
 }
 
-api: "demo/backend  ·  FastAPI wrapper" {
+api: "backend/demo_server  ·  FastAPI wrapper" {
   style.fill: "#FFF6F2"
   cors: "CORS + X-Session-Id" {shape: text}
   browse: "GET /products (browse)" {shape: text}

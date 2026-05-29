@@ -46,7 +46,7 @@ the request path for this demo (it remains available for the API-server use case
 
 ## Screenshot
 
-![Nimbus storefront](docs/storefront.png)
+![Nimbus storefront](storefront.png)
 
 *The "Recommended for you" rail (right) re-ranks live as you click; the session badge counts
 the signals captured this session. (Produced by the Playwright e2e run — see `make test`.)*
@@ -56,7 +56,7 @@ the signals captured this session. (Produced by the Playwright e2e run — see `
 You need only this repo and Docker:
 
 ```bash
-cd demo
+cd frontend
 docker compose up --build
 ```
 
@@ -72,11 +72,11 @@ What's running: `origin` (static signed bundle) → `edge` (Caddy CDN on :8081) 
 ### Iterate on the SPA locally (`make dev`)
 
 ```bash
-cd demo
+cd frontend
 make install   # one-time: frontend (npm) deps
 # Serve the signed bundle from the edge so the SPA can sync it:
 docker compose up -d origin edge
-make frontend  # Vite dev server on http://localhost:5173
+make app       # Vite dev server on http://localhost:5173
 ```
 
 The dev SPA reads `VITE_BUNDLE_BASE_URL` (default `http://localhost:8081`, the edge).
@@ -101,17 +101,17 @@ Sessions are **per-tab** and held in memory; reload to start from a clean slate.
 screenshot):
 
 ```bash
-cd demo/frontend
+cd frontend/app
 npm run test          # Vitest units (incl. the in-Node click→re-rank loop over the real bundle)
 npm run test:e2e      # Playwright: full backend-free loop in a real browser (see below)
 ```
 
 ## The optional API backend
 
-`demo/backend/` is still here: a thin FastAPI wrapper around edge-reco for the **server-side
+`backend/demo_server/` is still here: a thin FastAPI wrapper around edge-reco for the **server-side
 API** use case (it syncs the same signed bundle at startup and serves `/search`,
 `/recommend`, `/products`). It is **not** needed for this demo and is **not** in the default
-`docker compose up`. If you want to run the API server, see `make backend` / `demo/backend/`.
+`docker compose up`. If you want to run the API server, run `make backend` from `frontend/` / see `backend/demo_server/`.
 
 ## Config
 
@@ -119,7 +119,7 @@ API** use case (it syncs the same signed bundle at startup and serves `/search`,
 | --- | --- | --- | --- |
 | `VITE_BUNDLE_BASE_URL` | frontend | `http://localhost:8081` | Caddy edge origin the **browser** syncs the signed bundle from. Baked at build time. |
 
-The ed25519 verify key is **pinned in the SPA build** (`demo/frontend/public/public.key`,
+The ed25519 verify key is **pinned in the SPA build** (`frontend/app/public/public.key`,
 copied from `examples/keys/public.key`) and served same-origin — it is not configurable at
 runtime, by design.
 

@@ -8,12 +8,11 @@
 //
 // Primary entry point: EngineRuntime.bootstrap() → SearchEngine.
 //
-// Low-level sync primitives + the local fixture loader live behind the
-// `@edgeproc/browser/testing` subpath. They are test-only seams and not part
-// of the production surface.
+// Low-level sync primitives and the Worker-backed EngineClient live behind the
+// browser-safe `@edgeproc/browser/testing` subpath; the node-only fixture
+// loader lives behind `@edgeproc/browser/testing/fixtures`. Both are test-only
+// seams, not part of the production surface.
 
-// --- the Worker-backed sync client (used by the Playwright C1 harness) ---
-export { EngineClient } from "./engine/client";
 // --- the engine-owned domain contract (single source of truth) ---
 export type {
 	BrowseResponse,

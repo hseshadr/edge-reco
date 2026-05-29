@@ -1,4 +1,4 @@
-# demo/backend/ (optional API-server variant)
+# backend/demo_server/ (optional API-server variant)
 
 **Not in the default demo path.** The Nimbus demo is **backend-free**: the SPA
 syncs the signed bundle and runs the whole engine in the browser — see
@@ -10,5 +10,5 @@ thin FastAPI wrapper around `edgereco` that syncs the same signed bundle at
 startup and exposes `/search`, `/recommend`, and `/products`. Useful if you
 want to consume the engine over HTTP from a non-browser client.
 
-To run it: `make backend` from `demo/` (it launches `demo.backend.serve` from
-the repo root because the module depends on sibling-repo local sources).
+To run it: `make backend` from `frontend/` (it launches `demo_server.serve` from
+`backend/` because the module depends on sibling-repo local sources).

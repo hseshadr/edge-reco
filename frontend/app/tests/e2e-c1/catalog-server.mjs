@@ -1,5 +1,5 @@
 // Minimal CORS-enabled static server for the C1 e2e: serves the REAL signed
-// bundle (examples/catalog) + the pinned pubkey (examples/keys) so the browser
+// bundle (backend/examples/catalog) + the pinned pubkey (backend/examples/keys) so the browser
 // Worker syncs over HTTP exactly as in production. Also serves a `/patched/`
 // variant whose catalog_meta chunk is swapped, to prove a re-sync fetches only
 // the changed chunk. Started by Playwright's `webServer`.
@@ -10,7 +10,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const EXAMPLES = join(HERE, "..", "..", "..", "..", "examples");
+// HERE = frontend/app/tests/e2e-c1 → up 4 to the repo root, then backend/examples
+// (the signed catalog + pinned keys moved under backend/ in the 2026-05 restructure).
+const EXAMPLES = join(HERE, "..", "..", "..", "..", "backend", "examples");
 const CATALOG = join(EXAMPLES, "catalog");
 const KEYS = join(EXAMPLES, "keys");
 const PORT = Number(process.env.CATALOG_PORT ?? "8910");

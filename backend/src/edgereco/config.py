@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     search_limit: int = 10
     rrf_k: int = 60
+    # Bind all interfaces by default so the demo container is reachable from the host.
     api_host: str = "0.0.0.0"  # noqa: S104
     api_port: int = 8000
     # Bundle producer/consumer (signed, content-addressed catalog distribution).
