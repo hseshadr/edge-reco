@@ -3,8 +3,17 @@
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
-	"workspaces": ["app", "packages/*"],
+	"workspaces": [
+		"app",
+		"packages/*"
+	],
 	"engines": {
 		"node": ">=22.12"
+	},
+	"devDependencies": {
+		"jsdom": "^29.1.1"
+	},
+	"dependencies": {
+		"@rolldown/binding-darwin-arm64": "^1.0.2"
 	}
 }
