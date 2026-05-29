@@ -1,0 +1,13 @@
+packages:
+  - app
+  - packages/*
+
+# pnpm v11 does not run a dependency's build/postinstall scripts unless it is
+# explicitly allowlisted here (replaces v10's onlyBuiltDependencies). These are
+# transitive native deps of @huggingface/transformers, needed by the node-side
+# embedding parity tests: onnxruntime-node is the native ONNX backend, protobufjs
+# compiles its proto bindings, sharp builds its native image binary.
+allowBuilds:
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true

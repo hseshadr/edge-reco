@@ -5,7 +5,7 @@
 #   docker compose up --build     # the whole backend-free showcase, one command
 #
 # Iterate on the SPA locally:
-#   make install   # one-time: npm workspace deps (app + @edgeproc/browser)
+#   make install   # one-time: pnpm workspace deps (app + @edgeproc/browser)
 #   make edge      # serve the signed bundle from the Caddy edge (:8081)
 #   make app       # Vite dev server on localhost:5173 (syncs from the edge)
 #   make dev       # edge + app together
@@ -26,7 +26,7 @@ BACKEND_DIR := $(ROOT_DIR)/backend
 help: ## Show this help.
 	@echo "Nimbus frontend (backend-free) targets:"
 	@echo "  docker compose up --build   the whole showcase, one command"
-	@echo "  make install   npm install (workspace: app + @edgeproc/browser)"
+	@echo "  make install   pnpm install (workspace: app + @edgeproc/browser)"
 	@echo "  make edge       serve the signed bundle from Caddy (:8081)"
 	@echo "  make app        Vite dev server (open http://localhost:5173)"
 	@echo "  make dev        edge + app together"
@@ -34,7 +34,7 @@ help: ## Show this help.
 	@echo "  make backend    (optional) the API-server use case (:8000)"
 
 install: ## One-time: install workspace deps (app + @edgeproc/browser package).
-	cd $(FRONTEND_DIR) && npm install
+	cd $(FRONTEND_DIR) && pnpm install
 
 # Serve the signed bundle from the Caddy edge so the SPA can sync it in-browser.
 edge: ## Run the origin + Caddy edge (signed bundle on :8081).
@@ -47,13 +47,13 @@ dev: ## Run edge + app together. Open http://localhost:5173
 	@echo ">> app  -> http://localhost:5173  <- open this in your browser"
 	@cd $(FRONTEND_DIR) && docker compose up -d origin edge
 	@trap "cd $(FRONTEND_DIR) && docker compose stop origin edge >/dev/null 2>&1" EXIT INT TERM; \
-		cd $(FRONTEND_DIR)/app && npm run dev
+		cd $(FRONTEND_DIR)/app && pnpm run dev
 
 app: ## Run only the Vite dev server (localhost:5173).
-	cd $(FRONTEND_DIR)/app && npm run dev
+	cd $(FRONTEND_DIR)/app && pnpm run dev
 
 backend: ## (Optional) Run the API-server launcher (127.0.0.1:8000) — NOT needed for the demo.
 	cd $(BACKEND_DIR) && uv run python -m demo_server.serve
 
 test: ## Run the frontend vitest units.
-	cd $(FRONTEND_DIR)/app && npm run test
+	cd $(FRONTEND_DIR)/app && pnpm run test

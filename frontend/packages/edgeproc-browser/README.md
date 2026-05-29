@@ -10,7 +10,7 @@ publishes the same wire format and the same scoring formula as the Python core
 in [`src/edgereco/`](../../../src/edgereco) — the two are top-k parity-tested
 against the same committed bundle (see `src/engine/hybridParity.test.ts`).
 
-> **Status:** private npm workspace member of `edge-reco`. Not published to npm.
+> **Status:** private pnpm workspace member of `edge-reco`. Not published to npm.
 > Reusable by other workspace packages today; a public release will follow once
 > the package surface stabilizes.
 

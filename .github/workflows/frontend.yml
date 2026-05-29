@@ -1,10 +1,15 @@
 name: Frontend CI
 
-# The Nimbus storefront + the extracted @edgeproc/browser package live in an npm
+# The Nimbus storefront + the extracted @edgeproc/browser package live in a pnpm
 # workspace rooted at frontend/. The existing ci.yml covers only the Python core;
 # this workflow closes the long-standing gap where the frontend gate was
 # local-only. It mirrors the verified-green local hard gate exactly:
 # biome -> tsc -> vitest -> production build, across both workspace members.
+#
+# We use pnpm (not npm) because the install must resolve cleanly across OSes: npm
+# pins os/cpu-specific optional binaries (e.g. @rolldown/binding-darwin-arm64) as
+# required and fails on the Linux runner with EBADPLATFORM, whereas pnpm records
+# them as optional os/cpu deps and installs only the host's binding.
 # Playwright e2e now also runs in CI (the `e2e` job below): both the storefront
 # suite and the C1 sync + in-browser embed model-load smoke suite, each starting
 # its own Vite + static-catalog webServer. The HuggingFace MiniLM model download
@@ -27,26 +32,31 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Reads the pinned pnpm version from frontend/package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24" # >= 22.12 required by Vite 8
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install workspace
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint (biome) — package + app
-        run: npm run lint --workspaces --if-present
+        run: pnpm -r run lint
 
       - name: Typecheck (tsc) — package + app
-        run: npm run typecheck --workspaces --if-present
+        run: pnpm -r run typecheck
 
       - name: Unit tests (vitest) — package + app
-        run: npm run test --workspaces --if-present
+        run: pnpm -r run test
 
       - name: Build app (proves the workspace link resolves)
-        run: npm run build -w frontend
+        run: pnpm -F frontend run build
 
   e2e:
     runs-on: ubuntu-latest
@@ -64,24 +74,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Reads the pinned pnpm version from frontend/package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24" # >= 22.12 required by Vite 8
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install workspace
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
 
       - name: Install Playwright Chromium + system deps
         working-directory: frontend/app
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Cache HuggingFace model weights
         uses: actions/cache@v4
@@ -93,11 +108,11 @@ jobs:
 
       - name: E2E — storefront suite (default config)
         working-directory: frontend/app
-        run: npx playwright test
+        run: pnpm exec playwright test
 
       - name: E2E — C1 sync + embed model-load smoke suite
         working-directory: frontend/app
-        run: npx playwright test -c playwright.c1.config.ts
+        run: pnpm exec playwright test -c playwright.c1.config.ts
 
       - name: Upload Playwright report + traces on failure
         if: ${{ failure() }}

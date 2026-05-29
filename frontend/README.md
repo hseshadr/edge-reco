@@ -73,7 +73,7 @@ What's running: `origin` (static signed bundle) → `edge` (Caddy CDN on :8081) 
 
 ```bash
 cd frontend
-make install   # one-time: frontend (npm) deps
+make install   # one-time: frontend (pnpm) deps
 # Serve the signed bundle from the edge so the SPA can sync it:
 docker compose up -d origin edge
 make app       # Vite dev server on http://localhost:5173
@@ -102,8 +102,8 @@ screenshot):
 
 ```bash
 cd frontend/app
-npm run test          # Vitest units (incl. the in-Node click→re-rank loop over the real bundle)
-npm run test:e2e      # Playwright: full backend-free loop in a real browser (see below)
+pnpm run test          # Vitest units (incl. the in-Node click→re-rank loop over the real bundle)
+pnpm run test:e2e      # Playwright: full backend-free loop in a real browser (see below)
 ```
 
 ## The optional API backend
