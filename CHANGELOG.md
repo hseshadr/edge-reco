@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+> Not yet cut to a version. The current released line is **0.3.0** below; the
+> `@edgeproc/browser/engine` subpath export here is staged for the next release
+> and is not part of 0.3.0.
+
 ### Added
 - **`@edgeproc/browser/engine`** — new stable public subpath export promoting the
   domain-agnostic sync tier (`EngineClient`, OPFS/memory CAS stores, the

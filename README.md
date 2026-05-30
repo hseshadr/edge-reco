@@ -3,16 +3,56 @@
 > **Sync once. Run anywhere. Zero backend calls.**
 
 [![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
-A Python-first local product discovery engine. Edge nodes sync a manifest-described catalog, build local indexes, and serve hybrid search + session-aware recommendations — zero backend calls after sync.
+**Nimbus is a pretend online store.** The interesting part: its entire
+search-and-recommend brain runs *inside your browser tab* — no server, no
+backend calls — after a one-time download. So the store works offline, costs
+nothing per search, and your clicks never leave your device.
 
-## Why
+Open the store, search for "wireless headphones", click a couple of products,
+and watch the "Recommended for you" list re-sort toward your taste — instantly,
+with no trip to a server. Then turn the server off and reload: it still works,
+because everything it needs is already on your machine.
 
-Most search/reco stacks are tightly coupled to a remote backend: every query crosses the network, every reco request rebuilds session state in some service. EdgeReco inverts that: the catalog distributes through a CDN like static assets, the runtime ships as a small Python process, and inference happens locally. Sync once, run anywhere.
+That's the whole pitch: **a real search-and-recommend engine that lives in the
+browser instead of in a data center.** EdgeReco is the engine; Nimbus is the
+demo store built on top of it.
 
-## Architecture
+> _Nimbus is a fictional store built only to demo EdgeReco. It is not a real
+> shop. Its products come from a public Amazon dataset — see
+> [Data & attribution](#data--attribution)._
+
+## Try it (one command)
+
+You need this repo and Docker. Nothing else.
+
+```bash
+cd frontend && docker compose up --build
+
+# then open the store:
+open http://localhost:5173
+```
+
+You'll see a quick loading screen (it's fetching the catalog and a small AI
+model), then the storefront. Click a few products and the recommendations
+re-rank live. Stop the containers and reload — it keeps working offline.
+
+---
+
+## Under the hood (for developers)
+
+Everything below is the technical depth. Each piece of jargon is defined the
+first time it shows up.
+
+Most search/recommendation stacks are glued to a remote backend: every query
+crosses the network, every recommendation rebuilds session state in some
+service. EdgeReco inverts that. The catalog is distributed like static assets
+through a CDN; the engine ships as a small library; inference happens locally —
+in a browser tab, or in a Python process. Sync once, run anywhere.
+
+### Architecture
 
 ```
  examples/catalog (signed bundle)        IN THE BROWSER TAB
@@ -25,42 +65,67 @@ Most search/reco stacks are tightly coupled to a remote backend: every query cro
               signed bundle, CORS, cache +--------------------------------------+
 ```
 
-- **origin** — serves a signed, content-addressed bundle (a `latest` version pointer + immutable `manifest/<hash>` and `chunk/<hash>` objects). A committed 728-product Amazon bundle lives in `backend/examples/catalog/`.
-- **edge** — Caddy reverse proxy with the bundle cache policy (immutable chunks, short-TTL pointer).
-- **browser tier** — the Nimbus SPA syncs the bundle into OPFS (Worker), verifies it ed25519 + sha256 fail-closed against a SPA-pinned public key, loads `all-MiniLM-L6-v2` via transformers.js, and runs the full hybrid search + session-aware rerank pipeline **in the tab**. No application backend in the request path.
-- **edgereco runtime (Python)** — the same engine packaged as a FastAPI app for the server-side use case. Same scoring formula, same sync + verify, same prebuilt FAISS index — the in-browser engine (`@edgeproc/browser`) is parity-tested against it.
+- **origin** — serves a *signed, content-addressed bundle*: a `latest` version
+  pointer plus immutable `manifest/<hash>` and `chunk/<hash>` objects.
+  *Content-addressed* means each file is named by the hash of its bytes, so it
+  can be cached forever and can't be tampered with undetectably. A committed
+  728-product Amazon bundle lives in `backend/examples/catalog/`.
+- **edge** — a Caddy reverse proxy (a small static web server / CDN) applying
+  the bundle's cache policy: immutable chunks cached forever, short-TTL pointer.
+- **browser tier** — the Nimbus single-page app (SPA) syncs the bundle into
+  *OPFS* (Origin Private File System — the browser's per-site sandboxed disk),
+  verifies it with Ed25519 signatures + SHA-256 checksums *fail-closed* (any
+  mismatch aborts the load) against a key pinned in the SPA build, loads the
+  `all-MiniLM-L6-v2` embedding model via transformers.js, and runs the full
+  hybrid-search + session-aware rerank pipeline **in the tab**. No application
+  backend in the request path.
+- **edgereco runtime (Python)** — the same engine packaged as a FastAPI app for
+  the server-side use case. Same scoring formula, same sync + verify, same
+  prebuilt FAISS index — the in-browser engine (`@edgeproc/browser`) is
+  parity-tested against it.
 
-## Quickstart — the Nimbus demo (Docker, backend-free)
+### How it works
 
-One command brings up the full backend-free showcase: a static signed-bundle
-origin behind a Caddy edge, plus a static Nimbus SPA that syncs the bundle in
-its own tab and runs hybrid search + session-aware recommendations entirely
-in-browser. **No FastAPI, no Python in the request path.**
+**Hybrid search.** Two retrieval methods run in parallel and get merged.
+*BM25* is a classic keyword-relevance score (catches exact matches). *FAISS*
+(Facebook AI Similarity Search) does fast nearest-neighbour lookup over
+embedding vectors (catches paraphrases — "earbuds" finds "wireless headphones").
+The two rankings are fused with *RRF* (Reciprocal Rank Fusion):
+`rrf_score = Σ 1/(k + rank_i)` summed over each backend's rank for an item.
 
-```bash
-cd frontend && docker compose up --build
+**Session-aware reranking.** Click / view / favorite / cart events accumulate
+per-session affinity for category, tag, and brand. The reranker rescores the
+hybrid candidates:
 
-# storefront:
-open http://localhost:5173
+```
+score = 0.40·popularity + 0.20·category_aff + 0.15·tag_aff
+      + 0.10·brand_aff + 0.10·freshness − 0.25·repetition
 ```
 
-You will see the boot screen step through *syncing the signed bundle ->
-reassembling the index -> loading the model*, then the 728-product Amazon
-storefront. Click a few products: the "Recommended for you" rail re-ranks
-toward your taste — **no network round trip per click**. Stop `origin` + `edge`
-and reload: the bundle is in OPFS and the model is in the HTTP cache, so it
-keeps working offline.
+Recently-viewed items get penalized; matching categories / brands / tags get
+amplified. It's all in-memory and per-tab, so reloading starts fresh.
 
-This compose file needs only this repo — no sibling checkouts. The browser does
-the search.
+**Catalog sync.** The origin publishes the signed, content-addressed bundle: a
+`latest` version pointer (Ed25519-signed) → an immutable `manifest/<hash>` →
+immutable `chunk/<hash>` objects. The consumer fetches `/latest`, verifies its
+signature against the pinned public key (fail-closed on tampering), pulls only
+the listed chunks, reassembles each bundled file — including the prebuilt FAISS
+`vector/` index — into a local cache, and `VectorIndex.load`s it (zero
+recompute). After sync, the runtime is fully offline-capable.
 
-For the storefront walkthrough, screenshots, and how to iterate with
-`make dev`, see [`frontend/README.md`](frontend/README.md).
+**In the browser.** The same pipeline — sync the signed bundle, verify it
+Ed25519 + SHA-256, run BM25 ⊕ vector → RRF → session-rerank — runs in the tab
+via the [`@edgeproc/browser`](frontend/packages/edgeproc-browser/README.md)
+workspace package. The browser embedder is `Xenova/all-MiniLM-L6-v2` via
+transformers.js, the byte-for-byte equivalent of the Python encoder, and the
+top-k is parity-tested against the FastAPI runtime over the same bundle. See
+[`frontend/README.md`](frontend/README.md) for the storefront over this engine.
 
-## Quickstart — publish → sync → serve (Python API, no Docker)
+### Quickstart — publish → sync → serve (Python API, no Docker)
 
 For the **optional** server-side API variant (the FastAPI runtime, not used by
-the headline demo above), reproduce the delivery loop with the bundle CLI:
+the headline browser demo above), reproduce the delivery loop with the bundle
+CLI:
 
 ```bash
 cd backend
@@ -83,10 +148,11 @@ EDGERECO_BUNDLE_CACHE_DIR=/tmp/bundle-cache \
     uv run edgereco serve /tmp/staging /tmp/staging --port 8000
 ```
 
-The committed `backend/examples/catalog/` is exactly such an origin (built from the
-728-product Amazon catalog), so step 4 alone — pointed at it — serves the demo data.
+The committed `backend/examples/catalog/` is exactly such an origin (built from
+the 728-product Amazon catalog), so step 4 alone — pointed at it — serves the
+demo data.
 
-## CLI
+### CLI
 
 ```
 edgereco build-catalog INPUT.csv OUTPUT.jsonl           # scraped-Amazon CSV -> products.jsonl
@@ -99,30 +165,7 @@ edgereco serve CACHE_DIR INDEX_DIR [--host HOST] [--port PORT]
 edgereco search QUERY CACHE_DIR INDEX_DIR [--limit N] [--category CAT] [--json]
 ```
 
-## How it works
-
-**Hybrid search.** BM25 keyword scores and FAISS cosine-similarity scores are merged via Reciprocal Rank Fusion (`rrf_score = Σ 1/(k + rank_i)` over each backend). Keyword catches exact matches; vector catches paraphrases.
-
-**Session-aware reranking.** Click/view/favorite/cart events accumulate per-session affinity for category, tag, and brand. The reranker rescores hybrid candidates as
-
-```
-score = 0.40·popularity + 0.20·category_aff + 0.15·tag_aff
-      + 0.10·brand_aff + 0.10·freshness − 0.25·repetition
-```
-
-Recently-viewed items get penalized; matching categories/brands/tags get amplified.
-
-**Catalog sync.** The origin publishes a signed, content-addressed bundle: a `latest` version pointer (Ed25519-signed) → an immutable `manifest/<hash>` → immutable `chunk/<hash>` objects. The edge fetches `/latest`, verifies its signature against the pinned public key (fail-closed on tampering), pulls the listed chunks, reassembles each bundled file — including the prebuilt FAISS `vector/` index — into a local cache, and `VectorIndex.load`s it (zero recompute). After sync, the runtime is fully offline-capable.
-
-**In the browser.** The same pipeline — sync the signed bundle, verify it
-ed25519 + sha256, run BM25 ⊕ vector → RRF → session-rerank — runs in the tab
-via the [`@edgeproc/browser`](frontend/packages/edgeproc-browser/README.md)
-workspace package. The browser embedder is `Xenova/all-MiniLM-L6-v2` via
-transformers.js, the byte-for-byte equivalent of the Python encoder, and the
-top-k is parity-tested against the FastAPI runtime over the same bundle. See
-[`frontend/README.md`](frontend/README.md) for the storefront over this engine.
-
-## Configuration
+### Configuration
 
 Both halves run on safe defaults out of the box — config is opt-in. To see the
 full surface and override anything, copy the example files (nothing in them is a
@@ -137,7 +180,7 @@ Vite auto-loads `frontend/.env`. The backend's `EDGERECO_*` vars are read from
 the process environment, so export them first (e.g. `set -a && source .env && set +a`)
 or pass them inline as in the publish→sync→serve quickstart above.
 
-## Development
+### Development
 
 ```bash
 # Backend (Python recommender)
@@ -154,20 +197,40 @@ pnpm -r run test                  # vitest on both
 pnpm -F frontend run build        # prove the workspace link resolves
 ```
 
-The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenarios in `backend/features/` with steps in `backend/tests/bdd/`, integration tests in `backend/tests/integration/`, end-to-end in `backend/tests/e2e/`.
+The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD
+scenarios in `backend/features/` with steps in `backend/tests/bdd/`, integration
+tests in `backend/tests/integration/`, end-to-end in `backend/tests/e2e/`.
 
-## Data
+### Data & attribution
 
-`backend/examples/catalog/` is a committed, signed 728-product **real Amazon catalog** bundle (the demo data). It was produced by `build-catalog` → `index` → `bundle`. To build your own from raw data: a scraped-Amazon `products.csv` goes through `edgereco build-catalog`, or a Kaggle Amazon Products Dataset CSV through `edgereco preprocess INPUT.csv OUTPUT_DIR --limit 10000` (normalizes popularity from `stars × log(reviews+1)` and freshness from `boughtInLastMonth`); then `index` + `bundle` to sign and publish.
+This demo ships **two different catalogs** — don't confuse them:
 
-## Docs
+| Catalog | Path | What it is |
+| --- | --- | --- |
+| **Demo data (the headline)** | `backend/examples/catalog/` | A committed, signed 728-product bundle of **real Amazon products**. This is what the Nimbus storefront and the offline demo use. |
+| Synthetic API fixture | `backend/demo_server/catalog/products.jsonl` | 300 **fabricated** products with made-up brands, used only by the optional FastAPI API server. Not real data. |
+
+The committed 728-product bundle is derived from the **Amazon E-commerce
+Products & Reviews Dataset** by *lazylad99* on
+[Kaggle](https://www.kaggle.com/datasets/lazylad99/amazon-e-commerce-product-and-review-dataset),
+published under the **MIT** license. It was produced via `edgereco build-catalog`
+→ `edgereco index` → `edgereco bundle`; you can regenerate it from the raw CSVs
+with the same commands (or `edgereco preprocess` for the Kaggle CSV schema).
+
+The MIT license covers the uploader's *compilation* of the dataset; the
+underlying product listings, review text, and images were scraped from
+Amazon.com and remain subject to Amazon's terms. See the top-level
+[`NOTICE`](NOTICE) for the full attribution and the rights caveat — and verify
+your rights before redistributing the underlying content.
+
+### Docs
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture, system context, request lifecycle (with d2 diagrams).
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run the demo end-to-end.
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns.
 - [`docs/diagrams/`](docs/diagrams/) — d2 sources + rendered SVGs.
 
-## Repo layout
+### Repo layout
 
 - `backend/` — Python project root (`pyproject.toml`, `uv.lock`).
   - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `edge/` `telemetry/` `api/` `cli.py` `config.py`
@@ -176,7 +239,7 @@ The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenar
   - `backend/deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
   - `backend/examples/catalog/` — committed signed 728-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
   - `backend/examples/keys/public.key` — pinned Ed25519 verify key for the bundle
-  - `backend/demo_server/` — optional FastAPI API-server launcher (not in main gate)
+  - `backend/demo_server/` — optional FastAPI API-server launcher (not in main gate); ships the 300-product synthetic fixture
   - `backend/scripts/` — fixture generators for browser-tier parity tests
 - `frontend/` — pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`).
   - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
@@ -185,4 +248,4 @@ The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenar
 
 ## License
 
-[MIT](LICENSE).
+[Apache-2.0](LICENSE). Third-party data attribution is in [`NOTICE`](NOTICE).
