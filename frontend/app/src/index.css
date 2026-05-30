@@ -1008,3 +1008,35 @@ input {
 	line-height: 1.5;
 	margin: 0 0 14px;
 }
+
+/* =========================================================================
+   FOOTER
+   ========================================================================= */
+
+.nimbus-footer {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: 28px var(--gut) 56px;
+	border-top: 1px solid var(--line);
+}
+
+.nimbus-footer__line {
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--ink);
+	margin: 0 0 6px;
+}
+
+.nimbus-footer__line--muted {
+	color: var(--muted);
+	margin-bottom: 0;
+}
+
+.nimbus-footer__link {
+	color: var(--signal);
+	text-decoration: none;
+}
+
+.nimbus-footer__link:hover {
+	text-decoration: underline;
+}

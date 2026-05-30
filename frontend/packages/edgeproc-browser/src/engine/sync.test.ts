@@ -6,7 +6,12 @@ import { catalogFetch, latestBytes, pubkeyRaw } from "./fixtures";
 import { IntegrityError } from "./integrity";
 import { MemoryCacheStore } from "./memoryStore";
 import { materializeFile, syncIndex } from "./sync";
-import type { FetchBytes, IndexManifest, Verify, VersionPointer } from "./types";
+import type {
+	FetchBytes,
+	IndexManifest,
+	Verify,
+	VersionPointer,
+} from "./types";
 
 const DECODER = new TextDecoder();
 const PUBKEY = pubkeyRaw();

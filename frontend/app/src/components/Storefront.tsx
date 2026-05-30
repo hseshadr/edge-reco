@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { browse, recommend, search, sendEvent } from "../api/client";
 import type { Product, SearchResult } from "../api/types";
 import { useDebounced } from "../useDebounced";
+import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { ProductGrid } from "./ProductGrid";
 import { RecommendRail } from "./RecommendRail";
 import { Toast } from "./Toast";
 
 const RAIL_LIMIT = 8;
-const GRID_LIMIT = 24;
+const GRID_LIMIT = 24; // frozen: storefront grid page size
 const TOAST_MS = 2200;
 
 interface GridView {
@@ -179,6 +180,8 @@ export function Storefront() {
 					onPick={onPick}
 				/>
 			</main>
+
+			<Footer />
 
 			<Toast message={toast} />
 		</>

@@ -33,6 +33,7 @@ import {
 	type VectorIndexFiles,
 } from "./vectorIndex";
 
+// Parity: mirrors edge-reco's Settings.search_limit (backend config.py) — keep in sync.
 const DEFAULT_LIMIT = 10;
 
 /** Options for a search; `limit` caps results, `category` filters post-rerank. */
