@@ -11,14 +11,18 @@ search-and-recommend brain runs *inside your browser tab* — no server, no
 backend calls — after a one-time download. So the store works offline, costs
 nothing per search, and your clicks never leave your device.
 
-Open the store, search for "wireless headphones", click a couple of products,
-and watch the "Recommended for you" list re-sort toward your taste — instantly,
-with no trip to a server. Then turn the server off and reload: it still works,
-because everything it needs is already on your machine.
+Open the store, search for "wireless headphones", then click a couple of
+products. Every click reshapes the "Recommended for you" rail across five taste
+signals — category, brand, tags, popularity, and freshness — re-ranking
+**instantly, on-device, with no trip to a server.** This is the same shape of
+per-session personalization big storefronts run server-side; here it runs
+entirely in your tab, so your clicks never leave your device. Turn the server
+off and reload: it still works, because everything it needs is already on your
+machine.
 
-That's the whole pitch: **a real search-and-recommend engine that lives in the
-browser instead of in a data center.** EdgeReco is the engine; Nimbus is the
-demo store built on top of it.
+That's the whole pitch: **a real, heavily personalized search-and-recommend
+engine that lives in the browser instead of in a data center.** EdgeReco is the
+engine; Nimbus is the demo store built on top of it.
 
 > _Nimbus is a fictional store built only to demo EdgeReco. It is not a real
 > shop. Its products come from a public Amazon dataset — see
@@ -51,6 +55,23 @@ crosses the network, every recommendation rebuilds session state in some
 service. EdgeReco inverts that. The catalog is distributed like static assets
 through a CDN; the engine ships as a small library; inference happens locally —
 in a browser tab, or in a Python process. Sync once, run anywhere.
+
+### Built on edge-proc
+
+EdgeReco is two layers, not one. The bottom layer is **edge-proc** — a generic
+local-compute substrate: signed, content-addressed bundle sync, an OPFS/CAS
+(content-addressed store) cache, Ed25519 + SHA-256 fail-closed verification, and
+the hybrid-retrieval primitives (BM25 ⊕ vector → RRF) with FAISS /
+transformers.js embedders. The top layer is **edge-reco** — the
+product-discovery brain: the scoring formula, the session-signal capture, and
+the session-aware reranker.
+
+That dependency is real in both runtimes. The Python side pulls
+[`edge-proc[localvec,bundles]`](backend/pyproject.toml#L20); the browser side
+runs [`@edgeproc/browser`](frontend/packages/edgeproc-browser/) — _the edge-proc
+browser tier_ — over the same signed bundle. The substrate is reusable for any
+local search workload; edge-reco is what turns it into recommendations, and the
+two tiers are parity-tested against each other.
 
 ### Architecture
 
@@ -93,17 +114,32 @@ embedding vectors (catches paraphrases — "earbuds" finds "wireless headphones"
 The two rankings are fused with *RRF* (Reciprocal Rank Fusion):
 `rrf_score = Σ 1/(k + rank_i)` summed over each backend's rank for an item.
 
-**Session-aware reranking.** Click / view / favorite / cart events accumulate
-per-session affinity for category, tag, and brand. The reranker rescores the
-hybrid candidates:
+**Session-aware reranking.** This is the personalization layer, and it's not a
+toy. Every interaction bumps per-session affinity for the product's category,
+tags, and brand by a weight that scales with intent:
+
+| event | category | tag | brand |
+|---|---|---|---|
+| view | +0.02 | +0.01 | +0.02 |
+| click | +0.10 | +0.05 | +0.08 |
+| favorite | +0.20 | +0.10 | +0.15 |
+| cart | +0.25 | +0.12 | +0.20 |
+
+Affinities clamp at 1.0; the last 50 viewed product IDs carry a repetition
+penalty so the rail keeps surfacing new things. The reranker rescores the hybrid
+candidates against that live profile:
 
 ```
 score = 0.40·popularity + 0.20·category_aff + 0.15·tag_aff
       + 0.10·brand_aff + 0.10·freshness − 0.25·repetition
 ```
 
-Recently-viewed items get penalized; matching categories / brands / tags get
-amplified. It's all in-memory and per-tab, so reloading starts fresh.
+The loop is **zero-network**: a click folds straight into the in-memory session
+profile and the rail re-ranks on the spot — no fetch, no round trip. And it's
+not a black box — each result carries a "Why?" breakdown showing exactly which
+signal moved it (popularity vs. category vs. tag vs. brand vs. freshness, minus
+any repetition penalty). It's all in-memory and per-tab, so reloading starts
+fresh.
 
 **Catalog sync.** The origin publishes the signed, content-addressed bundle: a
 `latest` version pointer (Ed25519-signed) → an immutable `manifest/<hash>` →
