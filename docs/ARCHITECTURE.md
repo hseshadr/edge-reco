@@ -73,7 +73,7 @@ Serve-side (when running as API server): `edgereco serve` syncs the signed bundl
 - **Storage** — OPFS for the bundle cache; in-memory for the session profile.
 - **Worker boundary** — sync runs in a Worker so the UI thread is never blocked on a multi-MB bundle fetch.
 
-The package is consumed by `frontend/app/` via the npm workspace link (`@edgeproc/browser` in app's package.json resolves to `frontend/packages/edgeproc-browser/`).
+The package is consumed by `frontend/app/` via the pnpm workspace link (`@edgeproc/browser` in app's package.json resolves to `frontend/packages/edgeproc-browser/`).
 
 ## Frontend tier (Nimbus storefront)
 

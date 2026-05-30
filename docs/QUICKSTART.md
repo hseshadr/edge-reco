@@ -31,18 +31,18 @@ uv run mypy src
 
 If all four are green, the Python tier is healthy.
 
-## 2. Frontend gate (npm workspaces)
+## 2. Frontend gate (pnpm workspaces)
 
 ```bash
 cd ../frontend
-npm install                                     # resolves the whole workspace
-npm run lint --workspaces --if-present          # biome on app + package
-npm run typecheck --workspaces --if-present     # tsc -b on both
-npm run test --workspaces --if-present          # vitest on both
-npm run build -w frontend                       # prove the workspace link resolves
+pnpm install                                    # resolves the whole workspace
+pnpm -r run lint                                # biome on app + package
+pnpm -r run typecheck                           # tsc -b on both
+pnpm -r run test                                # vitest on both
+pnpm -F frontend run build                      # prove the workspace link resolves
 ```
 
-The npm workspace is rooted at `frontend/`; the SPA lives in `frontend/app/` and the in-browser engine in `frontend/packages/edgeproc-browser/`.
+The pnpm workspace is rooted at `frontend/`; the SPA lives in `frontend/app/` and the in-browser engine in `frontend/packages/edgeproc-browser/`.
 
 ## 3. Run the demo (backend-free, in-browser)
 
@@ -65,7 +65,7 @@ Without rebuilding the full Docker stack:
 
 ```bash
 cd frontend
-make install     # one-time: npm workspace deps
+make install     # one-time: pnpm workspace deps
 make dev         # edge (docker) + Vite dev server (foreground)
 ```
 

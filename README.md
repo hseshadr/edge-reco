@@ -147,11 +147,11 @@ uv run poe gate                                  # lint + type-check + tests + c
 
 # Frontend (Nimbus storefront + @edgeproc/browser)
 cd ../frontend
-npm install
-npm run lint --workspaces --if-present
-npm run typecheck --workspaces --if-present
-npm run test --workspaces --if-present
-npm run build -w frontend
+pnpm install                      # resolves the whole pnpm workspace (app + package)
+pnpm -r run lint                  # biome on both workspace members
+pnpm -r run typecheck             # tsc -b on both
+pnpm -r run test                  # vitest on both
+pnpm -F frontend run build        # prove the workspace link resolves
 ```
 
 The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenarios in `backend/features/` with steps in `backend/tests/bdd/`, integration tests in `backend/tests/integration/`, end-to-end in `backend/tests/e2e/`.
@@ -170,7 +170,7 @@ The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenar
 ## Repo layout
 
 - `backend/` — Python project root (`pyproject.toml`, `uv.lock`).
-  - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `telemetry/` `api/` `cli.py` `config.py`
+  - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `edge/` `telemetry/` `api/` `cli.py` `config.py`
   - `backend/features/` — Gherkin BDD specs, decoupled from step implementations
   - `backend/tests/` — `unit/` `bdd/` `integration/` `e2e/`
   - `backend/deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
@@ -178,7 +178,7 @@ The repo follows strict TDD/BDD: unit tests in `backend/tests/unit/`, BDD scenar
   - `backend/examples/keys/public.key` — pinned Ed25519 verify key for the bundle
   - `backend/demo_server/` — optional FastAPI API-server launcher (not in main gate)
   - `backend/scripts/` — fixture generators for browser-tier parity tests
-- `frontend/` — npm workspace root (`package.json`, `package-lock.json`).
+- `frontend/` — pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`).
   - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
   - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine
 - `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `diagrams/` · `archive/`

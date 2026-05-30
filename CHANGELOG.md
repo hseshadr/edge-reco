@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **`@edgeproc/browser/engine`** — new stable public subpath export promoting the
+  domain-agnostic sync tier (`EngineClient`, OPFS/memory CAS stores, the
+  `syncIndex` state machine, crypto + wire types) to a first-class API. Previously
+  reachable only behind the `./testing` seam marked "NOT production surface"; now
+  a reusable sync tier for downstream consumers of the edgeproc pattern. Purely
+  additive — the `.` (search) and `./testing` surfaces are untouched.
+
 ## [0.3.0] — 2026-05-29
 
 Northstar hardening: full test pyramid wired into CI, modern dependencies, and a
