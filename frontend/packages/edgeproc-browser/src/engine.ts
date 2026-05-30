@@ -17,8 +17,8 @@
 export { EngineClient } from "./engine/client";
 // --- fail-closed crypto primitives (compose your own Verify if needed) ---
 export { SignatureError, sha256Hex, verifyEd25519 } from "./engine/crypto";
-// --- the default byte fetcher (swap for custom transport/headers) ---
-export { fetchBytes } from "./engine/fetchBytes";
+// --- the default byte fetcher + its network-unreachable sentinel ---
+export { fetchBytes, NetworkError } from "./engine/fetchBytes";
 export { MemoryCacheStore } from "./engine/memoryStore";
 // --- content-addressed stores: OPFS for production, in-memory for tests ---
 export { OpfsCacheStore } from "./engine/opfsStore";

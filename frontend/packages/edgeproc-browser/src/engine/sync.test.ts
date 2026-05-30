@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { canonicalBytes, type JsonValue } from "./canonical";
 import { verifyEd25519 } from "./crypto";
+import { NetworkError } from "./fetchBytes";
 import { catalogFetch, latestBytes, pubkeyRaw } from "./fixtures";
 import { IntegrityError } from "./integrity";
 import { MemoryCacheStore } from "./memoryStore";
 import { materializeFile, syncIndex } from "./sync";
-import type { IndexManifest, Verify, VersionPointer } from "./types";
+import type { FetchBytes, IndexManifest, Verify, VersionPointer } from "./types";
 
 const DECODER = new TextDecoder();
 const PUBKEY = pubkeyRaw();
@@ -156,5 +157,92 @@ describe("syncIndex fail-closed behavior", () => {
 		await expect(
 			realVerify(message, pointer.signature),
 		).resolves.toBeUndefined();
+	});
+});
+
+describe("syncIndex offline fallback to the cached active version", () => {
+	/** Prime a store with a fully-synced active version (online first run). */
+	async function primedStore(): Promise<MemoryCacheStore> {
+		const store = new MemoryCacheStore();
+		const { fetchBytes } = catalogFetch();
+		await syncIndex({ baseUrl: "/cat", store, fetchBytes, verify: realVerify });
+		return store;
+	}
+
+	it("serves the cached version (0 fetched) when /latest is network-unreachable", async () => {
+		const store = await primedStore();
+		const active = await store.readActive();
+
+		// A transport that is offline for the pointer fetch.
+		const offlineFetch: FetchBytes = (url) => {
+			if (url.endsWith("/latest")) {
+				return Promise.reject(new NetworkError(`offline: ${url}`));
+			}
+			return Promise.reject(new Error(`should not fetch ${url} while offline`));
+		};
+
+		const result = await syncIndex({
+			baseUrl: "/cat",
+			store,
+			fetchBytes: offlineFetch,
+			verify: realVerify,
+		});
+
+		expect(result.version).toBe(active?.version);
+		expect(result.manifestHash).toBe(active?.manifest_hash);
+		expect(result.chunksFetched).toBe(0);
+		expect(result.bytesFetched).toBe(0);
+		expect(result.chunksReused).toBeGreaterThan(0);
+		// the cached active version is still readable + reassembles byte-correct
+		const manifest = await loadManifest(store, result.manifestHash);
+		for (const entry of manifest.files) {
+			const bytes = await materializeFile(store, manifest, entry.path);
+			expect(bytes.byteLength).toBe(entry.size);
+		}
+	});
+
+	it("re-throws when offline AND no active version is cached (cold + offline)", async () => {
+		const store = new MemoryCacheStore();
+		const offlineFetch: FetchBytes = (url) =>
+			Promise.reject(new NetworkError(`offline: ${url}`));
+
+		await expect(
+			syncIndex({
+				baseUrl: "/cat",
+				store,
+				fetchBytes: offlineFetch,
+				verify: realVerify,
+			}),
+		).rejects.toBeInstanceOf(NetworkError);
+		expect(await store.readActive()).toBeNull();
+	});
+
+	it("does NOT fall back on a signature failure even with a cached version (fail-closed)", async () => {
+		const store = await primedStore();
+		const before = await store.readActive();
+
+		// /latest is reachable but tampered; verify rejects (not a NetworkError).
+		const pointer = realPointer();
+		const tampered: VersionPointer = {
+			...pointer,
+			signature:
+				(pointer.signature[0] === "A" ? "B" : "A") + pointer.signature.slice(1),
+		};
+		const fetchBytes: FetchBytes = (url) => {
+			if (url.endsWith("/latest")) {
+				return Promise.resolve(
+					new TextEncoder().encode(JSON.stringify(tampered)),
+				);
+			}
+			return Promise.reject(new Error(`unexpected ${url}`));
+		};
+
+		await expect(
+			syncIndex({ baseUrl: "/cat", store, fetchBytes, verify: realVerify }),
+		).rejects.toThrow();
+		// the previously-promoted active version is untouched (no silent rollback)
+		expect((await store.readActive())?.manifest_hash).toBe(
+			before?.manifest_hash,
+		);
 	});
 });

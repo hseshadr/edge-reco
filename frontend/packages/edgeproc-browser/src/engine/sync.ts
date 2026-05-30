@@ -4,6 +4,7 @@
 
 import { canonicalBytes, type JsonValue } from "./canonical";
 import { sha256Hex } from "./crypto";
+import { NetworkError } from "./fetchBytes";
 import { IntegrityError } from "./integrity";
 import type {
 	CacheStore,
@@ -136,10 +137,60 @@ async function verifyReassembly(
 	}
 }
 
+/** Count the distinct chunk hashes a manifest references (for the cache result). */
+function distinctChunks(manifest: IndexManifest): number {
+	const seen = new Set<string>();
+	for (const entry of manifest.files) {
+		for (const ref of entry.chunks) {
+			seen.add(ref.hash);
+		}
+	}
+	return seen.size;
+}
+
+/**
+ * Offline fallback: the pointer fetch was network-unreachable. If a previously
+ * promoted active version + its manifest are already cached, serve THAT version
+ * (0 fetched, all reused) instead of failing. Returns null when no usable cache
+ * exists, so the caller re-throws the original network error. Fail-closed: this
+ * path runs ONLY for a NetworkError — integrity/signature failures never reach
+ * here, so a tampered-but-present pointer still throws.
+ */
+async function syncFromCache(store: CacheStore): Promise<SyncResult | null> {
+	const active = await store.readActive();
+	if (active === null) {
+		return null;
+	}
+	const raw = await store.getManifest(active.manifest_hash);
+	const manifest = parseJson<IndexManifest>(raw);
+	await verifyReassembly(manifest, store);
+	return {
+		version: active.version,
+		manifestHash: active.manifest_hash,
+		chunksFetched: 0,
+		chunksReused: distinctChunks(manifest),
+		bytesFetched: 0,
+	};
+}
+
 /** Pull a signed pointer, diff + fetch missing chunks, verify, atomically promote. */
 export async function syncIndex(args: SyncArgs): Promise<SyncResult> {
 	const { baseUrl, store, fetchBytes, verify } = args;
-	const pointer = await fetchPointer(baseUrl, fetchBytes, verify);
+	let pointer: VersionPointer;
+	try {
+		pointer = await fetchPointer(baseUrl, fetchBytes, verify);
+	} catch (error) {
+		// Only network-unreachable triggers the cached-version fallback. A present
+		// but invalid pointer (bad signature) is an IntegrityError-class failure
+		// and must propagate, promoting nothing.
+		if (error instanceof NetworkError) {
+			const cached = await syncFromCache(store);
+			if (cached !== null) {
+				return cached;
+			}
+		}
+		throw error;
+	}
 	const manifest = await fetchManifest(baseUrl, pointer, fetchBytes, store);
 	const { missing, reused } = await missingChunks(manifest, store);
 	const bytesFetched = await fetchMissing(baseUrl, missing, fetchBytes, store);
