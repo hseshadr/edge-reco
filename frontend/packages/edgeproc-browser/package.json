@@ -6,6 +6,7 @@
 	"description": "In-browser signed-bundle sync + hybrid search engine (the edge-proc browser tier).",
 	"exports": {
 		".": "./src/index.ts",
+		"./engine": "./src/engine.ts",
 		"./testing": "./src/testing.ts",
 		"./testing/fixtures": "./src/engine/fixtures.ts"
 	},
