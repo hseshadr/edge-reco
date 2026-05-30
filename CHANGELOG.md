@@ -5,9 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-> Not yet cut to a version. The current released line is **0.3.0** below; the
-> `@edgeproc/browser/engine` subpath export here is staged for the next release
-> and is not part of 0.3.0.
+## [0.4.0] — 2026-05-30
+
+Public-launch readiness: legal attribution for the demo dataset, a clear
+fictional-product disclaimer, a two-altitude README, and a reusable sync-tier
+export — so a cold visitor sees an honest, runnable, properly-credited demo.
 
 ### Added
 - **`@edgeproc/browser/engine`** — new stable public subpath export promoting the
@@ -16,6 +18,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reachable only behind the `./testing` seam marked "NOT production surface"; now
   a reusable sync tier for downstream consumers of the edgeproc pattern. Purely
   additive — the `.` (search) and `./testing` surfaces are untouched.
+- **`NOTICE`** crediting the demo catalog's source: the Kaggle "Amazon
+  E-commerce Products & Reviews Dataset" (MIT), with an Amazon Terms-of-Service
+  caveat for the underlying product data.
+- **Fictional-demo footer** in the storefront UI making explicit that "Nimbus"
+  is a fictional store and the catalog is third-party sample data — plus
+  browser/backend parity and config comments clarifying the shared search knobs.
+
+### Changed
+- **Two-altitude README**: a plain-language front door (what it is, how to run
+  it) above an "under the hood" section for engineers, heroing the in-browser
+  personalization story and surfacing the `edge-proc` dependency.
+- **Offline-resilient `syncIndex`**: when the signed index can't be fetched, the
+  browser tier now falls back to the cached active version instead of failing.
+
+### Fixed
+- **License consistency**: project unified on **Apache-2.0** (the README badge
+  previously contradicted the declared license); data attribution corrected.
+- npm→pnpm drift in the docs; e2e storefront screenshots redirected to a
+  gitignored `test-results/` path.
 
 ## [0.3.0] — 2026-05-29
 

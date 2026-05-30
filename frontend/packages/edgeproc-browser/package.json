@@ -1,7 +1,7 @@
 {
 	"name": "@edgeproc/browser",
 	"private": true,
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"type": "module",
 	"description": "In-browser signed-bundle sync + hybrid search engine (the edge-proc browser tier).",
 	"exports": {
