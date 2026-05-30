@@ -140,5 +140,10 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 	await expect(topRailCard.getByText("Why this ranks here")).toBeVisible();
 
 	// --- Capture the personalized, backend-free state ---
-	await page.screenshot({ path: "../docs/storefront.png", fullPage: true });
+	// Write to the gitignored test-results/ dir so the run never dirties the
+	// committed docs/storefront.png asset that the README references.
+	await page.screenshot({
+		path: "test-results/storefront.png",
+		fullPage: true,
+	});
 });

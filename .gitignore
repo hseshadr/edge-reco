@@ -13,6 +13,9 @@ coverage/
 .mypy_cache/
 htmlcov/
 
+# Test artifacts (playwright screenshots, traces, reports)
+test-results/
+
 # IDE
 .DS_Store
 .idea/
