@@ -43,6 +43,10 @@ You'll see a quick loading screen (it's fetching the catalog and a small AI
 model), then the storefront. Click a few products and the recommendations
 re-rank live. Stop the containers and reload — it keeps working offline.
 
+**Working on the code?** With the toolchain installed (uv + Node + pnpm + Docker),
+`cd backend && uv run poe demo` does the same thing in one command and opens the
+browser for you — signed-bundle edge on `:8081`, the Vite SPA on `:5173`.
+
 ---
 
 ## Under the hood (for developers)

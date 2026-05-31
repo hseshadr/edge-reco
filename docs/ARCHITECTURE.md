@@ -79,7 +79,7 @@ The package is consumed by `frontend/app/` via the pnpm workspace link (`@edgepr
 
 `frontend/app/`:
 
-A React + Vite SPA over `@edgeproc/browser`. The UI is intentionally simple — a 728-product Amazon catalog grid with a search box and a "Recommended for you" rail that re-ranks live as the user clicks. The headline demo (`cd frontend && docker compose up`) brings up the static signed-bundle origin + Caddy edge + the SPA; the browser does the search.
+A React + Vite SPA over `@edgeproc/browser`. The UI is intentionally simple — a 728-product Amazon catalog grid with a search box and a "Recommended for you" rail that re-ranks live as the user clicks. The headline demo — `cd backend && uv run poe demo` (or `cd frontend && docker compose up` for a Docker-only run) — brings up the static signed-bundle origin + Caddy edge + the SPA; the browser does the search.
 
 The SPA pins the verify public key (`public/public.key`) at build time — it never trusts the origin for the key.
 

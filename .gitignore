@@ -23,6 +23,9 @@ test-results/
 *.swp
 *.swo
 
+# Agent / MCP tooling
+.serena/
+
 # Docker
 .docker/
 

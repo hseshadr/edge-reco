@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Turnkey `poe demo` task** — `cd backend && uv run poe demo` brings up the
+  signed-bundle Caddy edge (`:8081`), starts the Vite SPA (`:5173`), and opens the
+  storefront in your browser: one command from clone to running in-tab. Surfaced in
+  the README "Try it" section, `docs/ARCHITECTURE.md`, and `docs/QUICKSTART.md`.
+
 ## [0.4.0] — 2026-05-30
 
 Public-launch readiness: legal attribution for the demo dataset, a clear
