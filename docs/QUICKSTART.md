@@ -46,12 +46,26 @@ The pnpm workspace is rooted at `frontend/`; the SPA lives in `frontend/app/` an
 
 ## 3. Run the demo (backend-free, in-browser)
 
+**Turnkey — starts everything and opens your browser:**
+
+```bash
+cd backend
+uv run poe demo        # edge (:8081) + Vite SPA (:5173) + opens http://localhost:5173
+```
+
+`poe demo` brings up the Caddy edge, installs the frontend deps on first run, starts
+the Vite dev server, and opens the storefront in your browser. Ctrl-C tears the edge
+back down. (Uses the `uv sync --group dev` from step 1, plus Node, pnpm, and Docker.)
+
+**Alternative — fully containerized (Docker only, no Node/pnpm):**
+
 ```bash
 cd frontend
 docker compose up --build
 ```
 
-Then open <http://localhost:5173>. You should see the boot screen step through:
+Then open **http://localhost:5173** manually — unlike `poe demo`, this path does not
+auto-open a browser. Once the tab loads (either path) you'll see the boot screen step through:
 
 1. *Syncing the signed bundle* — pulled from the Caddy edge on `:8081`.
 2. *Reassembling the index* — into OPFS.

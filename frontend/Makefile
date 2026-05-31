@@ -2,7 +2,8 @@
 # bundle from the Caddy edge and runs the engine in the browser.
 #
 # Quickstart (recommended path):
-#   docker compose up --build     # the whole backend-free showcase, one command
+#   cd ../backend && uv run poe demo   # turnkey: edge + SPA + opens your browser
+#   docker compose up --build          # fully containerized (Docker only), one command
 #
 # Iterate on the SPA locally:
 #   make install   # one-time: pnpm workspace deps (app + @edgeproc/browser)
@@ -25,6 +26,7 @@ BACKEND_DIR := $(ROOT_DIR)/backend
 
 help: ## Show this help.
 	@echo "Nimbus frontend (backend-free) targets:"
+	@echo "  cd ../backend && uv run poe demo   turnkey: edge + SPA + opens your browser"
 	@echo "  docker compose up --build   the whole showcase, one command"
 	@echo "  make install   pnpm install (workspace: app + @edgeproc/browser)"
 	@echo "  make edge       serve the signed bundle from Caddy (:8081)"

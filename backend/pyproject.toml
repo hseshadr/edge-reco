@@ -112,13 +112,15 @@ gate = ["fmt-check", "lint", "typecheck", "test"]
 # guard and Vite's `--open`. The demo runs entirely in-browser — no FastAPI here.
 [tool.poe.tasks.demo]
 help = "Turnkey backend-free demo — edge (:8081) + Vite SPA (:5173), opens your browser."
+cwd = "../frontend"            # poe resolves this relative to the project root (backend/)
 shell = """
+set -e
 docker info >/dev/null 2>&1 || { echo 'Docker is not running — start Docker Desktop first.'; exit 1; }
-cd ../frontend
 [ -d node_modules ] || pnpm install
 echo '>> edge -> http://localhost:8081  (signed bundle the SPA syncs)'
 echo '>> app  -> http://localhost:5173  <- opening this in your browser'
 docker compose up -d origin edge
+# stop (not down) the edge on Ctrl-C — keeps the caddy_data/_config volumes for fast restarts
 trap 'docker compose stop origin edge >/dev/null 2>&1' EXIT INT TERM
-cd app && pnpm run dev -- --open
+cd app && pnpm exec vite --open
 """
