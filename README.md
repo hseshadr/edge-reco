@@ -44,8 +44,9 @@ model), then the storefront. Click a few products and the recommendations
 re-rank live. Stop the containers and reload — it keeps working offline.
 
 **Working on the code?** With the toolchain installed (uv + Node + pnpm + Docker),
-`cd backend && uv run poe demo` does the same thing in one command and opens the
+`poe demo` from the repo root does the same thing in one command and opens the
 browser for you — signed-bundle edge on `:8081`, the Vite SPA on `:5173`.
+(`cd backend && uv run poe demo` works too, e.g. without a global poe install.)
 
 ---
 

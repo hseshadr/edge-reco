@@ -1,0 +1,18 @@
+# Repo-root task file so `poe demo` works straight from edge-reco/ (no `cd backend`).
+# The canonical task also lives in backend/pyproject.toml ([tool.poe.tasks.demo]) for
+# `cd backend && uv run poe demo`; keep the two in sync. The demo is backend-free
+# (Docker edge + Vite SPA), so it needs no Python project behind it.
+[tasks.demo]
+help = "Turnkey backend-free demo — edge (:8081) + Vite SPA (:5173), opens your browser."
+cwd = "frontend"            # resolved relative to this file's dir (the repo root)
+shell = """
+set -e
+docker info >/dev/null 2>&1 || { echo 'Docker is not running — start Docker Desktop first.'; exit 1; }
+[ -d node_modules ] || pnpm install
+echo '>> edge -> http://localhost:8081  (signed bundle the SPA syncs)'
+echo '>> app  -> http://localhost:5173  <- opening this in your browser'
+docker compose up -d origin edge
+# stop (not down) the edge on Ctrl-C — keeps the caddy_data/_config volumes for fast restarts
+trap 'docker compose stop origin edge >/dev/null 2>&1' EXIT INT TERM
+cd app && pnpm exec vite --open
+"""

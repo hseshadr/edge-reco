@@ -49,13 +49,16 @@ The pnpm workspace is rooted at `frontend/`; the SPA lives in `frontend/app/` an
 **Turnkey — starts everything and opens your browser:**
 
 ```bash
-cd backend
-uv run poe demo        # edge (:8081) + Vite SPA (:5173) + opens http://localhost:5173
+poe demo               # from the repo root — edge (:8081) + Vite SPA (:5173) + opens http://localhost:5173
+# or, without a global poe install:
+cd backend && uv run poe demo
 ```
 
 `poe demo` brings up the Caddy edge, installs the frontend deps on first run, starts
 the Vite dev server, and opens the storefront in your browser. Ctrl-C tears the edge
-back down. (Uses the `uv sync --group dev` from step 1, plus Node, pnpm, and Docker.)
+back down. (Needs Node, pnpm, and Docker; the `uv run` form also uses the
+`uv sync --group dev` from step 1.) The repo-root `poe demo` reads `poe_tasks.toml`;
+the `backend/` form reads the same task from `backend/pyproject.toml`.
 
 **Alternative — fully containerized (Docker only, no Node/pnpm):**
 
