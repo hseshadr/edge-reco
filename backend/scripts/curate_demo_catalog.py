@@ -11,10 +11,9 @@ for the signed bundle: anyone can ``build-catalog -> index -> bundle`` from it
 offline, with no parquet on disk. Columns match ``scraped_row_to_product`` exactly
 (catalog/preprocessor.py), so the build pipeline needs no changes.
 
-Run from backend/::
+Run from backend/ (--source is required — the dataset is not committed)::
 
-    .venv/bin/python3 scripts/curate_demo_catalog.py
-    .venv/bin/python3 scripts/curate_demo_catalog.py --source /path/to/amazon.parquet
+    .venv/bin/python3 scripts/curate_demo_catalog.py --source /path/to/amazon_products.parquet
 """
 
 from __future__ import annotations
@@ -30,7 +29,6 @@ from pydantic import BaseModel
 from edgereco.catalog.preprocessor import BREADCRUMB_SEP
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_SOURCE = Path.home() / "Downloads" / "amazon_products.parquet"
 DEFAULT_OUTPUT = BACKEND_ROOT / "examples" / "source" / "catalog.csv"
 DEFAULT_CATEGORIES = 12
 DEFAULT_PER_CATEGORY = 60
@@ -164,7 +162,12 @@ def _write_csv(rows: list[CuratedRow], output: Path) -> None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
+    parser.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        help="Path to the source Amazon metadata parquet (Amazon Reviews 2023 schema)",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--categories", type=int, default=DEFAULT_CATEGORIES)
     parser.add_argument("--per-category", type=int, default=DEFAULT_PER_CATEGORY)
