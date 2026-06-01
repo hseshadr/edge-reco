@@ -25,7 +25,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
   - `backend/src/edgereco/` — catalog · embeddings · search · reco · telemetry · api · edge · cli · config
   - `backend/tests/` — unit · bdd · integration · e2e
   - `backend/features/` — Gherkin feature files, **decoupled** from step implementations
-  - `backend/examples/catalog/` — committed signed 728-product **real Amazon** catalog bundle; built via `build-catalog` → `index` → `bundle`
+  - `backend/examples/catalog/` — committed signed 720-product **real Amazon** catalog bundle (balanced across 12 categories); built from `examples/source/catalog.csv` via `build-catalog` → `index` → `bundle`
   - `backend/examples/keys/` — `public.key` (pinned, committed) + `private.key` (gitignored)
   - `backend/deploy/` — Dockerfile · docker-compose.yml · Caddy config
   - `backend/demo_server/` — optional FastAPI API-server launcher (not in main test path)

@@ -125,9 +125,16 @@ describe("loadVectorIndex synthetic correctness", () => {
 
 describe("loadVectorIndex over the real synced bundle", () => {
 	it("reports the real ntotal/dim and reads vectors row<->faiss_id aligned", async () => {
-		const index = await loadVectorIndex(await syncedFiles());
-		expect(index.ntotal).toBe(728);
-		expect(index.dim).toBe(384);
+		const files = await syncedFiles();
+		// Cross-check the loaded FAISS index against the bundle's own declaration
+		// (catalog_meta.json) rather than hardcoding a count that drifts on rebuild.
+		const meta = JSON.parse(DECODER.decode(files.meta)) as {
+			readonly embedding_count: number;
+			readonly embedding_dim: number;
+		};
+		const index = await loadVectorIndex(files);
+		expect(index.ntotal).toBe(meta.embedding_count);
+		expect(index.dim).toBe(meta.embedding_dim);
 		// every stored row is L2-normalized -> a row queried against itself scores ~1.
 		const self = index.rowVector(0);
 		const hits = index.search(self, 1);

@@ -5,6 +5,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Streaming demo-catalog curator** — `backend/scripts/curate_demo_catalog.py`
+  builds a balanced, reproducible catalog source (`backend/examples/source/catalog.csv`)
+  by streaming a real Amazon metadata parquet (memory-bounded; never loads the
+  source's embeddings column). Pass `--source <parquet>`.
+
+### Changed
+- **Affinity-first recommendation rail** — clicking products now *visibly* re-ranks
+  "Recommended for you". `recommend()` selects its candidate pool by session affinity
+  when warm (popularity backfills only when there are fewer than `limit` matches);
+  cold start stays popularity top-N. The scoring formula is unchanged — only candidate
+  *selection* changed. Implemented byte-parity in the Python core (`reco/pool.py`) and
+  the in-browser engine (`poolSelection.ts`).
+- **Demo catalog rebuilt to 720 products across 12 balanced categories** (60 each), so
+  session-aware reranking has real signal to act on (the previous bundle was ~98% one
+  category). The committed signed bundle is re-signed with the existing pinned key, so
+  fail-closed verification is unaffected.
+
+### Fixed
+- The "Recommended for you" rail no longer appears frozen on click — a data + candidate-
+  pool problem, not a wiring bug (the click → profile → rerank loop was always correct).
+
+### Docs
+- Re-attributed the demo catalog to the **Amazon Reviews 2023** dataset (McAuley Lab,
+  UC San Diego) in `NOTICE` and the README, with the underlying-content rights caveat.
+
 ## [0.4.1] — 2026-05-31
 
 Developer-experience polish: a one-command, browser-opening demo runner.

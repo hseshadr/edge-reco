@@ -7,49 +7,29 @@ Third-party data attribution
 ================================================================================
 
 The demo storefront ("Nimbus") ships a committed, signed product catalog bundle
-at `backend/examples/catalog/` (~728 products / ~6,356 reviews, clothing &
-accessories). That catalog is derived from:
+at `backend/examples/catalog/` (720 products, balanced across 12 categories,
+60 each). That catalog is a small curated subset derived from:
 
-    Amazon E-commerce Products & Reviews Dataset
-    Author:  lazylad99
-    Source:  https://www.kaggle.com/datasets/lazylad99/amazon-e-commerce-product-and-review-dataset
-    License: MIT
-    Scope:   ~728 products / ~6,356 reviews, clothing & accessories,
-             scraped from Amazon.com circa March 2025.
+    Amazon Reviews 2023 (item metadata)
+    Authors: Yupeng Hou, Jiacheng Li, Zhankui He, An Yan, Xiusi Chen,
+             Julian McAuley (McAuley Lab, UC San Diego)
+    Source:  https://amazon-reviews-2023.github.io/
+             (Hugging Face: McAuley-Lab/Amazon-Reviews-2023)
+    Cite:    Hou et al., "Bridging Language and Items for Retrieval and
+             Recommendation," 2024 (arXiv:2403.03952).
+    Use:     released for academic / research use.
 
-The committed bundle was produced from that dataset's raw CSVs via
-`edgereco build-catalog` -> `edgereco index` -> `edgereco bundle`. You can
-regenerate it from the raw CSVs with the same commands (see README).
-
---------------------------------------------------------------------------------
-MIT permission notice (covering the uploader's dataset compilation)
---------------------------------------------------------------------------------
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The committed bundle was produced by curating a balanced subset from the source
+metadata (`backend/scripts/curate_demo_catalog.py` -> `backend/examples/source/
+catalog.csv`), then `edgereco build-catalog` -> `edgereco index` ->
+`edgereco bundle`. You can regenerate it with the same commands (see README).
 
 --------------------------------------------------------------------------------
 IMPORTANT CAVEAT
 --------------------------------------------------------------------------------
 
-The MIT license above covers the uploader's COMPILATION of the dataset. The
-underlying product listings, review text, and product images were scraped from
+The dataset above is provided for research use; this attribution is NOT a license
+to the underlying content. The product listings, titles, and images originate from
 Amazon.com and are Amazon/third-party content that remains subject to Amazon's
-Conditions of Use. This attribution is NOT a license to that underlying content.
-If you intend to redistribute or use the underlying content beyond this demo,
-verify your rights independently before doing so.
+Conditions of Use. If you intend to redistribute or use the underlying content
+beyond this demo, verify your rights independently before doing so.

@@ -9,7 +9,7 @@ from typing import Any
 
 from .models import Product
 
-_BREADCRUMB_SEP = "\u203a"  # SINGLE RIGHT-POINTING ANGLE QUOTATION MARK (dataset separator)
+BREADCRUMB_SEP = "\u203a"  # SINGLE RIGHT-POINTING ANGLE QUOTATION MARK (dataset separator)
 _FLOAT_RE = re.compile(r"\d+(?:\.\d+)?")
 _INT_RE = re.compile(r"\d+")
 
@@ -77,7 +77,7 @@ def amazon_row_to_product(
 
 def _split_breadcrumbs(breadcrumbs: str) -> tuple[str, list[str]]:
     """Split 'A > B > C' (U+203A separators) into (category, subcategories)."""
-    parts = [p.strip() for p in str(breadcrumbs).split(_BREADCRUMB_SEP) if p.strip()]
+    parts = [p.strip() for p in str(breadcrumbs).split(BREADCRUMB_SEP) if p.strip()]
     if not parts:
         return ("Uncategorized", [])
     return (parts[0], parts[1:])

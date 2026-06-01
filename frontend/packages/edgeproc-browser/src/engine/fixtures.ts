@@ -10,8 +10,10 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { IndexManifest, VersionPointer } from "./types";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const DECODER = new TextDecoder();
 // src/engine -> __fixtures__/bundle: the package-local copy of the signed bundle.
 const BUNDLE = join(HERE, "__fixtures__", "bundle");
 const EXAMPLES = BUNDLE;
@@ -31,6 +33,30 @@ export function manifestBytes(hash: string): Uint8Array {
 
 export function chunkBytes(hash: string): Uint8Array {
 	return new Uint8Array(readFileSync(join(CATALOG, "chunk", hash)));
+}
+
+/** The active manifest of the committed bundle (latest pointer -> manifest). */
+function activeManifest(): IndexManifest {
+	const pointer = JSON.parse(DECODER.decode(latestBytes())) as VersionPointer;
+	return JSON.parse(
+		DECODER.decode(manifestBytes(pointer.manifest_hash)),
+	) as IndexManifest;
+}
+
+/**
+ * The chunk hash backing catalog_meta.json in the committed bundle — derived from
+ * the manifest, never hardcoded, so it survives every catalog rebuild. Used by the
+ * content-addressing tests that need one known-good real chunk.
+ */
+export function catalogMetaChunkHash(): string {
+	const meta = activeManifest().files.find(
+		(file) => file.path === "catalog_meta.json",
+	);
+	const hash = meta?.chunks[0]?.hash;
+	if (hash === undefined) {
+		throw new Error("catalog_meta.json chunk missing from the bundle manifest");
+	}
+	return hash;
 }
 
 /**

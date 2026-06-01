@@ -9,8 +9,9 @@
 //     -> optional category filter -> slice to limit
 //
 // `total` is the pre-category-filter fused count (search.py total_pre_filter).
-// recommend() mirrors recommend.py: a popularity pool of min(limit*5, N) reranked
-// by the session profile. browse() is the catalog-listing path over products.jsonl.
+// recommend() mirrors recommend.py: an affinity-aware candidate pool (poolSelection.ts
+// — popularity top-N, plus affinity top-M when warm) reranked by the session profile.
+// browse() is the catalog-listing path over products.jsonl.
 //
 // The C2b vector-only parity path is a TEST-ONLY helper, exported separately
 // as `__searchVectorForParity` (not on the public SearchEngine interface).
@@ -24,6 +25,7 @@ import type {
 } from "./domain";
 import type { Embedder } from "./embedder";
 import { KeywordSearcher } from "./keyword";
+import { selectCandidatePool } from "./poolSelection";
 import { reciprocalRankFusion } from "./rerank";
 import { rerank } from "./reranker";
 import { emptyProfile, type SessionProfile } from "./session";
@@ -140,15 +142,7 @@ class HybridSearchEngine implements SearchEngine {
 	public recommend(opts?: RecommendOptions): RecommendResponse {
 		const limit = opts?.limit ?? DEFAULT_LIMIT;
 		const profile = opts?.profile ?? emptyProfile();
-		const poolSize = Math.min(limit * 5, this.#catalog.length);
-		const pool = [...this.#catalog]
-			.sort((a, b) => b.popularity_score - a.popularity_score)
-			.slice(0, poolSize);
-		const candidates: SearchResult[] = pool.map((product) => ({
-			product,
-			score: product.popularity_score,
-			score_components: null,
-		}));
+		const candidates = selectCandidatePool(this.#catalog, profile, limit);
 		const ranked = rerank(candidates, profile);
 		return {
 			results: [...ranked.slice(0, limit)],

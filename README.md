@@ -95,7 +95,7 @@ two tiers are parity-tested against each other.
   pointer plus immutable `manifest/<hash>` and `chunk/<hash>` objects.
   *Content-addressed* means each file is named by the hash of its bytes, so it
   can be cached forever and can't be tampered with undetectably. A committed
-  728-product Amazon bundle lives in `backend/examples/catalog/`.
+  720-product Amazon bundle lives in `backend/examples/catalog/`.
 - **edge** — a Caddy reverse proxy (a small static web server / CDN) applying
   the bundle's cache policy: immutable chunks cached forever, short-TTL pointer.
 - **browser tier** — the Nimbus single-page app (SPA) syncs the bundle into
@@ -180,7 +180,7 @@ uv run edgereco index /tmp/staging /tmp/staging
 
 # 3. sign + publish a content-addressed bundle origin
 uv run edgereco bundle /tmp/staging /tmp/origin examples/keys/private.key \
-    --catalog-id amazon-demo --version v1 --product-count 728
+    --catalog-id amazon-demo --version v1 --product-count 720
 
 # 4. serve by syncing that origin (filesystem URL works too) + verifying the key
 EDGERECO_BUNDLE_BASE_URL=/tmp/origin \
@@ -190,7 +190,7 @@ EDGERECO_BUNDLE_CACHE_DIR=/tmp/bundle-cache \
 ```
 
 The committed `backend/examples/catalog/` is exactly such an origin (built from
-the 728-product Amazon catalog), so step 4 alone — pointed at it — serves the
+the 720-product Amazon catalog), so step 4 alone — pointed at it — serves the
 demo data.
 
 ### CLI
@@ -248,21 +248,22 @@ This demo ships **two different catalogs** — don't confuse them:
 
 | Catalog | Path | What it is |
 | --- | --- | --- |
-| **Demo data (the headline)** | `backend/examples/catalog/` | A committed, signed 728-product bundle of **real Amazon products**. This is what the Nimbus storefront and the offline demo use. |
+| **Demo data (the headline)** | `backend/examples/catalog/` | A committed, signed 720-product bundle of **real Amazon products**, balanced across **12 categories** (60 each) so session-aware reranking visibly personalizes. This is what the Nimbus storefront and the offline demo use. |
 | Synthetic API fixture | `backend/demo_server/catalog/products.jsonl` | 300 **fabricated** products with made-up brands, used only by the optional FastAPI API server. Not real data. |
 
-The committed 728-product bundle is derived from the **Amazon E-commerce
-Products & Reviews Dataset** by *lazylad99* on
-[Kaggle](https://www.kaggle.com/datasets/lazylad99/amazon-e-commerce-product-and-review-dataset),
-published under the **MIT** license. It was produced via `edgereco build-catalog`
-→ `edgereco index` → `edgereco bundle`; you can regenerate it from the raw CSVs
-with the same commands (or `edgereco preprocess` for the Kaggle CSV schema).
+The committed 720-product bundle is a balanced, curated subset of the
+**Amazon Reviews 2023** dataset (item metadata) by the McAuley Lab at UC San Diego
+([amazon-reviews-2023.github.io](https://amazon-reviews-2023.github.io/), released
+for research use; cite Hou et al., *arXiv:2403.03952*). It is produced by
+`scripts/curate_demo_catalog.py` (a balanced 12-category subset →
+`examples/source/catalog.csv`) → `edgereco build-catalog` → `edgereco index` →
+`edgereco bundle`; you can regenerate it with the same commands.
 
-The MIT license covers the uploader's *compilation* of the dataset; the
-underlying product listings, review text, and images were scraped from
-Amazon.com and remain subject to Amazon's terms. See the top-level
-[`NOTICE`](NOTICE) for the full attribution and the rights caveat — and verify
-your rights before redistributing the underlying content.
+This attribution is *not* a license to the underlying content: the product
+listings, titles, and images originate from Amazon.com and remain subject to
+Amazon's terms. See the top-level [`NOTICE`](NOTICE) for the full attribution and
+the rights caveat — and verify your rights before redistributing the underlying
+content.
 
 ### Docs
 
@@ -278,10 +279,11 @@ your rights before redistributing the underlying content.
   - `backend/features/` — Gherkin BDD specs, decoupled from step implementations
   - `backend/tests/` — `unit/` `bdd/` `integration/` `e2e/`
   - `backend/deploy/` — `Dockerfile`, `docker-compose.yml`, Caddy edge config
-  - `backend/examples/catalog/` — committed signed 728-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
+  - `backend/examples/catalog/` — committed signed 720-product Amazon catalog bundle (`latest` + `manifest/` + `chunk/`)
+  - `backend/examples/source/catalog.csv` — committed, reproducible build source for the bundle (12 balanced categories)
   - `backend/examples/keys/public.key` — pinned Ed25519 verify key for the bundle
   - `backend/demo_server/` — optional FastAPI API-server launcher (not in main gate); ships the 300-product synthetic fixture
-  - `backend/scripts/` — fixture generators for browser-tier parity tests
+  - `backend/scripts/` — `curate_demo_catalog.py` (builds `examples/source/catalog.csv`) + browser-tier parity-fixture generators
 - `frontend/` — pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`).
   - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
   - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine

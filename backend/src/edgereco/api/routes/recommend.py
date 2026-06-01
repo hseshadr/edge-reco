@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from edgereco.api.deps import Container, get_session_id
 from edgereco.api.models import RecommendResponse
-from edgereco.catalog.models import SearchResult
+from edgereco.reco.pool import select_candidate_pool
 from edgereco.reco.reranker import rerank
 
 router = APIRouter()
@@ -21,8 +21,6 @@ def recommend(
     session_id: Annotated[str, Depends(get_session_id)] = "",
 ) -> RecommendResponse:
     profile = container.sessions.get(session_id)
-    pool_size = min(limit * 5, len(container.catalog))
-    pool = sorted(container.catalog, key=lambda p: p.popularity_score, reverse=True)[:pool_size]
-    candidates = [SearchResult(product=p, score=p.popularity_score) for p in pool]
+    candidates = select_candidate_pool(container.catalog, profile, limit)
     ranked = rerank(candidates, profile)
     return RecommendResponse(results=ranked[:limit], session_clicks=profile.click_count)

@@ -16,8 +16,8 @@ pins at cosine ~ 1.
 Run from backend/::
 
     .venv/bin/python3 scripts/gen_hybrid_fixture.py
-    (cd ../frontend/app && npx biome check --write \
-        src/engine/__fixtures__/hybrid_parity.json)
+    (cd ../frontend && pnpm exec biome check --write \
+        packages/edgeproc-browser/src/engine/__fixtures__/hybrid_parity.json)
 """
 
 from __future__ import annotations
@@ -40,7 +40,9 @@ from edgereco.search.vector import VectorSearcher
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_ROOT.parent
 CATALOG = BACKEND_ROOT / "examples" / "catalog"
-FIXTURE = REPO_ROOT / "frontend" / "app" / "src" / "engine" / "__fixtures__" / "hybrid_parity.json"
+FIXTURE = (
+    REPO_ROOT / "frontend/packages/edgeproc-browser/src/engine/__fixtures__/hybrid_parity.json"
+)
 DIM = 384
 LIMIT = 10
 QUERIES = [
@@ -121,7 +123,7 @@ def main() -> None:
     }
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     FIXTURE.write_text(json.dumps(fixture, indent="\t") + "\n")
-    print(f"wrote {FIXTURE.relative_to(BACKEND_ROOT)} ({FIXTURE.stat().st_size} bytes)")
+    print(f"wrote {FIXTURE.relative_to(REPO_ROOT)} ({FIXTURE.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
