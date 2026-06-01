@@ -74,7 +74,7 @@ auto-open a browser. Once the tab loads (either path) you'll see the boot screen
 2. *Reassembling the index* — into OPFS.
 3. *Loading the model* — transformers.js fetches `Xenova/all-MiniLM-L6-v2`.
 
-Then the 728-product Amazon storefront. Click a few products: the "Recommended for you" rail re-ranks toward your taste, **no network round trip per click**. Stop `origin` + `edge` and reload: the bundle is in OPFS and the model is cached, so it keeps working offline.
+Then the 720-product Amazon storefront (12 categories, 60 products each). Click a few products in one category: the "Recommended for you" rail visibly re-ranks toward that category, **no network round trip per click**. Stop `origin` + `edge` and reload: the bundle is in OPFS and the model is cached, so it keeps working offline.
 
 ## 4. Iterate on the SPA locally
 
@@ -90,21 +90,32 @@ make dev         # edge (docker) + Vite dev server (foreground)
 
 ## 5. Index a fresh catalog
 
+The committed demo bundle is rebuilt from `backend/examples/source/catalog.csv` —
+a small, committed, reproducible source (no external download needed):
+
 ```bash
 cd backend
 
-# Scraped Amazon CSV → products.jsonl
-uv run edgereco build-catalog ~/data/amazon.csv /tmp/staging/products.jsonl
+# Scraped Amazon CSV → products.jsonl  (the committed demo source; or your own CSV)
+uv run edgereco build-catalog examples/source/catalog.csv /tmp/cache/products.jsonl
 
-# Build the FAISS index
-uv run edgereco index /tmp/staging /tmp/staging
+# Build the FAISS index (reads /tmp/cache/products.jsonl, writes /tmp/staging/)
+uv run edgereco index /tmp/cache /tmp/staging
 
-# Sign + publish a content-addressed bundle origin
-uv run edgereco bundle /tmp/staging /tmp/origin examples/keys/private.key \
-    --catalog-id my-catalog --version v1 --product-count <N>
+# Sign + publish a content-addressed bundle origin (reuse the pinned signing key)
+uv run edgereco bundle /tmp/staging examples/catalog examples/keys/private.key \
+    --catalog-id amazon-demo --version v1 --product-count 720 --embedding-count 720
 ```
 
-Drop `/tmp/origin` behind any static HTTP server / CDN and point the SPA at it (`VITE_BUNDLE_BASE_URL` at build time).
+Drop the origin behind any static HTTP server / CDN and point the SPA at it (`VITE_BUNDLE_BASE_URL` at build time).
+
+To regenerate `examples/source/catalog.csv` itself — a balanced 12-category subset of
+a real Amazon dataset — run the streaming curation script (memory-bounded; never
+loads the source's embeddings column):
+
+```bash
+uv run python scripts/curate_demo_catalog.py --source /path/to/amazon_products.parquet
+```
 
 ## 6. Run as an API server (optional)
 

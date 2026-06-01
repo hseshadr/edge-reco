@@ -59,18 +59,38 @@ describe("selectCandidatePool", () => {
 		expect(selectCandidatePool(catalog, emptyProfile(), 2)).toHaveLength(10);
 	});
 
-	it("includes an affinity match that falls outside the popularity pool", () => {
+	it("is drawn purely from affinity matches when there are at least `limit`", () => {
 		const catalog = Array.from({ length: 50 }, (_, i) =>
 			product({ id: `e${i}`, category: "Electronics", popularity_score: 0.9 }),
 		);
-		catalog.push(
-			product({ id: "niche", category: "Clothing", popularity_score: 0.01 }),
-		);
+		for (let i = 0; i < 20; i++) {
+			catalog.push(
+				product({ id: `c${i}`, category: "Clothing", popularity_score: 0.5 }),
+			);
+		}
 		const profile = profileWith({ category: new Map([["Clothing", 1.0]]) });
-		expect(ids(selectCandidatePool(catalog, profile, 2))).toContain("niche");
+		const pool = selectCandidatePool(catalog, profile, 2);
+		// >= limit Clothing matches → rail is drawn purely from them; Electronics excluded.
+		expect(new Set(pool.map((r) => r.product.category))).toEqual(
+			new Set(["Clothing"]),
+		);
+		expect(ids(pool)).not.toContain("e0");
 	});
 
-	it("still includes the popularity leader when warm", () => {
+	it("surfaces an unpopular affinity match deep in the tail", () => {
+		const catalog = Array.from({ length: 50 }, (_, i) =>
+			product({ id: `e${i}`, category: "Electronics", popularity_score: 0.9 }),
+		);
+		for (let i = 0; i < 5; i++) {
+			catalog.push(
+				product({ id: `c${i}`, category: "Clothing", popularity_score: 0.01 }),
+			);
+		}
+		const profile = profileWith({ category: new Map([["Clothing", 1.0]]) });
+		expect(ids(selectCandidatePool(catalog, profile, 2))).toContain("c0");
+	});
+
+	it("backfills popularity when there are fewer than `limit` matches", () => {
 		const catalog = Array.from({ length: 50 }, (_, i) =>
 			product({
 				id: `e${i}`,
@@ -82,7 +102,9 @@ describe("selectCandidatePool", () => {
 			product({ id: "niche", category: "Clothing", popularity_score: 0.01 }),
 		);
 		const profile = profileWith({ category: new Map([["Clothing", 1.0]]) });
-		expect(ids(selectCandidatePool(catalog, profile, 2))).toContain("e49");
+		const result = ids(selectCandidatePool(catalog, profile, 5));
+		expect(result).toContain("niche"); // the lone match
+		expect(result).toContain("e49"); // ...plus popularity backfill
 	});
 
 	it("dedupes an item that is both popular and an affinity match", () => {

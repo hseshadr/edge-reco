@@ -1,10 +1,11 @@
 """Candidate-pool selection for recommend().
 
-Cold (empty profile): popularity top-N — the legacy behavior. Warm: the union of
-popularity top-N and an affinity top-M, deduped by id, so low-popularity items
-matching the session's taste become candidates and can surface after rerank.
-The scoring formula is unchanged; only candidate *selection* broadens. Mirrored
-in @edgeproc/browser's poolSelection.ts.
+Cold (empty profile): popularity top-N — the legacy behavior. Warm (has affinity):
+the items matching the session's category/tag/brand affinity, so "Recommended for
+you" reflects demonstrated interest. The rerank then orders those matches by the
+full formula (popular-within-your-interests first). Popularity backfills only when
+there are fewer than `limit` matches, so the rail always fills. The scoring formula
+is unchanged; only candidate *selection* changes. Mirrored in poolSelection.ts.
 """
 
 from __future__ import annotations
@@ -33,11 +34,9 @@ def _popularity_top(catalog: list[Product], n: int) -> list[Product]:
     return sorted(catalog, key=lambda p: p.popularity_score, reverse=True)[:n]
 
 
-def _affinity_top(catalog: list[Product], profile: SessionProfile, m: int) -> list[Product]:
-    scored = [(p, _affinity_score(p, profile)) for p in catalog]
-    matching = [(p, s) for p, s in scored if s > 0.0]
-    matching.sort(key=lambda ps: ps[1], reverse=True)
-    return [p for p, _ in matching[:m]]
+def _affinity_matches(catalog: list[Product], profile: SessionProfile) -> list[Product]:
+    """Every product the session has shown affinity for (rerank orders them later)."""
+    return [p for p in catalog if _affinity_score(p, profile) > 0.0]
 
 
 def _dedup_by_id(products: list[Product]) -> list[Product]:
@@ -53,9 +52,15 @@ def _dedup_by_id(products: list[Product]) -> list[Product]:
 def select_candidate_pool(
     catalog: list[Product], profile: SessionProfile, limit: int
 ) -> list[SearchResult]:
-    """Eligible products for rerank: popularity top-N, plus affinity top-M when warm."""
+    """Eligible products for rerank: affinity matches when warm (popularity backfills
+    if fewer than `limit`), else popularity top-N."""
     size = min(limit * 5, len(catalog))
-    pool = _popularity_top(catalog, size)
-    if _has_affinity(profile):
-        pool = _dedup_by_id(pool + _affinity_top(catalog, profile, size))
+    if not _has_affinity(profile):
+        pool = _popularity_top(catalog, size)
+    else:
+        matches = _affinity_matches(catalog, profile)
+        if len(matches) >= limit:
+            pool = matches
+        else:
+            pool = _dedup_by_id(matches + _popularity_top(catalog, size))
     return [SearchResult(product=p, score=p.popularity_score) for p in pool]

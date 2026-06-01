@@ -9,14 +9,14 @@ import { expect, test } from "@playwright/test";
  *
  *   boot screen → sync the signed bundle into OPFS (real ed25519 + sha256 +
  *   content-addressed chunks, in a Worker) → storefront mounts over the real
- *   728-product Amazon catalog → search embeds a query in-tab and returns real
+ *   720-product Amazon catalog → search embeds a query in-tab and returns real
  *   products → clicking 3 products folds into the in-tab session profile (NO
  *   network) → the "Recommended for you" rail re-ranks and the session badge
  *   increments → "why?" reveals the score bars.
  *
  * REAL vs STUBBED:
  *   - REAL: the sync engine (OPFS, signature + chunk verification, reassembly of
- *     the 728-product catalog), the BM25 ⊕ vector → RRF → session-rerank search
+ *     the 720-product catalog), the BM25 ⊕ vector → RRF → session-rerank search
  *     engine, and the in-tab session profile / click→re-rank loop.
  *   - STUBBED: only the embedder TRANSPORT. The demo's
  *     `window.__edgeprocDemoTestHooks.makeEmbedder` factory returns a
@@ -80,7 +80,7 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 
 	// --- Boot: the signed bundle syncs in-tab and the storefront mounts ---
 	// The boot screen steps through real stages; once ready the grid populates.
-	// A generous timeout covers sync + 728-product index reassembly.
+	// A generous timeout covers sync + 720-product index reassembly.
 	const productCards = page.locator(PRODUCT_CARD);
 	await expect(productCards.first()).toBeVisible({ timeout: 60_000 });
 	expect(await productCards.count()).toBeGreaterThanOrEqual(3);

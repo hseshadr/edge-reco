@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./crypto";
-import { chunkBytes } from "./fixtures";
+import { catalogMetaChunkHash, chunkBytes } from "./fixtures";
 import { decompress } from "./zstd";
 
-// A real chunk hash from examples/catalog (catalog_meta.json's single chunk).
-const REAL_CHUNK =
-	"baff671db712e38859be1046ef85ae0af6ba86bfa57fe01a69a3d42bcbe7fdda";
+// A real chunk hash from examples/catalog (catalog_meta.json's single chunk),
+// derived from the manifest so it survives every catalog rebuild.
+const REAL_CHUNK = catalogMetaChunkHash();
 
 describe("zstd decompress", () => {
 	it("decompresses a real catalog chunk whose plaintext sha256 matches its name", async () => {

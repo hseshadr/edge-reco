@@ -1,9 +1,10 @@
 // Candidate-pool selection for recommend(), ported from edge-reco's reco/pool.py.
-// Cold (empty profile): popularity top-N — the legacy behavior. Warm: the union of
-// popularity top-N and an affinity top-M, deduped by id, so low-popularity items
-// matching the session's taste become candidates and can surface after rerank.
-// The scoring formula (reranker.ts) is unchanged; only candidate *selection*
-// broadens. Logic matches pool.py exactly.
+// Cold (empty profile): popularity top-N — the legacy behavior. Warm (has affinity):
+// the items matching the session's category/tag/brand affinity, so "Recommended for
+// you" reflects demonstrated interest; the rerank then orders those matches by the
+// full formula (popular-within-your-interests first). Popularity backfills only when
+// there are fewer than `limit` matches. The scoring formula (reranker.ts) is
+// unchanged; only candidate *selection* changes. Logic matches pool.py exactly.
 
 import type { Product, SearchResult } from "./domain";
 import { SCORING_WEIGHTS } from "./reranker";
@@ -42,17 +43,12 @@ function popularityTop(catalog: ReadonlyArray<Product>, n: number): Product[] {
 		.slice(0, n);
 }
 
-function affinityTop(
+function affinityMatches(
 	catalog: ReadonlyArray<Product>,
 	profile: SessionProfile,
-	m: number,
 ): Product[] {
-	return catalog
-		.map((product) => ({ product, score: affinityScore(product, profile) }))
-		.filter((entry) => entry.score > 0)
-		.sort((a, b) => b.score - a.score)
-		.slice(0, m)
-		.map((entry) => entry.product);
+	// Every product the session has shown affinity for (rerank orders them later).
+	return catalog.filter((product) => affinityScore(product, profile) > 0);
 }
 
 function dedupeById(products: ReadonlyArray<Product>): Product[] {
@@ -67,16 +63,25 @@ function dedupeById(products: ReadonlyArray<Product>): Product[] {
 	return unique;
 }
 
-/** Eligible products for rerank: popularity top-N, plus affinity top-M when warm. */
+/**
+ * Eligible products for rerank: affinity matches when warm (popularity backfills if
+ * fewer than `limit`), else popularity top-N.
+ */
 export function selectCandidatePool(
 	catalog: ReadonlyArray<Product>,
 	profile: SessionProfile,
 	limit: number,
 ): SearchResult[] {
 	const size = Math.min(limit * 5, catalog.length);
-	let pool = popularityTop(catalog, size);
-	if (hasAffinity(profile)) {
-		pool = dedupeById([...pool, ...affinityTop(catalog, profile, size)]);
+	let pool: Product[];
+	if (!hasAffinity(profile)) {
+		pool = popularityTop(catalog, size);
+	} else {
+		const matches = affinityMatches(catalog, profile);
+		pool =
+			matches.length >= limit
+				? matches
+				: dedupeById([...matches, ...popularityTop(catalog, size)]);
 	}
 	return pool.map((product) => ({
 		product,
