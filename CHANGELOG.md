@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-01
+
+The session-aware reranker now *shows*: clicking products visibly re-ranks the
+"Recommended for you" rail, backed by a balanced multi-category demo catalog.
+
 ### Added
 - **Streaming demo-catalog curator** — `backend/scripts/curate_demo_catalog.py`
   builds a balanced, reproducible catalog source (`backend/examples/source/catalog.csv`)
