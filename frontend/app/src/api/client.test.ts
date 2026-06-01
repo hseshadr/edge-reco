@@ -138,6 +138,12 @@ describe("backend-free data layer", () => {
 		expect(warm.session_clicks).toBe(3);
 		const warmOrder = warm.results.map((r) => r.product.id).join(",");
 		expect(warmOrder).not.toBe(coldOrder);
+
+		// Meaningful personalization (not just a tie-break reshuffle): the affinity-aware
+		// pool surfaces at least one product the cold rail never showed.
+		const coldIds = new Set(cold.results.map((r) => r.product.id));
+		const newcomers = warm.results.filter((r) => !coldIds.has(r.product.id));
+		expect(newcomers.length).toBeGreaterThan(0);
 	});
 
 	it("ignores clicks on unknown product ids", async () => {
