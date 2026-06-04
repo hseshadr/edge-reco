@@ -41,6 +41,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - **Catalog sync**: signed, content-addressed bundle (`latest` → `manifest/<hash>` → `chunk/<hash>`), Ed25519-verified fail-closed; Caddy edge cache. Bundle ships the prebuilt FAISS `vector/` (zero recompute on the edge).
 - **Architecture**: all-Pydantic models throughout v1 (wire/domain split is a future concern); Protocol-based DI for infrastructure
 - **Zero backend calls after sync** — runtime is offline-capable
+- **Uplink optional & off the inference path** — the flywheel uplink (clicks → batched beacon → `/events`) is gated by `VITE_EVENTS_URL` (unset = disabled), fire-and-forget, and never blocks/breaks the app or gates the in-tab rail re-rank
 
 ## Workflow
 - **Spec-first**: brainstorm → spec → plan → subagent implementation (see `superpowers:*` skills)

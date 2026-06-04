@@ -905,6 +905,34 @@ input {
 	font-size: 14px;
 }
 
+/* Flywheel uplink status pill — unobtrusive, sits above the footer. */
+.sync-badge {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 24px auto 0;
+	padding: 7px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+	background: var(--paper);
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+	width: fit-content;
+}
+
+.sync-badge__dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--signal);
+}
+
+/* On-device (uplink disabled): a calmer, dimmer dot. */
+.sync-badge--local .sync-badge__dot {
+	background: var(--muted);
+}
+
 /* =========================================================================
    BOOT: in-browser engine bootstrap screen (sync bundle / load model)
    ========================================================================= */

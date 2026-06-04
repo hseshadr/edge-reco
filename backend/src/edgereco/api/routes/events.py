@@ -21,6 +21,10 @@ router = APIRouter()
 
 class EventsBody(BaseModel):
     events: list[InteractionEvent]
+    # Optional in-body session id for the beacon uplink: navigator.sendBeacon
+    # cannot set an X-Session-Id header, so the client folds it into the payload.
+    # When present it wins over the header; absent, the header path is unchanged.
+    session_id: str | None = None
 
 
 @router.post("/events", response_model=EventsResponse)
@@ -29,12 +33,13 @@ def post_events(
     container: Container,
     session_id: Annotated[str, Depends(get_session_id)] = "",
 ) -> EventsResponse:
+    effective_session = body.session_id or session_id
     for event in body.events:
         product = container.by_id.get(event.product_id)
         if product is None:
             logger.warning("unknown product_id in event: %s", event.product_id)
         else:
-            container.sessions.update(session_id, _updater(product, event.event_type))
+            container.sessions.update(effective_session, _updater(product, event.event_type))
         container.events.append(event)
     return EventsResponse(received=len(body.events))
 

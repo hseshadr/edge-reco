@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Flywheel uplink (the "events back to the cloud" loop)** — clicks are now
+  captured in-tab, persisted (localStorage), and periodically flushed in batches
+  to a "mimicked cloud" collector (the existing FastAPI `/events`). It is an
+  **optional, async, fire-and-forget beacon kept entirely off the inference
+  path** and **off by default**: with `VITE_EVENTS_URL` unset the demo makes zero
+  backend calls (the headline invariant holds). New `poe demo-flywheel` brings up
+  the collector container and runs the SPA with the uplink enabled; a `SyncBadge`
+  shows "N interactions synced to cloud". Implemented in
+  `frontend/app/src/telemetry/uplink.ts` (bounded queue, `fetch(keepalive)` +
+  `navigator.sendBeacon` on unload), wired into `sendEvent` without touching the
+  in-tab rerank. The collector's `/events` gained an optional in-body `session_id`
+  so beacon batches (which can't set headers) attribute correctly.
+  _Retrain half (aggregate events → recompute popularity → republish the signed
+  bundle) is intentionally future work._
+
 ## [0.5.1] — 2026-06-03
 
 Make the turnkey `poe demo` robust against a cross-project Docker collision that

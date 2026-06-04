@@ -6,6 +6,7 @@ import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { ProductGrid } from "./ProductGrid";
 import { RecommendRail } from "./RecommendRail";
+import { SyncBadge } from "./SyncBadge";
 import { Toast } from "./Toast";
 
 const RAIL_LIMIT = 8;
@@ -180,6 +181,8 @@ export function Storefront() {
 					onPick={onPick}
 				/>
 			</main>
+
+			<SyncBadge />
 
 			<Footer />
 

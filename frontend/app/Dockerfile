@@ -37,6 +37,11 @@ COPY . .
 ARG VITE_BUNDLE_BASE_URL=http://localhost:8081
 ENV VITE_BUNDLE_BASE_URL=${VITE_BUNDLE_BASE_URL}
 
+# Optional flywheel uplink sink, baked at build time (empty = uplink disabled,
+# the backend-free default). `poe demo-flywheel` sets it for the local dev path.
+ARG VITE_EVENTS_URL=
+ENV VITE_EVENTS_URL=${VITE_EVENTS_URL}
+
 # Build only the SPA workspace; it resolves @edgeproc/browser via the workspace link.
 # The workspace member is named "frontend" in app/package.json so `-F frontend` works.
 RUN pnpm -F frontend run build

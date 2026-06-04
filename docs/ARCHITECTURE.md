@@ -117,6 +117,7 @@ Regenerate via `backend/scripts/gen_*_fixture.py`. The browser tests under `fron
 - **Hybrid search**: BM25 + FAISS vector + RRF, in that order.
 - **Catalog sync**: signed, content-addressed, fail-closed on tampering. No exception.
 - **Zero backend calls after sync**: once the bundle is local, the runtime is offline-capable. Don't introduce a runtime backend dep.
+- **Uplink is optional & off the inference path**: search / recommend / rerank / sync make zero backend calls. The flywheel uplink (a click is captured in-tab, persisted, then batched as a fire-and-forget beacon to the `/events` collector) is gated by `VITE_EVENTS_URL` — **unset = fully disabled** — and must never block or break the app. It feeds the cloud's future retrain; it never gates the in-tab rail re-rank.
 
 ## Further reading
 

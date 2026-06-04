@@ -4,11 +4,14 @@
 //   search()   -> engine.search(query)        (embed in-tab -> BM25⊕vector -> RRF -> rerank)
 //   recommend()-> engine.recommend()          (popularity pool reranked by the live profile)
 //   browse()   -> engine.browse()             (catalog listing over products.jsonl)
-//   sendEvent()-> fold the click into the in-tab SessionProfile  (NO network)
+//   sendEvent()-> fold the click into the in-tab SessionProfile (NO network),
+//                 and ALSO hand it to the flywheel uplink (off the inference
+//                 path; disabled unless VITE_EVENTS_URL is set)
 //
 // The whole point of the demo lives in sendEvent: a click updates the in-browser
 // profile, so the very next recommend() re-ranks toward your taste — entirely
-// in-tab, no round trip. The SearchResponse/RecommendResponse/BrowseResponse
+// in-tab, no round trip. (The uplink is a separate, optional, fire-and-forget
+// beacon — it never gates the rail re-rank.) The SearchResponse/RecommendResponse/BrowseResponse
 // shapes are byte-identical to the old HTTP contract, so the components that
 // consume this module did not change.
 //
@@ -27,6 +30,7 @@ import {
 	type SearchEngine,
 	type SessionProfile,
 } from "@edgeproc/browser";
+import { enqueueUplink } from "../telemetry/uplink";
 import type {
 	BrowseResponse,
 	InteractionEvent,
@@ -135,6 +139,10 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 			if (product !== undefined) {
 				profile = applyInteraction(profile, product, evt.event_type);
 			}
+			// Off the inference path: a click ALSO feeds the flywheel uplink —
+			// captured locally and later batched to the mimicked cloud. No-op when
+			// the uplink is disabled (VITE_EVENTS_URL unset). Never blocks/throws.
+			enqueueUplink(evt);
 			return Promise.resolve();
 		},
 		catalogInfo(): Promise<{ readonly count: number }> {

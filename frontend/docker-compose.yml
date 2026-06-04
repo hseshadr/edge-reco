@@ -72,9 +72,42 @@ services:
       retries: 5
       start_period: 5s
 
+  # Mimicked cloud: the FastAPI `/events` collector (demo_server) — the uplink
+  # SINK for the flywheel. NOT part of the backend-free default demo; brought up
+  # only by `poe demo-flywheel` (and via the `flywheel` compose profile). It
+  # SYNCS the same signed bundle from the edge (prebuilt FAISS, zero recompute)
+  # and serves CORS so the browser can POST batched interaction events to it.
+  collector:
+    profiles: ["flywheel"]
+    build:
+      # ~/dev/oss — the demo_server image needs all three sibling repos (see the
+      # Dockerfile header); this compose file lives two levels under that root.
+      context: ../..
+      dockerfile: edge-reco/backend/demo_server/Dockerfile
+    container_name: nimbus-collector
+    depends_on:
+      edge:
+        condition: service_healthy
+    environment:
+      DEMO_HOST: 0.0.0.0
+      DEMO_PORT: "8000"
+      DEMO_CORS_ORIGINS: http://localhost:5173
+      # Sync the SAME signed bundle the browser uses (prebuilt vector/, no rebuild).
+      EDGERECO_BUNDLE_BASE_URL: http://edge:8081
+      EDGERECO_VERIFY_KEY_PATH: /workspace/edge-reco/backend/examples/keys/public.key
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
+
   # The Nimbus SPA: a static bundle. VITE_BUNDLE_BASE_URL is baked at build time
   # to the host-mapped edge origin, because the BROWSER (not this container) is
-  # what syncs the signed bundle from it.
+  # what syncs the signed bundle from it. VITE_EVENTS_URL is the optional uplink
+  # sink — empty by default (backend-free); set it to enable the flywheel.
   frontend:
     build:
       # Context is the npm-workspace root (frontend/) so the build sees the root
@@ -83,6 +116,7 @@ services:
       dockerfile: app/Dockerfile
       args:
         VITE_BUNDLE_BASE_URL: http://localhost:8081
+        VITE_EVENTS_URL: ${VITE_EVENTS_URL:-}
     container_name: nimbus-frontend
     ports:
       - "5173:5173"

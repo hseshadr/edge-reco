@@ -22,3 +22,26 @@ trap 'docker compose stop origin edge >/dev/null 2>&1' EXIT INT TERM
 node app/scripts/check-edge.mjs
 cd app && pnpm exec vite --open
 """
+
+# Same demo, PLUS the flywheel uplink: interaction events are captured in-tab and
+# periodically flushed to a mimicked-cloud collector (the FastAPI /events on
+# :8000). Inference stays 100% local — the uplink is an optional, off-path
+# beacon. This brings up an extra backend container, so it's a separate task and
+# NOT the backend-free headline `demo`.
+[tasks.demo-flywheel]
+help = "Demo + flywheel uplink — events flush to a mimicked cloud collector (:8000)."
+cwd = "frontend"
+shell = """
+set -e
+docker info >/dev/null 2>&1 || { echo 'Docker is not running — start Docker Desktop first.'; exit 1; }
+[ -d node_modules ] || pnpm install
+echo '>> edge      -> http://localhost:8081  (signed bundle the SPA syncs)'
+echo '>> collector -> http://localhost:8000  (mimicked cloud — receives interaction events)'
+echo '>> app       -> http://localhost:5173  <- opening this in your browser'
+# First run builds the collector image (the engine + siblings) — that is the
+# opt-in cost of the flywheel; the plain `demo` stays image-free.
+docker compose up -d --wait origin edge collector
+trap 'docker compose stop origin edge collector >/dev/null 2>&1' EXIT INT TERM
+node app/scripts/check-edge.mjs
+cd app && VITE_EVENTS_URL=http://localhost:8000/events pnpm exec vite --open
+"""

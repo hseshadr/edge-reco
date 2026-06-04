@@ -48,6 +48,14 @@ re-rank live. Stop the containers and reload — it keeps working offline.
 browser for you — signed-bundle edge on `:8081`, the Vite SPA on `:5173`.
 (`cd backend && uv run poe demo` works too, e.g. without a global poe install.)
 
+**See the flywheel:** `poe demo-flywheel` adds a "mimicked cloud" collector on
+`:8081`→`:8000` and shows the uplink half of the loop — clicks are captured in-tab
+and periodically flushed (batched, fire-and-forget) to the FastAPI `/events`
+endpoint, so the cloud could later retrain. Inference still runs 100% locally; the
+uplink is optional and off by default (the plain `poe demo` makes zero backend
+calls). Watch the `POST /events` requests and the "N interactions synced to cloud"
+badge.
+
 ---
 
 ## Under the hood (for developers)
