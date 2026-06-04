@@ -55,6 +55,9 @@ jobs:
       - name: Unit tests (vitest) — package + app
         run: pnpm -r run test
 
+      - name: Demo preflight regression (node:test) — :8081 bundle-match check
+        run: pnpm -F frontend run test:preflight
+
       - name: Build app (proves the workspace link resolves)
         run: pnpm -F frontend run build
 

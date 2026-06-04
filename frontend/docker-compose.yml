@@ -24,6 +24,13 @@
 # │ build. (`make dev` is still the lightest way to iterate on the SPA.)     │
 # └─────────────────────────────────────────────────────────────────────────┘
 
+# Pin the compose project name so this demo's volumes/network are namespaced
+# `nimbus-demo_*` instead of the directory-derived default `frontend` — which any
+# sibling repo with its own `frontend/` compose dir would also claim, sharing
+# (and contaminating) the same caddy_data volume + network. Container names are
+# already nimbus-*; this closes the volume/network half of the same collision.
+name: nimbus-demo
+
 services:
   # Static-file origin: serves the committed signed bundle (../backend/examples/
   # catalog/: flat `latest`, `manifest/<hash>`, `chunk/<hash>`). Read-only mount.

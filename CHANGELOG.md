@@ -5,6 +5,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-06-03
+
+Make the turnkey `poe demo` robust against a cross-project Docker collision that
+surfaced as a cryptic **"signature verification failed"** in the browser. The
+engine, signed bundle, pinned key, and fail-closed verify were all correct — the
+failure was purely in demo orchestration when another project occupied `:8081`.
+
+### Fixed
+- **Isolated the demo's Docker namespace** — `frontend/docker-compose.yml` now pins
+  `name: nimbus-demo`, so its volumes/network are `nimbus-demo_*` instead of the
+  directory-derived default `frontend`. A sibling repo with its own `frontend/`
+  compose dir no longer shares (and contaminates) the same `caddy_data` volume.
+  This was the root cause: a foreign-but-valid signed `/latest` answered on `:8081`
+  and failed the SPA's pinned-key verify.
+- **`poe demo` now fails clearly, early** — the task runs `docker compose up -d
+  --wait` (no startup race) and a preflight (`frontend/app/scripts/check-edge.mjs`)
+  that asserts `:8081/latest` matches this repo's committed bundle pointer before
+  opening the SPA. If another project occupies `:8081`, the user gets an actionable
+  terminal message instead of a browser crypto error.
+
+### Added
+- **Preflight regression test** — `frontend/app/scripts/check-edge.test.mjs`
+  (`pnpm test:preflight`, zero-dep `node:test`) covers the match / foreign-bundle /
+  unreachable / non-200 / malformed-pointer branches; wired into CI.
+
 ## [0.5.0] — 2026-06-01
 
 The session-aware reranker now *shows*: clicking products visibly re-ranks the

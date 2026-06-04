@@ -9,7 +9,13 @@ export default defineConfig({
 	test: {
 		environment: "jsdom",
 		globals: false,
-		// Playwright owns tests/e2e + tests/e2e-c1; keep Vitest to unit specs only.
-		exclude: [...configDefaults.exclude, "tests/e2e/**", "tests/e2e-c1/**"],
+		// Playwright owns tests/e2e + tests/e2e-c1; the demo preflight under
+		// scripts/ runs on node:test (`pnpm test:preflight`). Keep Vitest to unit specs.
+		exclude: [
+			...configDefaults.exclude,
+			"tests/e2e/**",
+			"tests/e2e-c1/**",
+			"scripts/**",
+		],
 	},
 });

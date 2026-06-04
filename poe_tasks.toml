@@ -11,8 +11,14 @@ docker info >/dev/null 2>&1 || { echo 'Docker is not running — start Docker De
 [ -d node_modules ] || pnpm install
 echo '>> edge -> http://localhost:8081  (signed bundle the SPA syncs)'
 echo '>> app  -> http://localhost:5173  <- opening this in your browser'
-docker compose up -d origin edge
+# --wait blocks until both healthchecks pass, so the SPA never races an
+# origin that isn't ready yet (a not-ready edge surfaces as a confusing error).
+docker compose up -d --wait origin edge
 # stop (not down) the edge on Ctrl-C — keeps the caddy_data/_config volumes for fast restarts
 trap 'docker compose stop origin edge >/dev/null 2>&1' EXIT INT TERM
+# Preflight: prove :8081 serves THIS repo's committed bundle before opening the
+# SPA. If another project occupies :8081, fail here with a clear message instead
+# of the browser's cryptic "signature verification failed".
+node app/scripts/check-edge.mjs
 cd app && pnpm exec vite --open
 """

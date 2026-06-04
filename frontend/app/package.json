@@ -8,6 +8,7 @@
 		"build": "tsc -b && vite build",
 		"lint": "biome check .",
 		"test": "vitest run",
+		"test:preflight": "node --test scripts/check-edge.test.mjs",
 		"test:e2e": "playwright test",
 		"typecheck": "tsc -b",
 		"preview": "vite preview"
