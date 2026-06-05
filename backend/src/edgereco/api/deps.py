@@ -97,10 +97,7 @@ class ServiceContainer:
         """
         from edgereco.catalog.loader import load_jsonl
 
-        store, manifest = _sync_and_load_manifest(
-            base_url=base_url, cache_root=cache_root, verifier=verifier
-        )
-        local = _materialize_bundle(store, manifest, cache_root / "materialized")
+        local = sync_and_materialize(base_url=base_url, cache_root=cache_root, verifier=verifier)
         catalog = load_jsonl(local / "products.jsonl")
         meta = CatalogMeta.model_validate_json((local / "catalog_meta.json").read_bytes())
         vector = VectorSearcher(VectorIndex.load(local / "vector"))
@@ -112,6 +109,19 @@ class ServiceContainer:
             encoder=ProductEncoder(),
             manifest=_manifest_from_meta(meta),
         )
+
+
+def sync_and_materialize(*, base_url: str, cache_root: Path, verifier: Verifier) -> Path:
+    """Sync a signed bundle origin and reassemble its files into a local dir.
+
+    Fail-closed on a bad signature or tampered chunk. Returns the dir holding the
+    materialized ``products.jsonl`` + ``vector/`` + ``catalog_meta.json`` — the
+    base inputs both ``from_synced`` (edge) and the retrain job (cloud) build on.
+    """
+    store, manifest = _sync_and_load_manifest(
+        base_url=base_url, cache_root=cache_root, verifier=verifier
+    )
+    return _materialize_bundle(store, manifest, cache_root / "materialized")
 
 
 def _sync_and_load_manifest(

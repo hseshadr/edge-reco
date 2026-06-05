@@ -5,6 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-05
+
+### Added
+- **Flywheel retrain (the loop closes)** — the cloud half that v0.6.0's uplink set
+  up: aggregate the collected interaction events → recompute `popularity_score` →
+  rebuild, **re-sign, and republish** the content-addressed bundle (new `latest`).
+  Both tiers (Python core + `@edgeproc/browser`) pick up the new popularity on
+  their next sync — **with zero scoring-formula changes**, because the scorer is
+  coefficient-driven and reads `popularity_score` straight off the synced product.
+  The prebuilt FAISS `vector/` is reused verbatim (embeddings depend on product
+  text, not popularity), so a retrain re-encodes nothing.
+  - New `GET /events/export` aggregates the collector's event buffer into weighted
+    engagement per product (the retrain read seam).
+  - New `edgereco retrain` CLI: sync the current bundle → fold in engagement →
+    republish a freshly signed bundle (`backend/src/edgereco/republish.py` +
+    `reco/retrain.py`). Engagement is an additive, max-normalized boost
+    (`new_pop = clamp01(base_pop + α · engagement_norm)`, `α` tunable).
+  - New `poe demo-retrain`: after clicking around under `poe demo-flywheel`,
+    recompute + republish into a **runtime origin** (the demo edge serves a
+    writable copy seeded from the committed bundle, so the committed seed stays
+    byte-stable). Refresh the SPA — the edge revalidates `latest` within 30s and
+    the rail re-ranks toward what was clicked. Requires the maintainer signing key
+    (`examples/keys/private.key`, gitignored) since the bundle is re-signed.
+
 ## [0.6.0] — 2026-06-05
 
 ### Added

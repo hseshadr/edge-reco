@@ -8,7 +8,11 @@ search + session-aware reranker, 90%+ coverage. The Nimbus demo is **backend-fre
 the React SPA syncs the signed bundle into OPFS and runs the whole engine in the
 browser via the `@edgeproc/browser` workspace package (`frontend/packages/edgeproc-browser/`),
 parity-tested against the Python core. The FastAPI runtime remains available for
-the optional server-side API use case but is not in the default demo path.
+the optional server-side API use case but is not in the default demo path. The
+**flywheel is closed end-to-end**: clicks → in-tab uplink → mimicked-cloud
+collector → `edgereco retrain` (recompute popularity, re-sign, republish the
+bundle) → both tiers re-sync the new ranking. See `poe demo-flywheel` +
+`poe demo-retrain`.
 
 ## Docs
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture, embeds d2 diagrams
@@ -42,6 +46,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - **Architecture**: all-Pydantic models throughout v1 (wire/domain split is a future concern); Protocol-based DI for infrastructure
 - **Zero backend calls after sync** — runtime is offline-capable
 - **Uplink optional & off the inference path** — the flywheel uplink (clicks → batched beacon → `/events`) is gated by `VITE_EVENTS_URL` (unset = disabled), fire-and-forget, and never blocks/breaks the app or gates the in-tab rail re-rank
+- **Retrain moves data, not the formula** — the cloud retrain (`edgereco retrain`: `/events/export` → recompute `popularity_score` → re-sign + republish) must only change popularity values, never the scoring weights, so both tiers re-rank on sync with no code change. Reuses the prebuilt FAISS `vector/` verbatim. Republishes to a runtime origin (`.demo-origin`), leaving the committed seed bundle + browser parity fixture byte-stable
 
 ## Workflow
 - **Spec-first**: brainstorm → spec → plan → subagent implementation (see `superpowers:*` skills)

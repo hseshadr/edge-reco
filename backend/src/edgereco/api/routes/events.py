@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from edgereco.api.deps import Container, get_session_id
-from edgereco.api.models import EventsResponse
+from edgereco.api.models import EngagementExport, EventsResponse
 from edgereco.catalog.models import EventType, InteractionEvent, Product, SessionProfile
+from edgereco.reco.retrain import aggregate_engagement
 from edgereco.reco.signals import apply_interaction
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,18 @@ def post_events(
             container.sessions.update(effective_session, _updater(product, event.event_type))
         container.events.append(event)
     return EventsResponse(received=len(body.events))
+
+
+@router.get("/events/export", response_model=EngagementExport)
+def export_events(container: Container) -> EngagementExport:
+    """Aggregate the buffered events into weighted engagement per product.
+
+    The cloud retrain job reads this to recompute popularity. Read-only and off
+    the inference path — it never touches search/recommend.
+    """
+    events = container.events.all()
+    stats = aggregate_engagement(events)
+    return EngagementExport(total_events=len(events), stats=list(stats.values()))
 
 
 def _updater(product: Product, event_type: EventType) -> Callable[[SessionProfile], SessionProfile]:

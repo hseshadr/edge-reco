@@ -117,7 +117,8 @@ Regenerate via `backend/scripts/gen_*_fixture.py`. The browser tests under `fron
 - **Hybrid search**: BM25 + FAISS vector + RRF, in that order.
 - **Catalog sync**: signed, content-addressed, fail-closed on tampering. No exception.
 - **Zero backend calls after sync**: once the bundle is local, the runtime is offline-capable. Don't introduce a runtime backend dep.
-- **Uplink is optional & off the inference path**: search / recommend / rerank / sync make zero backend calls. The flywheel uplink (a click is captured in-tab, persisted, then batched as a fire-and-forget beacon to the `/events` collector) is gated by `VITE_EVENTS_URL` — **unset = fully disabled** — and must never block or break the app. It feeds the cloud's future retrain; it never gates the in-tab rail re-rank.
+- **Uplink is optional & off the inference path**: search / recommend / rerank / sync make zero backend calls. The flywheel uplink (a click is captured in-tab, persisted, then batched as a fire-and-forget beacon to the `/events` collector) is gated by `VITE_EVENTS_URL` — **unset = fully disabled** — and must never block or break the app. It feeds the cloud's retrain; it never gates the in-tab rail re-rank.
+- **Retrain is a data change, not a formula change**: the cloud retrain (`edgereco retrain`) aggregates collected events, recomputes `popularity_score`, and republishes a re-signed bundle. It must *only* move popularity values — never the scoring weights — so both tiers pick up the new ranking on sync with no code change. It reuses the prebuilt FAISS `vector/` verbatim (embeddings are text-derived, popularity-independent). Republish to a runtime origin; the committed seed bundle and the browser parity fixture stay byte-stable.
 
 ## Further reading
 

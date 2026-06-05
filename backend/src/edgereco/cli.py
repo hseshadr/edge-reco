@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
+
+if TYPE_CHECKING:
+    from edgereco.republish import RetrainResult
 
 app = typer.Typer(name="edgereco", help="EdgeReco: edge product discovery engine.")
 
@@ -94,6 +97,65 @@ def bundle(
         product_count=product_count,
     )
     typer.echo(f"Built bundle '{catalog_id}' v{version} → {origin_dir}")
+
+
+# ---------------------------------------------------------------------------
+# retrain (flywheel: events -> recompute popularity -> republish signed bundle)
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def retrain(
+    bundle_base_url: Annotated[str, typer.Argument(help="Origin to sync the current bundle from")],
+    origin_dir: Annotated[Path, typer.Argument(help="Origin dir to republish the new bundle into")],
+    private_key_path: Annotated[
+        Path, typer.Argument(help="Raw ed25519 private key (signs the bundle)")
+    ],
+    verify_key_path: Annotated[
+        Path, typer.Argument(help="Raw ed25519 public key (verifies the sync)")
+    ],
+    events_url: Annotated[
+        str | None, typer.Option(help="Collector /events/export URL; omit for an empty retrain")
+    ] = None,
+    alpha: Annotated[float, typer.Option(help="Engagement boost weight in [0, 1]")] = 0.5,
+    version: Annotated[
+        str | None, typer.Option(help="New bundle version; default bumps the synced version")
+    ] = None,
+    cache_dir: Annotated[Path, typer.Option(help="Scratch dir for sync + staging")] = Path(
+        ".retrain-cache"
+    ),
+) -> None:
+    """Recompute popularity from collected events and republish the signed bundle.
+
+    The cloud half of the flywheel: sync the current bundle, fold in engagement
+    pulled from the collector, and republish a freshly signed bundle (new
+    ``latest``) — reusing the prebuilt FAISS index verbatim. No formula change.
+    """
+    from edgeproc.bundles.signing import Ed25519Verifier
+
+    from edgereco.republish import fetch_engagement, retrain_and_republish
+
+    verifier = Ed25519Verifier.from_public_bytes(verify_key_path.read_bytes())
+    engagement = fetch_engagement(events_url) if events_url else {}
+    result = retrain_and_republish(
+        bundle_base_url=bundle_base_url,
+        origin_dir=origin_dir,
+        private_key_path=private_key_path,
+        verifier=verifier,
+        engagement=engagement,
+        alpha=alpha,
+        cache_root=cache_dir,
+        version=version,
+    )
+    _echo_retrain(result)
+
+
+def _echo_retrain(result: RetrainResult) -> None:
+    """Print a human summary of a retrain outcome."""
+    typer.echo(f"Republished {result.product_count} products as version {result.version}")
+    typer.echo(f"{len(result.changed)} products changed popularity.")
+    for delta in result.changed[:10]:
+        typer.echo(f"  {delta.product_id}: {delta.before:.3f} -> {delta.after:.3f}")
 
 
 # ---------------------------------------------------------------------------

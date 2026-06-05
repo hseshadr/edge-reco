@@ -32,14 +32,18 @@
 name: nimbus-demo
 
 services:
-  # Static-file origin: serves the committed signed bundle (../backend/examples/
-  # catalog/: flat `latest`, `manifest/<hash>`, `chunk/<hash>`). Read-only mount.
+  # Static-file origin: serves a signed bundle (flat `latest`, `manifest/<hash>`,
+  # `chunk/<hash>`). Defaults to the committed seed (../backend/examples/catalog/);
+  # the flywheel-retrain path overrides NIMBUS_ORIGIN_DIR to a writable runtime
+  # copy (.demo-origin) so `edgereco retrain` can republish without touching the
+  # committed seed. Mount is :ro for the CONTAINER (it only serves); the host-side
+  # retrain job writes the runtime dir directly, which :ro does not restrict.
   origin:
     image: python:3.13-slim
     container_name: nimbus-origin
     working_dir: /catalog
     volumes:
-      - ../backend/examples/catalog:/catalog:ro
+      - ${NIMBUS_ORIGIN_DIR:-../backend/examples/catalog}:/catalog:ro
     command: ["python", "-m", "http.server", "8080"]
     healthcheck:
       # `/latest` is the bundle's version pointer (the old flat `/manifest.json`

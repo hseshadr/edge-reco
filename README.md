@@ -51,10 +51,19 @@ browser for you — signed-bundle edge on `:8081`, the Vite SPA on `:5173`.
 **See the flywheel:** `poe demo-flywheel` adds a "mimicked cloud" collector on
 `:8081`→`:8000` and shows the uplink half of the loop — clicks are captured in-tab
 and periodically flushed (batched, fire-and-forget) to the FastAPI `/events`
-endpoint, so the cloud could later retrain. Inference still runs 100% locally; the
+endpoint, so the cloud can retrain. Inference still runs 100% locally; the
 uplink is optional and off by default (the plain `poe demo` makes zero backend
 calls). Watch the `POST /events` requests and the "N interactions synced to cloud"
 badge.
+
+**Close the loop:** after clicking around, `poe demo-retrain` is the cloud half —
+it aggregates the collected events, recomputes each product's popularity, and
+**republishes a freshly signed bundle**. Refresh the SPA and the rail re-ranks
+toward what you clicked, because both tiers re-sync the new popularity from the
+same signed bundle — *no scoring-formula change, no re-embedding*. That's the
+whole flywheel: click → cloud → retrain → better rail. (Re-signing needs the
+maintainer's private key, `examples/keys/private.key`, so this step is for repo
+owners; the published demo ships the result.)
 
 ---
 
