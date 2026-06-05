@@ -44,9 +44,10 @@ model), then the storefront. Click a few products and the recommendations
 re-rank live. Stop the containers and reload — it keeps working offline.
 
 **Working on the code?** With the toolchain installed (uv + Node + pnpm + Docker),
-`poe demo` from the repo root does the same thing in one command and opens the
-browser for you — signed-bundle edge on `:8081`, the Vite SPA on `:5173`.
-(`cd backend && uv run poe demo` works too, e.g. without a global poe install.)
+`poe demo` (or `make demo`) from the repo root does the same thing in one command
+and opens the browser for you — signed-bundle edge on `:8081`, the Vite SPA on
+`:5173`. (`cd backend && uv run poe demo` works too, e.g. without a global poe
+install; `make demo` falls back to it automatically.)
 
 **See the flywheel:** `poe demo-flywheel` adds a "mimicked cloud" collector on
 `:8081`→`:8000` and shows the uplink half of the loop — clicks are captured in-tab
