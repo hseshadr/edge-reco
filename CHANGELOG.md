@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Demo SPA dev port moved to **5174** (was 5173), pinned via Vite `strictPort` so it
+  fails loudly rather than silently landing elsewhere. The collector CORS allow-list,
+  Docker port mapping, Playwright e2e, and docs were updated to match.
+
 ## [0.7.0] — 2026-06-05
 
 ### Added

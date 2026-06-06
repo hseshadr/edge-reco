@@ -12,8 +12,8 @@ def test_healthz_ok() -> None:
 
 
 def test_cors_header_present_for_browser_origin() -> None:
-    r = client.get("/healthz", headers={"Origin": "http://localhost:5173"})
-    assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    r = client.get("/healthz", headers={"Origin": "http://localhost:5174"})
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:5174"
 
 
 def test_search_then_click_then_recommend_personalizes() -> None:
@@ -30,7 +30,7 @@ def test_search_then_click_then_recommend_personalizes() -> None:
 
 def test_events_collector_records_batch_with_cors() -> None:
     """The mimicked-cloud collector accepts a batched uplink from the SPA origin."""
-    headers = {"X-Session-Id": "collector-batch", "Origin": "http://localhost:5173"}
+    headers = {"X-Session-Id": "collector-batch", "Origin": "http://localhost:5174"}
     events = [
         {"event_type": "click", "product_id": "p-unknown-1", "timestamp": "2026-06-04T00:00:00Z"},
         {"event_type": "view", "product_id": "p-unknown-2", "timestamp": "2026-06-04T00:00:01Z"},
@@ -38,7 +38,7 @@ def test_events_collector_records_batch_with_cors() -> None:
     r = client.post("/events", json={"events": events}, headers=headers)
     assert r.status_code == 200
     assert r.json()["received"] == 2  # unknown ids are tolerated, still recorded
-    assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:5174"
 
 
 def test_events_body_session_id_attributes_without_header() -> None:

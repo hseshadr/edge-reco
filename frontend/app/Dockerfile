@@ -48,7 +48,7 @@ RUN pnpm -F frontend run build
 
 # ---- stage 2: serve the static dist/ ----
 # `serve` is a tiny zero-config static server; -s rewrites unknown routes to
-# index.html (SPA). Listens on 5173 to match the dev origin.
+# index.html (SPA). Listens on 5174 to match the dev origin.
 FROM node:24-slim AS serve
 
 WORKDIR /app
@@ -56,6 +56,6 @@ RUN npm install -g serve@14
 
 COPY --from=build /workspace/app/dist ./dist
 
-EXPOSE 5173
+EXPOSE 5174
 
-CMD ["serve", "-s", "dist", "-l", "5173"]
+CMD ["serve", "-s", "dist", "-l", "5174"]

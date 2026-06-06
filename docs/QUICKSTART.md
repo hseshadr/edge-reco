@@ -49,7 +49,7 @@ The pnpm workspace is rooted at `frontend/`; the SPA lives in `frontend/app/` an
 **Turnkey — starts everything and opens your browser:**
 
 ```bash
-poe demo               # from the repo root — edge (:8081) + Vite SPA (:5173) + opens http://localhost:5173
+poe demo               # from the repo root — edge (:8081) + Vite SPA (:5174) + opens http://localhost:5174
 # or, without a global poe install:
 cd backend && uv run poe demo
 ```
@@ -67,7 +67,7 @@ cd frontend
 docker compose up --build
 ```
 
-Then open **http://localhost:5173** manually — unlike `poe demo`, this path does not
+Then open **http://localhost:5174** manually — unlike `poe demo`, this path does not
 auto-open a browser. Once the tab loads (either path) you'll see the boot screen step through:
 
 1. *Syncing the signed bundle* — pulled from the Caddy edge on `:8081`.
@@ -86,7 +86,7 @@ make install     # one-time: pnpm workspace deps
 make dev         # edge (docker) + Vite dev server (foreground)
 ```
 
-`make dev` boots the Caddy edge in the background, then runs the Vite dev server on `:5173`. Ctrl-C tears the edge down. See `frontend/Makefile` for the full target list.
+`make dev` boots the Caddy edge in the background, then runs the Vite dev server on `:5174`. Ctrl-C tears the edge down. See `frontend/Makefile` for the full target list.
 
 ## 5. Index a fresh catalog
 

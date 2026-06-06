@@ -41,7 +41,7 @@ services:
       dockerfile: app/Dockerfile
       args:
         VITE_BUNDLE_BASE_URL: http://localhost:8081
-    ports: ["5173:5173"]
+    ports: ["5174:5174"]
 ```
 
 For real production: replace the localhost ports with TLS + a real CDN in front of `origin/`. The browser only needs to reach the **edge** and trust the pinned public key.

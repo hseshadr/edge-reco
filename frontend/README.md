@@ -60,14 +60,14 @@ cd frontend
 docker compose up --build
 ```
 
-Then open **http://localhost:5173**. You will see the boot screen step through
+Then open **http://localhost:5174**. You will see the boot screen step through
 *syncing the signed bundle → reassembling the index → loading the model*, then the
 storefront. **Stop the `origin` and `edge` containers and reload** — the bundle is in
 OPFS and the model is in the HTTP cache, so the store still works offline after the
 first load.
 
 What's running: `origin` (static signed bundle) → `edge` (Caddy CDN on :8081) → `frontend`
-(the static SPA on :5173). The browser does all the search. No FastAPI, no Python in the path.
+(the static SPA on :5174). The browser does all the search. No FastAPI, no Python in the path.
 
 ### Iterate on the SPA locally (`make dev`)
 
@@ -76,14 +76,14 @@ cd frontend
 make install   # one-time: frontend (pnpm) deps
 # Serve the signed bundle from the edge so the SPA can sync it:
 docker compose up -d origin edge
-make app       # Vite dev server on http://localhost:5173
+make app       # Vite dev server on http://localhost:5174
 ```
 
 The dev SPA reads `VITE_BUNDLE_BASE_URL` (default `http://localhost:8081`, the edge).
 
 ## Demo flow (the realistic one)
 
-1. **Open the store** at http://localhost:5173. After the boot screen, the grid shows the
+1. **Open the store** at http://localhost:5174. After the boot screen, the grid shows the
    728-product Amazon catalog; the "Recommended for you" rail starts cold (no signals yet).
 2. **Search** for something — e.g. `wireless headphones`. The query is embedded **in your
    tab**; the grid swaps to fused BM25 + vector results.

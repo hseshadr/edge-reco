@@ -27,7 +27,7 @@ export default defineConfig({
 	timeout: 120_000,
 	expect: { timeout: 30_000 },
 	use: {
-		baseURL: "http://localhost:5173",
+		baseURL: "http://localhost:5174",
 		headless: true,
 		actionTimeout: 15_000,
 		navigationTimeout: 30_000,
@@ -41,8 +41,8 @@ export default defineConfig({
 	],
 	webServer: [
 		{
-			command: "npx vite --port 5173 --strictPort",
-			url: "http://localhost:5173/public.key",
+			command: "npx vite --port 5174 --strictPort",
+			url: "http://localhost:5174/public.key",
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
 			env: { VITE_BUNDLE_BASE_URL: BUNDLE_BASE_URL },

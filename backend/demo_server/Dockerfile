@@ -50,7 +50,7 @@ RUN uv sync --no-dev
 # frontend's served origin through CORS. Overridable via compose env.
 ENV DEMO_HOST=0.0.0.0 \
     DEMO_PORT=8000 \
-    DEMO_CORS_ORIGINS=http://localhost:5173
+    DEMO_CORS_ORIGINS=http://localhost:5174
 
 EXPOSE 8000
 

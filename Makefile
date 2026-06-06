@@ -4,7 +4,7 @@
 # backend/pyproject.toml's [tool.poe.tasks.*]); these `make` targets are just a
 # thin, discoverable front door so `make demo` works the same as `poe demo`:
 #
-#   make demo            turnkey backend-free demo: edge (:8081) + Vite SPA (:5173)
+#   make demo            turnkey backend-free demo: edge (:8081) + Vite SPA (:5174)
 #   make demo-flywheel   demo + the uplink half (clicks -> mimicked-cloud collector :8000)
 #   make demo-retrain    the retrain half (recompute popularity -> republish signed bundle)
 #
@@ -18,7 +18,7 @@ POE := $(shell command -v poe >/dev/null 2>&1 && echo poe || echo 'uv run --dire
 .DEFAULT_GOAL := help
 .PHONY: help demo demo-flywheel demo-retrain
 
-demo: ## Turnkey backend-free demo — edge (:8081) + Vite SPA (:5173), opens your browser.
+demo: ## Turnkey backend-free demo — edge (:8081) + Vite SPA (:5174), opens your browser.
 	cd $(ROOT_DIR) && $(POE) demo
 
 demo-flywheel: ## Demo + flywheel uplink — events flush to a mimicked-cloud collector (:8000).

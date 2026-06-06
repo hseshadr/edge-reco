@@ -1,6 +1,6 @@
 """Thin FastAPI wrapper adding CORS + a browse endpoint over edge-reco's engine.
 
-The demo storefront is a browser SPA (Vite dev server on :5173, preview on
+The demo storefront is a browser SPA (Vite dev server on :5174, preview on
 :4173) that calls edge-reco's API directly. The library's ``create_app`` adds
 no CORS and exposes only ``/search`` + ``/recommend``; a storefront also needs a
 plain catalog-browse feed. So this module builds the engine's ``ServiceContainer``,
@@ -44,7 +44,7 @@ from edgereco.config import Settings
 CATALOG_PATH = Path(__file__).parent / "catalog" / "products.jsonl"
 
 ALLOWED_ORIGINS = (
-    "http://localhost:5173",
+    "http://localhost:5174",
     "http://localhost:4173",
 )
 
