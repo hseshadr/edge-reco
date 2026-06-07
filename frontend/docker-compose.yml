@@ -63,8 +63,11 @@ services:
     depends_on:
       origin:
         condition: service_healthy
+    # Host port defaults to 8081 for standalone `docker compose up`; the demo
+    # orchestrator (app/scripts/demo.mjs) overrides EDGE_HOST_PORT with a random
+    # free port per run to avoid cross-project collisions.
     ports:
-      - "8081:8081"
+      - "${EDGE_HOST_PORT:-8081}:8081"
     volumes:
       - ../backend/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -95,12 +98,14 @@ services:
     environment:
       DEMO_HOST: 0.0.0.0
       DEMO_PORT: "8000"
-      DEMO_CORS_ORIGINS: http://localhost:5174
+      # CORS allowlist for the browser SPA. Defaults to the standalone SPA port;
+      # the demo orchestrator overrides it with the SPA's random port per run.
+      DEMO_CORS_ORIGINS: ${DEMO_CORS_ORIGINS:-http://localhost:5174}
       # Sync the SAME signed bundle the browser uses (prebuilt vector/, no rebuild).
       EDGERECO_BUNDLE_BASE_URL: http://edge:8081
       EDGERECO_VERIFY_KEY_PATH: /workspace/edge-reco/backend/examples/keys/public.key
     ports:
-      - "8000:8000"
+      - "${COLLECTOR_HOST_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 5s

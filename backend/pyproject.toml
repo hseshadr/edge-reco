@@ -111,56 +111,28 @@ gate = ["fmt-check", "lint", "typecheck", "test"]
 # same edge + Vite + trap-teardown sequence as frontend/Makefile:dev, plus a deps
 # guard and Vite's `--open`. The demo runs entirely in-browser — no FastAPI here.
 [tool.poe.tasks.demo]
-help = "Turnkey backend-free demo — edge (:8081) + Vite SPA (:5174), opens your browser."
+help = "Turnkey backend-free demo — edge + Vite SPA on free ports, opens your browser."
 cwd = "../frontend"            # poe resolves this relative to the project root (backend/)
-shell = """
-set -e
-docker info >/dev/null 2>&1 || { echo 'Docker is not running — start Docker Desktop first.'; exit 1; }
-[ -d node_modules ] || pnpm install
-echo '>> edge -> http://localhost:8081  (signed bundle the SPA syncs)'
-echo '>> app  -> http://localhost:5174  <- opening this in your browser'
-# --wait blocks until both healthchecks pass, so the SPA never races an
-# origin that isn't ready yet (a not-ready edge surfaces as a confusing error).
-docker compose up -d --wait origin edge
-# stop (not down) the edge on Ctrl-C — keeps the caddy_data/_config volumes for fast restarts
-trap 'docker compose stop origin edge >/dev/null 2>&1' EXIT INT TERM
-# Preflight: prove :8081 serves THIS repo's committed bundle before opening the
-# SPA. If another project occupies :8081, fail here with a clear message instead
-# of the browser's cryptic "signature verification failed".
-node app/scripts/check-edge.mjs
-cd app && pnpm exec vite --open
-"""
+# Thin wrapper over the single orchestrator (frontend/app/scripts/demo.mjs), which
+# allocates random free ports per run and wires them through compose/Vite/CORS/the
+# preflight. Kept in sync with poe_tasks.toml's [tasks.demo].
+shell = "node app/scripts/demo.mjs"
 
 # Same demo, PLUS the flywheel uplink: interaction events are captured in-tab and
-# periodically flushed to a mimicked-cloud collector (the FastAPI /events on
-# :8000). Inference stays 100% local — the uplink is an optional, off-path beacon.
+# periodically flushed to a mimicked-cloud collector (the FastAPI /events). Inference
+# stays 100% local — the uplink is an optional, off-path beacon.
 # Kept in sync with poe_tasks.toml's [tasks.demo-flywheel].
 [tool.poe.tasks.demo-flywheel]
-help = "Demo + flywheel uplink — events flush to a mimicked cloud collector (:8000)."
+help = "Demo + flywheel uplink — events flush to a mimicked cloud collector (free port)."
 cwd = "../frontend"
-shell = """
-set -e
-docker info >/dev/null 2>&1 || { echo 'Docker is not running — start Docker Desktop first.'; exit 1; }
-[ -d node_modules ] || pnpm install
-echo '>> edge      -> http://localhost:8081  (signed bundle the SPA syncs)'
-echo '>> collector -> http://localhost:8000  (mimicked cloud — receives interaction events)'
-echo '>> app       -> http://localhost:5174  <- opening this in your browser'
-# Seed a WRITABLE runtime origin from the committed seed so `poe demo-retrain` can
-# republish the recomputed bundle without mutating the committed examples/catalog/.
-rm -rf .demo-origin && mkdir -p .demo-origin && cp -R ../backend/examples/catalog/. .demo-origin/
-export NIMBUS_ORIGIN_DIR=./.demo-origin
-# First run builds the collector image (the engine + siblings) — that is the
-# opt-in cost of the flywheel; the plain `demo` stays image-free.
-docker compose up -d --wait origin edge collector
-trap 'docker compose stop origin edge collector >/dev/null 2>&1' EXIT INT TERM
-node app/scripts/check-edge.mjs
-cd app && VITE_EVENTS_URL=http://localhost:8000/events pnpm exec vite --open
-"""
+shell = "node app/scripts/demo.mjs --flywheel"
 
 # The CLOUD half of the flywheel: recompute popularity from the collected events
 # and republish a freshly signed bundle into the runtime origin. The edge
 # revalidates `latest` within 30s, so a browser refresh re-ranks the rail toward
-# what you clicked. Kept in sync with poe_tasks.toml's [tasks.demo-retrain].
+# what you clicked. The collector's randomly-chosen port is read from the
+# demo-ports.env the flywheel run wrote. Kept in sync with poe_tasks.toml's
+# [tasks.demo-retrain].
 [tool.poe.tasks.demo-retrain]
 help = "Flywheel retrain — recompute popularity from collected events, republish the signed bundle."
 shell = """
@@ -168,7 +140,10 @@ set -e
 ORIGIN=../frontend/.demo-origin
 [ -d "$ORIGIN/manifest" ] || { echo 'No runtime origin yet — run `poe demo-flywheel` first, click around, then retrain.'; exit 1; }
 [ -f examples/keys/private.key ] || { echo 'Missing examples/keys/private.key (gitignored). Retrain re-signs the bundle, so the maintainer signing key is required.'; exit 1; }
-echo '>> retrain -> syncing the current bundle, folding in collected engagement, republishing…'
-uv run edgereco retrain "$ORIGIN" "$ORIGIN" examples/keys/private.key examples/keys/public.key --events-url http://localhost:8000/events/export --alpha 0.5 --cache-dir .retrain-cache
-echo '>> done. Refresh http://localhost:5174 — the rail re-ranks toward what you clicked.'
+# The flywheel run records its randomly-chosen collector port here; fall back to 8000.
+COLLECTOR_PORT=8000
+[ -f "$ORIGIN/demo-ports.env" ] && . "$ORIGIN/demo-ports.env"
+echo ">> retrain -> syncing the current bundle, folding in collected engagement, republishing… (collector :$COLLECTOR_PORT)"
+uv run edgereco retrain "$ORIGIN" "$ORIGIN" examples/keys/private.key examples/keys/public.key --events-url "http://localhost:${COLLECTOR_PORT}/events/export" --alpha 0.5 --cache-dir .retrain-cache
+echo '>> done. Refresh the SPA tab — the rail re-ranks toward what you clicked.'
 """

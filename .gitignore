@@ -53,3 +53,4 @@ origin/
 # job's sync/staging scratch. Both disposable — the committed seed stays pristine.
 .demo-origin/
 .retrain-cache/
+.superpowers/
