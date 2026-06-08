@@ -5,7 +5,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-08
+
+### Added
+- **Intro landing + live metrics** — the SPA now opens on a landing page that
+  explains what EdgeReco is and why running discovery in the browser is effective,
+  then a **"Launch the live demo"** button boots the engine. Inside the store, a
+  live `MetricsStrip` shows REAL in-browser measurements: recommendation latency,
+  backend calls after sync (0), cold start, JS-heap memory, and catalog size.
+  Honesty is enforced and tested — memory is labelled "JS heap (Chromium)" and
+  hidden when unavailable (never faked); the "0 backend calls" counter excludes
+  product images and the optional uplink; the cost figure is labelled
+  "illustrative". New `src/metrics/*` (store + classifier + observers),
+  `Landing` / `MetricsStrip` components, and instrumentation in `api/client.ts`,
+  `App.tsx`, and `Storefront.tsx`. Design spec in
+  `docs/superpowers/specs/2026-06-07-metrics-and-intro-landing-design.md`.
+
 ### Changed
+- **Demo allocates random free ports per run** — `make demo` / `poe demo` /
+  `poe demo-flywheel` no longer pin :8081 / :5174 / :8000. A single orchestrator
+  (`frontend/app/scripts/demo.mjs`) picks free ports and wires them through the
+  compose port-mappings, Vite, the collector CORS allow-list, and the edge
+  preflight, removing cross-project and stale-container port collisions. Standalone
+  `docker compose up` still defaults to 8081/8000/5174. The poe tasks,
+  `backend/pyproject.toml`, and the Makefile are now thin wrappers over the one
+  orchestrator.
 - Demo SPA dev port moved to **5174** (was 5173), pinned via Vite `strictPort` so it
   fails loudly rather than silently landing elsewhere. The collector CORS allow-list,
   Docker port mapping, Playwright e2e, and docs were updated to match.

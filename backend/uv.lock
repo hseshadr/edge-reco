@@ -393,7 +393,7 @@ dev = [
 
 [[package]]
 name = "edgereco"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "edge-proc", extra = ["bundles", "localvec"] },
