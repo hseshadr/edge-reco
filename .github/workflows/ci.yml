@@ -76,5 +76,9 @@ jobs:
         run: uv run ruff check .
       - name: Mypy
         run: uv run mypy src
+      - name: Complexity (xenon)
+        run: uv run xenon --max-absolute B --max-modules B --max-average A src
       - name: Tests with coverage
         run: uv run pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90
+      - name: Dependency audit (pip-audit)
+        run: uv run pip-audit

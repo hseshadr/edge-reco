@@ -28,6 +28,8 @@ dev = [
   "mypy>=2.1",
   "ruff>=0.6",
   "poethepoet>=0.30",
+  "pip-audit>=2.7",
+  "xenon>=0.9",
 ]
 
 [tool.uv]
@@ -101,10 +103,18 @@ show_missing = true
 fmt-check = "ruff format --check ."
 lint = "ruff check ."
 typecheck = "mypy src"
+# Complexity gate: no function worse than Radon rank B, no module worse than B,
+# average A. Catches NEW over-complex code without churning the few cohesive
+# rank-B CLI handlers (legacy is a cleanup signal, not a release blocker).
+complexity = "xenon --max-absolute B --max-modules B --max-average A src"
+# Dependency vulnerability scan (network-dependent — hits the PyPI advisory DB).
+# Runs as its own CI step rather than in the core offline `gate`.
+audit = "pip-audit"
 test = "pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90"
 fmt = "ruff format ."
-# `gate` mirrors CI exactly (format-check + lint + typecheck + test-with-coverage).
-gate = ["fmt-check", "lint", "typecheck", "test"]
+# `gate` mirrors CI's quality steps (format-check + lint + typecheck + complexity +
+# test-with-coverage). `pip-audit` runs as a separate CI security step (`poe audit`).
+gate = ["fmt-check", "lint", "typecheck", "complexity", "test"]
 
 # `demo` is the turnkey, backend-free showcase: it brings up the Caddy edge (signed
 # bundle on :8081), starts the Vite SPA (:5174), and opens your browser. Reuses the
