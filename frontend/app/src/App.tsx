@@ -4,6 +4,7 @@ import { bootstrap } from "./api/client";
 import { BootScreen } from "./components/BootScreen";
 import { Landing } from "./components/Landing";
 import { Storefront } from "./components/Storefront";
+import { record } from "./metrics/store";
 
 function errorMessage(err: unknown): string {
 	return err instanceof Error ? err.message : "Unexpected error";
@@ -37,8 +38,12 @@ export function App() {
 		ranAttempt.current = attempt;
 		setError(null);
 		setStage(null);
+		const t0 = performance.now();
 		bootstrap(setStage)
-			.then(() => setReady(true))
+			.then(() => {
+				record({ coldStartMs: performance.now() - t0 });
+				setReady(true);
+			})
 			.catch((err: unknown) => setError(errorMessage(err)));
 	}, [launched, attempt]);
 

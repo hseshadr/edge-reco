@@ -1344,3 +1344,59 @@ input {
 		grid-template-columns: repeat(2, 1fr);
 	}
 }
+
+/* MetricsStrip — a thin row of LIVE in-tab telemetry under the store header.
+   Echoes the .clicks-badge / .session-pill vocabulary: Fraunces numbers, pill
+   shapes, --line dividers, the steady "0" in --abyss, --muted labels. Kept
+   compact — a status row, not a panel. */
+.metrics-strip {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: 0 var(--gut) 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.metrics-strip__tile {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	padding: 6px 12px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--paper);
+}
+
+.metrics-strip__value {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 14px;
+	color: var(--signal);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+
+/* The steady backend-call "0": calmer --abyss, not the hot --signal. */
+.metrics-strip__value--steady {
+	color: var(--abyss);
+}
+
+.metrics-strip__label {
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--muted);
+	text-transform: lowercase;
+}
+
+@media (max-width: 720px) {
+	.metrics-strip {
+		overflow-x: auto;
+		flex-wrap: nowrap;
+		scrollbar-width: none;
+	}
+
+	.metrics-strip__tile {
+		flex-shrink: 0;
+	}
+}

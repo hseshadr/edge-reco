@@ -19,6 +19,7 @@ import {
 } from "@edgeproc/browser/testing";
 import { catalogFetch } from "@edgeproc/browser/testing/fixtures";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getSnapshot } from "../metrics/store";
 import {
 	__setRuntimeForTests,
 	bootstrap,
@@ -154,5 +155,19 @@ describe("backend-free data layer", () => {
 		});
 		const res = await recommend(5);
 		expect(res.session_clicks).toBe(0);
+	});
+
+	it("records a non-negative searchMs latency when search() runs", async () => {
+		await search("headphones", { limit: 3 });
+		const { searchMs } = getSnapshot();
+		expect(typeof searchMs).toBe("number");
+		expect(searchMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("records a non-negative recommendMs latency when recommend() runs", async () => {
+		await recommend(3);
+		const { recommendMs } = getSnapshot();
+		expect(typeof recommendMs).toBe("number");
+		expect(recommendMs).toBeGreaterThanOrEqual(0);
 	});
 });
