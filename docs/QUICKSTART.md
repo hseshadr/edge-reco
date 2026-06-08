@@ -49,7 +49,7 @@ The pnpm workspace is rooted at `frontend/`; the SPA lives in `frontend/app/` an
 **Turnkey — starts everything and opens your browser:**
 
 ```bash
-poe demo               # from the repo root — edge (:8081) + Vite SPA (:5174) + opens http://localhost:5174
+poe demo               # from the repo root — edge + Vite SPA on free ports, opens your browser
 # or, without a global poe install:
 cd backend && uv run poe demo
 ```

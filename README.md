@@ -39,18 +39,22 @@ cd frontend && docker compose up --build
 open http://localhost:5174
 ```
 
-You'll see a quick loading screen (it's fetching the catalog and a small AI
-model), then the storefront. Click a few products and the recommendations
-re-rank live. Stop the containers and reload — it keeps working offline.
+You'll land on a short intro page — hit **"Launch the live demo"** and it boots the
+engine right in your tab (a quick loading screen while it fetches the catalog and a
+small AI model), then the storefront. A live **metrics strip** shows the real in-tab
+numbers as you browse — recommendation latency, memory, and **0 backend calls after
+sync**. Click a few products and the recommendations re-rank live. Stop the
+containers and reload — it keeps working offline.
 
 **Working on the code?** With the toolchain installed (uv + Node + pnpm + Docker),
 `poe demo` (or `make demo`) from the repo root does the same thing in one command
-and opens the browser for you — signed-bundle edge on `:8081`, the Vite SPA on
-`:5174`. (`cd backend && uv run poe demo` works too, e.g. without a global poe
-install; `make demo` falls back to it automatically.)
+and opens the browser for you. It picks **free ports per run** (no fixed `:8081` /
+`:5174`), so it never clashes with a stale container or another project. (`cd backend
+&& uv run poe demo` works too, e.g. without a global poe install; `make demo` falls
+back to it automatically.)
 
-**See the flywheel:** `poe demo-flywheel` adds a "mimicked cloud" collector on
-`:8081`→`:8000` and shows the uplink half of the loop — clicks are captured in-tab
+**See the flywheel:** `poe demo-flywheel` adds a "mimicked cloud" collector (also on
+a free port) and shows the uplink half of the loop — clicks are captured in-tab
 and periodically flushed (batched, fire-and-forget) to the FastAPI `/events`
 endpoint, so the cloud can retrain. Inference still runs 100% locally; the
 uplink is optional and off by default (the plain `poe demo` makes zero backend

@@ -1,13 +1,11 @@
+import {
+	LANDING_FOOTNOTE,
+	LANDING_METRICS,
+	type RepresentativeMetric,
+} from "../metrics/landing-figures";
+
 interface LandingProps {
 	onLaunch: () => void;
-}
-
-interface Metric {
-	num: string;
-	unit?: string;
-	tone?: "hot" | "pos";
-	label: string;
-	sub: string;
 }
 
 interface Why {
@@ -19,45 +17,6 @@ interface Step {
 	n: string;
 	label: string;
 }
-
-const METRICS: readonly Metric[] = [
-	{
-		num: "~36",
-		unit: "ms",
-		tone: "hot",
-		label: "per recommendation",
-		sub: "in-tab, no network hop",
-	},
-	{
-		num: "0",
-		tone: "pos",
-		label: "backend calls after sync",
-		sub: "search · recommend · rerank — all local",
-	},
-	{
-		num: "~1.2",
-		unit: "s",
-		label: "cold start to first results",
-		sub: "verify + load 720 products",
-	},
-	{
-		num: "~22",
-		unit: "MB",
-		label: "JS heap (Chromium)",
-		sub: "whole engine, in the tab",
-	},
-	{
-		num: "$0",
-		tone: "pos",
-		label: "inference / 1k recs",
-		sub: "illustrative · only CDN bandwidth",
-	},
-	{
-		num: "720",
-		label: "real products, in-tab",
-		sub: "12 categories · 1.6 MB bundle",
-	},
-];
 
 const WHYS: readonly Why[] = [
 	{
@@ -86,7 +45,7 @@ const STEPS: readonly Step[] = [
 	{ n: "5", label: "hybrid search + rerank, in-tab" },
 ];
 
-function MetricTile({ metric }: { metric: Metric }) {
+function MetricTile({ metric }: { metric: RepresentativeMetric }) {
 	const toneClass = metric.tone ? ` metric-tile__num--${metric.tone}` : "";
 	return (
 		<div className="metric-tile">
@@ -144,10 +103,7 @@ export function Landing({ onLaunch }: LandingProps) {
 							▶ Launch the live demo
 						</button>
 					</div>
-					<p className="landing__footnote">
-						First load fetches a ~1.6 MB signed bundle + a one-time embedding
-						model, then everything is cached and offline.
-					</p>
+					<p className="landing__footnote">{LANDING_FOOTNOTE}</p>
 				</header>
 
 				<section className="landing__band" aria-label="Performance">
@@ -158,7 +114,7 @@ export function Landing({ onLaunch }: LandingProps) {
 						<div className="landing__band-live">representative figures</div>
 					</div>
 					<div className="landing__tiles">
-						{METRICS.map((metric) => (
+						{LANDING_METRICS.map((metric) => (
 							<MetricTile key={metric.label} metric={metric} />
 						))}
 					</div>
