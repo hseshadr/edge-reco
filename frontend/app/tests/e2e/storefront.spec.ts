@@ -78,6 +78,10 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 }) => {
 	await page.goto("/");
 
+	// --- Launch gate: the Landing shows first; the engine stays cold until the
+	// user clicks Launch. Cross the gate before expecting the boot/store. ---
+	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
+
 	// --- Boot: the signed bundle syncs in-tab and the storefront mounts ---
 	// The boot screen steps through real stages; once ready the grid populates.
 	// A generous timeout covers sync + 720-product index reassembly.

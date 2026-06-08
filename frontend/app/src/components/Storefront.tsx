@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browse, recommend, search, sendEvent } from "../api/client";
+import {
+	browse,
+	catalogInfo,
+	recommend,
+	search,
+	sendEvent,
+} from "../api/client";
 import type { Product, SearchResult } from "../api/types";
+import { startMetricsObservers } from "../metrics/observe";
+import { record } from "../metrics/store";
 import { useDebounced } from "../useDebounced";
 import { Footer } from "./Footer";
 import { Header } from "./Header";
+import { MetricsStrip } from "./MetricsStrip";
 import { ProductGrid } from "./ProductGrid";
 import { RecommendRail } from "./RecommendRail";
 import { SyncBadge } from "./SyncBadge";
@@ -108,6 +117,19 @@ export function Storefront() {
 		return () => window.clearTimeout(toastTimer.current);
 	}, []);
 
+	// Live metrics: Storefront mounts only once the engine is ready, so now() is a
+	// sound `readyAt` for the post-sync backend-call observer. We also record the
+	// catalog size here (the engine's ntotal) — honest because the engine is ready.
+	useEffect(() => {
+		const stop = startMetricsObservers({
+			readyAt: performance.now(),
+			edgeOrigin: import.meta.env.VITE_BUNDLE_BASE_URL,
+			eventsUrl: import.meta.env.VITE_EVENTS_URL,
+		});
+		void catalogInfo().then(({ count }) => record({ productCount: count }));
+		return stop;
+	}, []);
+
 	const flashToast = useCallback((message: string) => {
 		setToast(message);
 		window.clearTimeout(toastTimer.current);
@@ -145,6 +167,8 @@ export function Storefront() {
 				activeCategory={activeCategory}
 				onSelectCategory={onSelectCategory}
 			/>
+
+			<MetricsStrip />
 
 			<main className="layout">
 				<div>

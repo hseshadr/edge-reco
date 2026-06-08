@@ -30,6 +30,7 @@ import {
 	type SearchEngine,
 	type SessionProfile,
 } from "@edgeproc/browser";
+import { record } from "../metrics/store";
 import { enqueueUplink } from "../telemetry/uplink";
 import type {
 	BrowseResponse,
@@ -192,14 +193,20 @@ export function bootstrap(
 export function resetSession(): void {
 	active.resetSession();
 }
-export function search(
+export async function search(
 	q: string,
 	opts?: SearchOptions,
 ): Promise<SearchResponse> {
-	return active.search(q, opts);
+	const t0 = performance.now();
+	const res = await active.search(q, opts);
+	record({ searchMs: performance.now() - t0 });
+	return res;
 }
-export function recommend(limit?: number): Promise<RecommendResponse> {
-	return active.recommend(limit);
+export async function recommend(limit?: number): Promise<RecommendResponse> {
+	const t0 = performance.now();
+	const res = await active.recommend(limit);
+	record({ recommendMs: performance.now() - t0 });
+	return res;
 }
 export function browse(opts?: BrowseOptions): Promise<BrowseResponse> {
 	return active.browse(opts);
