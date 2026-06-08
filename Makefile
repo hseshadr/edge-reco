@@ -4,9 +4,13 @@
 # backend/pyproject.toml's [tool.poe.tasks.*]); these `make` targets are just a
 # thin, discoverable front door so `make demo` works the same as `poe demo`:
 #
-#   make demo            turnkey backend-free demo: edge (:8081) + Vite SPA (:5174)
-#   make demo-flywheel   demo + the uplink half (clicks -> mimicked-cloud collector :8000)
+#   make demo            turnkey backend-free demo: edge + Vite SPA (random free ports)
+#   make demo-flywheel   demo + the uplink half (clicks -> mimicked-cloud collector)
 #   make demo-retrain    the retrain half (recompute popularity -> republish signed bundle)
+#
+# Ports are allocated per run (no fixed :8081/:5174/:8000), so the demo never
+# collides with a stale container or a sibling project. The chosen URLs are
+# printed at startup and the SPA opens automatically.
 #
 # Prefers a global `poe`; falls back to the backend venv's poe via `uv`, so a
 # fresh clone with only `uv` installed still works (no global poe install needed).
@@ -18,10 +22,10 @@ POE := $(shell command -v poe >/dev/null 2>&1 && echo poe || echo 'uv run --dire
 .DEFAULT_GOAL := help
 .PHONY: help demo demo-flywheel demo-retrain
 
-demo: ## Turnkey backend-free demo — edge (:8081) + Vite SPA (:5174), opens your browser.
+demo: ## Turnkey backend-free demo — edge + Vite SPA on free ports, opens your browser.
 	cd $(ROOT_DIR) && $(POE) demo
 
-demo-flywheel: ## Demo + flywheel uplink — events flush to a mimicked-cloud collector (:8000).
+demo-flywheel: ## Demo + flywheel uplink — events flush to a mimicked-cloud collector (free port).
 	cd $(ROOT_DIR) && $(POE) demo-flywheel
 
 demo-retrain: ## Flywheel retrain — recompute popularity from events, republish the signed bundle.
