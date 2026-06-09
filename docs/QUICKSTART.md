@@ -27,9 +27,12 @@ uv run pytest --cov=edgereco --cov-fail-under=90    # full suite + coverage gate
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src
+uv run xenon --max-absolute B --max-modules B --max-average A src    # complexity gate
 ```
 
-If all four are green, the Python tier is healthy.
+If all five are green, the Python tier is healthy. (Or run them as one task:
+`uv run poe gate`. A separate `uv run poe audit` runs `pip-audit` against the
+dependency lock — it needs the network, so CI keeps it outside the offline gate.)
 
 ## 2. Frontend gate (pnpm workspaces)
 
@@ -68,9 +71,11 @@ docker compose up --build
 ```
 
 Then open **http://localhost:5174** manually — unlike `poe demo`, this path does not
-auto-open a browser. Once the tab loads (either path) you'll see the boot screen step through:
+auto-open a browser. Once the tab loads (either path) you'll see the intro landing
+page — click **Launch the live demo** to watch the boot screen step through:
 
-1. *Syncing the signed bundle* — pulled from the Caddy edge on `:8081`.
+1. *Syncing the signed bundle* — pulled from the Caddy edge (`:8081` on the
+   Docker-only path; `poe demo` allocates a free port per run).
 2. *Reassembling the index* — into OPFS.
 3. *Loading the model* — transformers.js fetches `Xenova/all-MiniLM-L6-v2`.
 

@@ -249,7 +249,8 @@ or pass them inline as in the publish→sync→serve quickstart above.
 # Backend (Python recommender)
 cd backend
 uv sync --group dev
-uv run poe gate                                  # lint + type-check + tests + coverage gate
+uv run poe gate                                  # format + lint + types + complexity (xenon) + tests/coverage
+uv run poe audit                                 # pip-audit dependency scan (network; separate CI step)
 
 # Frontend (Nimbus storefront + @edgeproc/browser)
 cd ../frontend
