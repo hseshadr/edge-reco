@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc -b && vite build",
+		"build:pages": "node scripts/build-pages.mjs",
 		"lint": "biome check .",
 		"test": "vitest run",
 		"test:preflight": "node --test scripts/*.test.mjs",

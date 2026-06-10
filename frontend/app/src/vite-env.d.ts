@@ -1,7 +1,13 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-	/** Caddy origin serving the signed, content-addressed bundle. */
+	/**
+	 * Where the signed, content-addressed bundle is served from. Absolute in
+	 * the Docker demo (the Caddy edge, e.g. http://localhost:8081) or
+	 * app-relative for same-origin hosting (the GitHub Pages build sets
+	 * "bundle"); resolved to an absolute URL at runtime by
+	 * `api/bundleUrl.resolveBundleBaseUrl`.
+	 */
 	readonly VITE_BUNDLE_BASE_URL: string;
 	/**
 	 * Optional "mimicked cloud" collector for the interaction-event uplink

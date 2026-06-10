@@ -32,6 +32,7 @@ import {
 } from "@edgeproc/browser";
 import { record } from "../metrics/store";
 import { enqueueUplink } from "../telemetry/uplink";
+import { resolveBundleBaseUrl } from "./bundleUrl";
 import type {
 	BrowseResponse,
 	InteractionEvent,
@@ -70,6 +71,16 @@ declare global {
 	}
 }
 
+/**
+ * The app's runtime config: reuse the package's configFromEnv() (which pins
+ * the verify key same-origin via document.baseURI) but absolutize the bundle
+ * URL app-side, so an app-relative VITE_BUNDLE_BASE_URL (the GitHub Pages
+ * build) reaches the sync Worker as the absolute URL it requires.
+ */
+function appRuntimeConfig(): RuntimeConfig {
+	return { ...configFromEnv(), bundleBaseUrl: resolveBundleBaseUrl() };
+}
+
 /** The data-layer API. Created once per app/test session via createDataClient. */
 export interface DataClient {
 	bootstrap(onStage?: OnStage, config?: RuntimeConfig): Promise<void>;
@@ -104,7 +115,7 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 	return {
 		async bootstrap(
 			onStage: OnStage = () => {},
-			config: RuntimeConfig = configFromEnv(),
+			config: RuntimeConfig = appRuntimeConfig(),
 		): Promise<void> {
 			const engine = await runtime.bootstrap(config, onStage);
 			productById = new Map(engine.catalog().map((p) => [p.id, p]));

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { resolveBundleBaseUrl } from "../api/bundleUrl";
 import {
 	browse,
 	catalogInfo,
@@ -123,7 +124,9 @@ export function Storefront() {
 	useEffect(() => {
 		const stop = startMetricsObservers({
 			readyAt: performance.now(),
-			edgeOrigin: import.meta.env.VITE_BUNDLE_BASE_URL,
+			// The ORIGIN of the resolved bundle URL (resolution handles the
+			// app-relative GitHub Pages form; classify compares origins).
+			edgeOrigin: new URL(resolveBundleBaseUrl()).origin,
 			eventsUrl: import.meta.env.VITE_EVENTS_URL,
 		});
 		void catalogInfo().then(({ count }) => record({ productCount: count }));

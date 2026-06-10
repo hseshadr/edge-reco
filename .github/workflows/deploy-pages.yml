@@ -1,0 +1,79 @@
+# Deploy the backend-free Nimbus demo to GitHub Pages — MANUAL ONLY.
+#
+# Trigger: workflow_dispatch exclusively. Nothing deploys on push or PR; the
+# owner runs this from the Actions tab after the repo is public and
+# Settings -> Pages -> Source is set to "GitHub Actions".
+#
+# What ships: the Pages variant of frontend/app (scripts/build-pages.mjs) —
+#   - Vite base /edge-reco/ (project pages serve under the repo subpath);
+#   - VITE_BUNDLE_BASE_URL=bundle: app-relative, absolutized in-browser
+#     (src/api/bundleUrl.ts), with the committed signed catalog bundle copied
+#     same-origin into dist/bundle (no CORS, no second origin);
+#   - VITE_EVENTS_URL left unset → the flywheel uplink stays disabled → the
+#     hosted demo makes zero backend calls after sync (the headline invariant).
+#
+# The frontend workspace has no private-repo dependencies (those are
+# backend-only), so a plain checkout suffices. All run: steps are static
+# commands — no untrusted ${{ github.event.* }} input is interpolated
+# anywhere, so there is no workflow-injection surface.
+name: Deploy demo to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deploy at a time; never cancel an in-flight production deploy.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      # Reads the pinned pnpm version from frontend/package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # >= 22.12 required by Vite 8
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Pages variant (subpath base + same-origin bundle copy)
+        run: pnpm -F frontend run build:pages
+        env:
+          VITE_BASE: /edge-reco/
+          VITE_BUNDLE_BASE_URL: bundle
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact (dist incl. the signed bundle)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
