@@ -5,27 +5,20 @@
 [![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![TypeScript 6](https://img.shields.io/badge/typescript-6.0-blue.svg)](https://www.typescriptlang.org/)
 
-**Nimbus is a pretend online store.** The interesting part: its entire
-search-and-recommend brain runs *inside your browser tab* — no server, no
-backend calls — after a one-time download. So the store works offline, costs
-nothing per search, and your clicks never leave your device.
+**EdgeReco is a full search-and-recommendation engine that runs on the user's
+device — in a browser tab — after a one-time sync of a signed catalog
+bundle.** Hybrid search (BM25 + vectors), session-aware re-ranking on every
+click, and a retrain loop that ships ranking updates as data (a re-signed
+bundle), never as code.
 
-Open the store, search for "wireless headphones", then click a couple of
-products. Every click reshapes the "Recommended for you" rail across five taste
-signals — category, brand, tags, popularity, and freshness — re-ranking
-**instantly, on-device, with no trip to a server.** This is the same shape of
-per-session personalization big storefronts run server-side; here it runs
-entirely in your tab, so your clicks never leave your device. Turn the server
-off and reload: it still works, because everything it needs is already on your
-machine.
+![Nimbus demo: searching the storefront and clicking a few products — the "Recommended for you" rail re-ranks instantly while the metrics strip stays at zero backend calls](docs/assets/nimbus-hero.gif)
 
-That's the whole pitch: **a real, heavily personalized search-and-recommend
-engine that lives in the browser instead of in a data center.** EdgeReco is the
-engine; Nimbus is the demo store built on top of it.
+<!-- live-demo: add GitHub Pages link after deploy — a "Try it (zero install)" CTA line goes here; also link the hero GIF to it and add a live-demo badge to the row above -->
 
-> _Nimbus is a fictional store built only to demo EdgeReco. It is not a real
-> shop. Its products come from a public Amazon dataset — see
+> _Nimbus, the store in the demo, is fictional — built only to demo EdgeReco.
+> It is not a real shop. Its products come from a public Amazon dataset — see
 > [Data & attribution](#data--attribution)._
 
 ## Try it (one command)
@@ -35,8 +28,7 @@ You need this repo and Docker. Nothing else.
 ```bash
 cd frontend && docker compose up --build
 
-# then open the store:
-open http://localhost:5174
+# then visit http://localhost:5174 in your browser
 ```
 
 You'll land on a short intro page — hit **"Launch the live demo"** and it boots the
@@ -45,6 +37,23 @@ small AI model), then the storefront. A live **metrics strip** shows the real in
 numbers as you browse — recommendation latency, memory, and **0 backend calls after
 sync**. Click a few products and the recommendations re-rank live. Stop the
 containers and reload — it keeps working offline.
+
+**Nimbus is a pretend online store.** The interesting part: its entire
+search-and-recommend brain runs *inside your browser tab* — no server, no
+backend calls — after a one-time download. So the store works offline, costs
+nothing per search, and your clicks never leave your device.
+
+Open the store, search for "shirt", then click a couple of
+products. Every click reshapes the "Recommended for you" rail across five taste
+signals — category, brand, tags, popularity, and freshness — re-ranking
+**instantly, on-device, with no trip to a server.** This is the same shape of
+per-session personalization big storefronts run server-side; here it runs
+entirely in your tab, so your clicks never leave your device. Turn the server
+off and reload: it still works, because everything it needs is already on your
+machine.
+
+That's the whole pitch. EdgeReco is the engine; Nimbus is the demo store built
+on top of it.
 
 **Working on the code?** With the toolchain installed (uv + Node + pnpm + Docker),
 `poe demo` (or `make demo`) from the repo root does the same thing in one command
