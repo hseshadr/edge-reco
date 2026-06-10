@@ -43,7 +43,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - **Scoring formula**: `0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`
 - **Hybrid search**: BM25 + FAISS vector + Reciprocal Rank Fusion
 - **Catalog sync**: signed, content-addressed bundle (`latest` → `manifest/<hash>` → `chunk/<hash>`), Ed25519-verified fail-closed; Caddy edge cache. Bundle ships the prebuilt FAISS `vector/` (zero recompute on the edge).
-- **Architecture**: all-Pydantic models throughout v1 (wire/domain split is a future concern); Protocol-based DI for infrastructure
+- **Architecture**: all-Pydantic models throughout v1 (wire/domain split is a future concern); DI via the concrete `ServiceContainer` (`api/deps.py`) — Protocol seams for swappable infrastructure are a future concern (introduce alongside any index swap)
 - **Zero backend calls after sync** — runtime is offline-capable
 - **Uplink optional & off the inference path** — the flywheel uplink (clicks → batched beacon → `/events`) is gated by `VITE_EVENTS_URL` (unset = disabled), fire-and-forget, and never blocks/breaks the app or gates the in-tab rail re-rank
 - **Retrain moves data, not the formula** — the cloud retrain (`edgereco retrain`: `/events/export` → recompute `popularity_score` → re-sign + republish) must only change popularity values, never the scoring weights, so both tiers re-rank on sync with no code change. Reuses the prebuilt FAISS `vector/` verbatim. Republishes to a runtime origin (`.demo-origin`), leaving the committed seed bundle + browser parity fixture byte-stable
