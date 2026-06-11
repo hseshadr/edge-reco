@@ -49,22 +49,18 @@ function commitCap(eventType: EventType, product: Product): void {
 	if (eventType === "view") viewEmitted.add(product.id);
 }
 
-// U+201C = left double quotation mark; U+201D = right double quotation mark.
-const LQ = "“";
-const RQ = "”";
-
 function toastFor(eventType: EventType, product: Product): string | null {
 	switch (eventType) {
 		case "click":
-			return `Added ${LQ}${product.title}${RQ} to your taste`;
+			return `Added “${product.title}” to your taste`;
 		case "favorite":
-			return `Favorited ${LQ}${product.title}${RQ} — strong signal, rail reweighted`;
+			return `Favorited “${product.title}” — strong signal, rail reweighted`;
 		case "cart": {
 			const honesty = cartHonestyShown
 				? ""
 				: " (demo: a ranking signal — nothing is purchased)";
 			cartHonestyShown = true;
-			return `${LQ}${product.title}${RQ} in the cart — strong signal, rail reweighted${honesty}`;
+			return `“${product.title}” in the cart — strong signal, rail reweighted${honesty}`;
 		}
 		case "view":
 			return null;
