@@ -436,6 +436,16 @@ input {
 	outline-offset: 2px;
 }
 
+/* The overlay button sits above the media, so the old element-local hover
+   zoom can't receive pointer events — drive it from the card hover instead. */
+.card__zoom {
+	transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card:hover .card__zoom {
+	transform: scale(1.06);
+}
+
 /* =========================================================================
    PRODUCT IMAGE — category-tinted gradient stand-ins
    ========================================================================= */

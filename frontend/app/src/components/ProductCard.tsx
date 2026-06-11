@@ -103,13 +103,9 @@ export function ProductCard({
 				</button>
 			</div>
 			<div className="card__media">
-				<motion.div
-					style={{ position: "absolute", inset: 0 }}
-					whileHover={{ scale: 1.06 }}
-					transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-				>
+				<div className="card__zoom" style={{ position: "absolute", inset: 0 }}>
 					<ProductImage product={product} />
-				</motion.div>
+				</div>
 			</div>
 			<div className="card__body">
 				{product.brand.trim() !== "" && (
