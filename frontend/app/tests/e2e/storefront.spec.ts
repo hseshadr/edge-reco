@@ -171,42 +171,25 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 	});
 });
 
-test("graded signals: one cart-add re-ranks the rail at least as far as two clicks", async ({
-	page,
-}) => {
-	// Per-facet affinity: one cart beats two clicks on EVERY facet
-	// (category .25 > .20, tag .12 > .10, brand .20 > .16) — so at most as many
-	// of the original rail titles survive a cart-add as survive two clicks.
-	const overlap = (before: string[], after: string[]): number =>
-		after.filter((t) => before.includes(t)).length;
-
-	const boot = async (): Promise<string[]> => {
-		await page.goto("/");
-		await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
-		await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
-			timeout: 60_000,
-		});
-		// Let the initial viewport's ambient dwell views fire (2 s window) and
-		// the rail settle, so BOTH phases share the same baseline drift.
-		await page.waitForTimeout(2_600);
-		return (await page.locator(RAIL_TITLE).allTextContents()).map((t) =>
-			t.trim(),
-		);
-	};
-
-	// Phase 1: two clicks on the first card.
-	const before1 = await boot();
-	await page.locator(PRODUCT_CARD).first().click();
-	await page.locator(PRODUCT_CARD).first().click();
-	await expect(page.locator(`${RAIL} .clicks-badge`)).toHaveText("2");
-	const afterClicks = (await page.locator(RAIL_TITLE).allTextContents()).map(
-		(t) => t.trim(),
+test("a single cart-add alone visibly re-ranks the rail", async ({ page }) => {
+	// The cart-vs-clicks magnitude claim (cart out-weighs two clicks on every
+	// affinity facet) is pinned deterministically against the real engine fold
+	// in src/signals/gradedSignals.test.ts. Here we prove the visible half:
+	// ONE cart-add re-orders the rail on its own — the hero loop needs three
+	// clicks. Set-stability is expected (the settled, category-saturated pool
+	// keeps the same strong candidates); the RANKING is what must move.
+	await page.goto("/");
+	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
+	await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
+		timeout: 60_000,
+	});
+	// Let the initial viewport's ambient dwell views fire (2 s window) and the
+	// rail settle, so the baseline is stable before the cart signal lands.
+	await page.waitForTimeout(2_600);
+	const before = (await page.locator(RAIL_TITLE).allTextContents()).map((t) =>
+		t.trim(),
 	);
 
-	// Phase 2: fresh in-tab session (reload resets the profile; the bundle is
-	// already in OPFS so the re-boot is fast). ONE cart-add on the SAME card.
-	const before2 = await boot();
-	expect(before2).toEqual(before1); // same catalog, same deterministic baseline
 	await page
 		.locator("main article.card")
 		.first()
@@ -214,11 +197,10 @@ test("graded signals: one cart-add re-ranks the rail at least as far as two clic
 		.nth(1)
 		.click();
 	await expect(page.locator(`${RAIL} .clicks-badge`)).toHaveText("1");
-	const afterCart = (await page.locator(RAIL_TITLE).allTextContents()).map(
-		(t) => t.trim(),
+	const after = (await page.locator(RAIL_TITLE).allTextContents()).map((t) =>
+		t.trim(),
 	);
 
-	expect(overlap(before2, afterCart)).toBeLessThanOrEqual(
-		overlap(before1, afterClicks),
-	);
+	const movedPositions = before.filter((t, i) => after[i] !== t).length;
+	expect(movedPositions).toBeGreaterThanOrEqual(1);
 });
