@@ -30,7 +30,9 @@ import { expect, test } from "@playwright/test";
  */
 
 const RAIL = "aside[aria-label='Recommended for you']";
-const PRODUCT_CARD = "main button.card";
+// The card root became an <article> in v0.9.0; the full-card action is the
+// overlay button (one per card, so counting overlays counts cards).
+const PRODUCT_CARD = "main article.card button.card__overlay";
 const RAIL_ITEM = `${RAIL} li.rail-card`;
 const RAIL_TITLE = `${RAIL} .rail-card__title`;
 
@@ -143,6 +145,23 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 	expect(await scoreBars.count()).toBeGreaterThanOrEqual(1);
 	await expect(topRailCard.getByText("Why this ranks here")).toBeVisible();
 
+	// --- Graded signals (v0.9.0): favorite and cart are explicit signals too ---
+	const firstCardActions = page
+		.locator("main article.card")
+		.first()
+		.locator(".card__actions button");
+	const toast = page.locator(".toast[role='status']");
+
+	await firstCardActions.nth(0).click(); // favorite
+	await expect(badge).toHaveText("4"); // explicit-signal badge: 3 clicks + 1 favorite
+	await expect(firstCardActions.nth(0)).toHaveAttribute("aria-pressed", "true");
+	await expect(toast).toContainText("strong signal");
+
+	await firstCardActions.nth(1).click(); // add to cart
+	await expect(badge).toHaveText("5");
+	await expect(page.locator(".cart-pill")).toHaveText(/1/);
+	await expect(toast).toContainText("nothing is purchased"); // first-add honesty
+
 	// --- Capture the personalized, backend-free state ---
 	// Write to the gitignored test-results/ dir so the run never dirties the
 	// committed docs/storefront.png asset that the README references.
@@ -150,4 +169,56 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 		path: "test-results/storefront.png",
 		fullPage: true,
 	});
+});
+
+test("graded signals: one cart-add re-ranks the rail at least as far as two clicks", async ({
+	page,
+}) => {
+	// Per-facet affinity: one cart beats two clicks on EVERY facet
+	// (category .25 > .20, tag .12 > .10, brand .20 > .16) — so at most as many
+	// of the original rail titles survive a cart-add as survive two clicks.
+	const overlap = (before: string[], after: string[]): number =>
+		after.filter((t) => before.includes(t)).length;
+
+	const boot = async (): Promise<string[]> => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
+		await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
+			timeout: 60_000,
+		});
+		// Let the initial viewport's ambient dwell views fire (2 s window) and
+		// the rail settle, so BOTH phases share the same baseline drift.
+		await page.waitForTimeout(2_600);
+		return (await page.locator(RAIL_TITLE).allTextContents()).map((t) =>
+			t.trim(),
+		);
+	};
+
+	// Phase 1: two clicks on the first card.
+	const before1 = await boot();
+	await page.locator(PRODUCT_CARD).first().click();
+	await page.locator(PRODUCT_CARD).first().click();
+	await expect(page.locator(`${RAIL} .clicks-badge`)).toHaveText("2");
+	const afterClicks = (await page.locator(RAIL_TITLE).allTextContents()).map(
+		(t) => t.trim(),
+	);
+
+	// Phase 2: fresh in-tab session (reload resets the profile; the bundle is
+	// already in OPFS so the re-boot is fast). ONE cart-add on the SAME card.
+	const before2 = await boot();
+	expect(before2).toEqual(before1); // same catalog, same deterministic baseline
+	await page
+		.locator("main article.card")
+		.first()
+		.locator(".card__actions button")
+		.nth(1)
+		.click();
+	await expect(page.locator(`${RAIL} .clicks-badge`)).toHaveText("1");
+	const afterCart = (await page.locator(RAIL_TITLE).allTextContents()).map(
+		(t) => t.trim(),
+	);
+
+	expect(overlap(before2, afterCart)).toBeLessThanOrEqual(
+		overlap(before1, afterClicks),
+	);
 });

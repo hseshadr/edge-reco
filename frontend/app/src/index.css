@@ -317,6 +317,7 @@ input {
 	position: relative;
 	aspect-ratio: 4 / 3;
 	overflow: hidden;
+	pointer-events: none; /* overlay button (z-index 1) handles card clicks */
 }
 
 .card__body {
@@ -427,6 +428,12 @@ input {
 .card__action--active {
 	color: var(--signal);
 	border-color: var(--signal);
+}
+
+.card__overlay:focus-visible,
+.card__action:focus-visible {
+	outline: 2px solid var(--signal);
+	outline-offset: 2px;
 }
 
 /* =========================================================================
