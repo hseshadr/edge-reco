@@ -7,14 +7,32 @@ interface ProductCardProps {
 	product: Product;
 	index: number;
 	onPick: (product: Product) => void;
+	onFavorite: (product: Product) => void;
+	onAddToCart: (product: Product) => void;
+	favorited: boolean;
+	dwellRef: (el: HTMLElement | null) => void;
 }
 
-export function ProductCard({ product, index, onPick }: ProductCardProps) {
+/**
+ * One catalog card. The root is an <article> (NOT a button) because the card
+ * hosts three distinct actions — the full-card "add to taste" overlay button
+ * plus the favorite/cart signal buttons layered above it; nested buttons are
+ * invalid HTML and break keyboard a11y. `dwellRef` is the ambient dwell-view
+ * observer's hook onto the card root.
+ */
+export function ProductCard({
+	product,
+	index,
+	onPick,
+	onFavorite,
+	onAddToCart,
+	favorited,
+	dwellRef,
+}: ProductCardProps) {
 	return (
-		<motion.button
-			type="button"
+		<motion.article
 			className="card"
-			onClick={() => onPick(product)}
+			ref={dwellRef}
 			initial={{ opacity: 0, y: 18 }}
 			animate={{ opacity: 1, y: 0 }}
 			transition={{
@@ -24,6 +42,66 @@ export function ProductCard({ product, index, onPick }: ProductCardProps) {
 			}}
 			whileHover={{ y: -6, boxShadow: "var(--shadow-lift)" }}
 		>
+			<button
+				type="button"
+				className="card__overlay"
+				aria-label={`Add “${product.title}” to your taste`}
+				onClick={() => onPick(product)}
+			/>
+			<div className="card__actions">
+				<button
+					type="button"
+					className={
+						favorited ? "card__action card__action--active" : "card__action"
+					}
+					aria-pressed={favorited}
+					aria-label={
+						favorited
+							? `Unfavorite “${product.title}”`
+							: `Favorite “${product.title}”`
+					}
+					onClick={() => onFavorite(product)}
+				>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill={favorited ? "currentColor" : "none"}
+						aria-hidden="true"
+					>
+						<path
+							d="M12 20.3 4.7 13a4.9 4.9 0 0 1 0-7 4.9 4.9 0 0 1 7 0l.3.4.3-.4a4.9 4.9 0 0 1 7 0 4.9 4.9 0 0 1 0 7L12 20.3z"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinejoin="round"
+						/>
+					</svg>
+				</button>
+				<button
+					type="button"
+					className="card__action"
+					aria-label={`Add “${product.title}” to cart`}
+					onClick={() => onAddToCart(product)}
+				>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill="none"
+						aria-hidden="true"
+					>
+						<path
+							d="M3 4h2.4l2.3 11.2a1.6 1.6 0 0 0 1.6 1.3h7.6a1.6 1.6 0 0 0 1.6-1.2L20.5 8H6"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						/>
+						<circle cx="10" cy="20" r="1.4" fill="currentColor" />
+						<circle cx="17" cy="20" r="1.4" fill="currentColor" />
+					</svg>
+				</button>
+			</div>
 			<div className="card__media">
 				<motion.div
 					style={{ position: "absolute", inset: 0 }}
@@ -45,6 +123,6 @@ export function ProductCard({ product, index, onPick }: ProductCardProps) {
 					<span className="card__pick">Add to taste &rarr;</span>
 				</div>
 			</div>
-		</motion.button>
+		</motion.article>
 	);
 }

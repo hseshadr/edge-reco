@@ -298,6 +298,7 @@ input {
 }
 
 .card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--line);
@@ -377,6 +378,55 @@ input {
 .card:hover .card__pick {
 	opacity: 1;
 	transform: translateX(0);
+}
+
+/* Signal affordances (v0.9.0): the card root is an <article>; the full-card
+   "add to taste" action is the transparent overlay button, and the
+   favorite / add-to-cart signal buttons are layered above it. */
+.card__overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.card__actions {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 2;
+	display: flex;
+	gap: 6px;
+}
+
+.card__action {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--paper-raise);
+	color: var(--muted);
+	cursor: pointer;
+	box-shadow: var(--shadow-card);
+	transition:
+		color 0.18s ease,
+		transform 0.18s ease;
+}
+
+.card__action:hover {
+	color: var(--signal);
+	transform: translateY(-1px);
+}
+
+.card__action--active {
+	color: var(--signal);
+	border-color: var(--signal);
 }
 
 /* =========================================================================
