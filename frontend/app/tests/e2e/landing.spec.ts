@@ -17,7 +17,9 @@ import { expect, test } from "@playwright/test";
  * ~25 MB transformers.js model download. Everything else is the production path.
  */
 
-const PRODUCT_CARD = "main button.card";
+// The card root became an <article> in v0.9.0; the full-card action is the
+// overlay button (one per card, so counting overlays counts cards).
+const PRODUCT_CARD = "main article.card button.card__overlay";
 const STRIP = "[aria-label='Live engine metrics']";
 
 const EMBEDDING_DIM = 384;

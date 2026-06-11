@@ -30,7 +30,9 @@ import { expect, test } from "@playwright/test";
  */
 
 const RAIL = "aside[aria-label='Recommended for you']";
-const PRODUCT_CARD = "main button.card";
+// The card root became an <article> in v0.9.0; the full-card action is the
+// overlay button (one per card, so counting overlays counts cards).
+const PRODUCT_CARD = "main article.card button.card__overlay";
 const RAIL_ITEM = `${RAIL} li.rail-card`;
 const RAIL_TITLE = `${RAIL} .rail-card__title`;
 
@@ -143,6 +145,23 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 	expect(await scoreBars.count()).toBeGreaterThanOrEqual(1);
 	await expect(topRailCard.getByText("Why this ranks here")).toBeVisible();
 
+	// --- Graded signals (v0.9.0): favorite and cart are explicit signals too ---
+	const firstCardActions = page
+		.locator("main article.card")
+		.first()
+		.locator(".card__actions button");
+	const toast = page.locator(".toast[role='status']");
+
+	await firstCardActions.nth(0).click(); // favorite
+	await expect(badge).toHaveText("4"); // explicit-signal badge: 3 clicks + 1 favorite
+	await expect(firstCardActions.nth(0)).toHaveAttribute("aria-pressed", "true");
+	await expect(toast).toContainText("strong signal");
+
+	await firstCardActions.nth(1).click(); // add to cart
+	await expect(badge).toHaveText("5");
+	await expect(page.locator(".cart-pill")).toHaveText(/1/);
+	await expect(toast).toContainText("nothing is purchased"); // first-add honesty
+
 	// --- Capture the personalized, backend-free state ---
 	// Write to the gitignored test-results/ dir so the run never dirties the
 	// committed docs/storefront.png asset that the README references.
@@ -150,4 +169,38 @@ test("backend-free hero loop: sync → search → 3 clicks re-rank the rail → 
 		path: "test-results/storefront.png",
 		fullPage: true,
 	});
+});
+
+test("a single cart-add alone visibly re-ranks the rail", async ({ page }) => {
+	// The cart-vs-clicks magnitude claim (cart out-weighs two clicks on every
+	// affinity facet) is pinned deterministically against the real engine fold
+	// in src/signals/gradedSignals.test.ts. Here we prove the visible half:
+	// ONE cart-add re-orders the rail on its own — the hero loop needs three
+	// clicks. Set-stability is expected (the settled, category-saturated pool
+	// keeps the same strong candidates); the RANKING is what must move.
+	await page.goto("/");
+	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
+	await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
+		timeout: 60_000,
+	});
+	// Let the initial viewport's ambient dwell views fire (2 s window) and the
+	// rail settle, so the baseline is stable before the cart signal lands.
+	await page.waitForTimeout(2_600);
+	const before = (await page.locator(RAIL_TITLE).allTextContents()).map((t) =>
+		t.trim(),
+	);
+
+	await page
+		.locator("main article.card")
+		.first()
+		.locator(".card__actions button")
+		.nth(1)
+		.click();
+	await expect(page.locator(`${RAIL} .clicks-badge`)).toHaveText("1");
+	const after = (await page.locator(RAIL_TITLE).allTextContents()).map((t) =>
+		t.trim(),
+	);
+
+	const movedPositions = before.filter((t, i) => after[i] !== t).length;
+	expect(movedPositions).toBeGreaterThanOrEqual(1);
 });

@@ -76,3 +76,17 @@ def test_post_multiple_events_received_count(client: TestClient) -> None:
     response = client.post("/events", json=payload, headers={"X-Session-Id": session_id})
     assert response.status_code == 200
     assert response.json() == {"received": 2}
+
+
+def test_post_events_accepts_all_event_types(client: TestClient) -> None:
+    """The collector accepts the full vocabulary the SPA emits as of v0.9.0."""
+    session_id = str(uuid.uuid4())
+    payload = {
+        "events": [
+            {"event_type": et, "product_id": "B001", "timestamp": "2026-06-11T00:00:00Z"}
+            for et in ["click", "view", "favorite", "cart"]
+        ]
+    }
+    response = client.post("/events", json=payload, headers={"X-Session-Id": session_id})
+    assert response.status_code == 200
+    assert response.json() == {"received": 4}

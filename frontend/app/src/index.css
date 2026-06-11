@@ -298,6 +298,7 @@ input {
 }
 
 .card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--line);
@@ -316,6 +317,7 @@ input {
 	position: relative;
 	aspect-ratio: 4 / 3;
 	overflow: hidden;
+	pointer-events: none; /* overlay button (z-index 1) handles card clicks */
 }
 
 .card__body {
@@ -377,6 +379,71 @@ input {
 .card:hover .card__pick {
 	opacity: 1;
 	transform: translateX(0);
+}
+
+/* Signal affordances (v0.9.0): the card root is an <article>; the full-card
+   "add to taste" action is the transparent overlay button, and the
+   favorite / add-to-cart signal buttons are layered above it. */
+.card__overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.card__actions {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 2;
+	display: flex;
+	gap: 6px;
+}
+
+.card__action {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--paper-raise);
+	color: var(--muted);
+	cursor: pointer;
+	box-shadow: var(--shadow-card);
+	transition:
+		color 0.18s ease,
+		transform 0.18s ease;
+}
+
+.card__action:hover {
+	color: var(--signal);
+	transform: translateY(-1px);
+}
+
+.card__action--active {
+	color: var(--signal);
+	border-color: var(--signal);
+}
+
+.card__overlay:focus-visible,
+.card__action:focus-visible {
+	outline: 2px solid var(--signal);
+	outline-offset: 2px;
+}
+
+/* The overlay button sits above the media, so the old element-local hover
+   zoom can't receive pointer events — drive it from the card hover instead. */
+.card__zoom {
+	transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card:hover .card__zoom {
+	transform: scale(1.06);
 }
 
 /* =========================================================================
@@ -552,6 +619,22 @@ input {
 	align-items: center;
 	justify-content: center;
 	box-shadow: 0 4px 12px var(--signal-soft);
+}
+
+.cart-pill {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: var(--paper-raise);
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 15px;
 }
 
 .rail__list {

@@ -4,7 +4,7 @@ import { RailCard } from "./RailCard";
 
 interface RecommendRailProps {
 	results: SearchResult[];
-	sessionClicks: number;
+	sessionSignals: number;
 	personalizing: boolean;
 	onPick: (product: Product) => void;
 }
@@ -25,11 +25,11 @@ function ColdStart() {
 
 export function RecommendRail({
 	results,
-	sessionClicks,
+	sessionSignals,
 	personalizing,
 	onPick,
 }: RecommendRailProps) {
-	const hasPicks = sessionClicks > 0;
+	const hasPicks = sessionSignals > 0;
 
 	return (
 		<aside className="rail" aria-label="Recommended for you">
@@ -45,9 +45,9 @@ export function RecommendRail({
 				</div>
 				<span
 					className="clicks-badge"
-					title={`${sessionClicks} signals captured this session`}
+					title={`${sessionSignals} signals captured this session`}
 				>
-					{sessionClicks}
+					{sessionSignals}
 				</span>
 			</div>
 

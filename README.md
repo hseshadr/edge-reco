@@ -41,14 +41,14 @@ containers and reload — it keeps working offline.
 **Nimbus is a pretend online store.** The interesting part: its entire
 search-and-recommend brain runs *inside your browser tab* — no server, no
 backend calls — after a one-time download. So the store works offline, costs
-nothing per search, and your clicks never leave your device.
+nothing per search, and your clicks, hearts, and cart adds never leave your device.
 
 Open the store, search for "shirt", then click a couple of
 products. Every click reshapes the "Recommended for you" rail across five taste
 signals — category, brand, tags, popularity, and freshness — re-ranking
-**instantly, on-device, with no trip to a server.** This is the same shape of
+**instantly, on-device, with no trip to a server.** Hearts and cart-adds are stronger signals than clicks, and what you linger on nudges the rail gently. This is the same shape of
 per-session personalization big storefronts run server-side; here it runs
-entirely in your tab, so your clicks never leave your device. Turn the server
+entirely in your tab, so your signals never leave your device. Turn the server
 off and reload: it still works, because everything it needs is already on your
 machine.
 
@@ -65,7 +65,7 @@ back to it automatically.)
 **See the flywheel:** `poe demo-flywheel` adds a "mimicked cloud" collector (also on
 a free port) and shows the uplink half of the loop — clicks are captured in-tab
 and periodically flushed (batched, fire-and-forget) to the FastAPI `/events`
-endpoint, so the cloud can retrain. Inference still runs 100% locally; the
+endpoint, so the cloud can retrain. Signals are intent-graded — toward retrained popularity a cart-add weighs 4×, a favorite 3×, a click 1×, a lingered view 0.2× (the same grading both tiers use in-session). Inference still runs 100% locally; the
 uplink is optional and off by default (the plain `poe demo` makes zero backend
 calls). Watch the `POST /events` requests and the "N interactions synced to cloud"
 badge.

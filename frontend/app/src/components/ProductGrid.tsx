@@ -9,6 +9,10 @@ interface ProductGridProps {
 	title: string;
 	loading: boolean;
 	onPick: (product: Product) => void;
+	onFavorite: (product: Product) => void;
+	onAddToCart: (product: Product) => void;
+	favoritedIds: ReadonlySet<string>;
+	registerDwell: (product: Product) => (el: HTMLElement | null) => void;
 }
 
 function SkeletonCard() {
@@ -27,6 +31,10 @@ export function ProductGrid({
 	title,
 	loading,
 	onPick,
+	onFavorite,
+	onAddToCart,
+	favoritedIds,
+	registerDwell,
 }: ProductGridProps) {
 	return (
 		<section aria-label={title}>
@@ -60,6 +68,10 @@ export function ProductGrid({
 							product={product}
 							index={index}
 							onPick={onPick}
+							onFavorite={onFavorite}
+							onAddToCart={onAddToCart}
+							favorited={favoritedIds.has(product.id)}
+							dwellRef={registerDwell(product)}
 						/>
 					))}
 				</div>

@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-06-11
+
+### Added
+- **Richer interaction signals** — the storefront now emits the full graded
+  vocabulary the engine and retrain already understood: a favorite heart
+  (once per product per session; unfavoriting is visual-only), add-to-cart
+  (every press; header cart pill; first add carries a "nothing is purchased"
+  honesty note), and capped ambient dwell views (≥75% visible for 2 s, once
+  per product, silent). Cart-over-clicks facet dominance is pinned against
+  the real engine fold in `signals/gradedSignals.test.ts`; a single cart-add
+  visibly re-ranks the rail in e2e. Zero engine/backend/weight change;
+  parity fixtures byte-identical.
+
+### Changed
+- The rail badge counts all explicit signals (clicks + favorites + cart-adds)
+  app-side; product cards are now `<article>` roots with a full-card
+  "add to taste" overlay button plus layered signal buttons (keyboard
+  focus-visible styles included), and the image hover-zoom is driven from
+  card-level CSS.
+
 ## [0.8.0] — 2026-06-08
 
 ### Added

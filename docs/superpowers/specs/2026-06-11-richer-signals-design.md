@@ -47,8 +47,7 @@ Closing it is emitter-only work.
 | `cart` | add-to-cart pressed | emit on **every** add (repeated intent = repeated signal) | toast (first add includes "demo: this is a ranking signal — nothing is purchased"); header badge increments |
 | `view` | card ≥75% visible (threshold 0.75) for 2 continuous seconds (IntersectionObserver), tab visible | emit **once per product per session**; observer disconnects per product after emit | none — impressions are ambient |
 
-Button presses are exclusive: heart and add-to-cart stop propagation, so a
-`favorite`/`cart` press never also emits the card's `click`.
+Button presses are exclusive: the heart and add-to-cart buttons are SIBLINGS of the full-card overlay button (not nested inside it), so a `favorite`/`cart` press never also emits the card's `click` — structurally, with no stopPropagation needed.
 
 All visible affordance state is per-tab-session, matching the engine session
 profile's lifetime: a refresh resets both. That alignment is deliberate and
@@ -129,8 +128,7 @@ simple and explainable:
 ## Demo story
 
 - Click three crafts products (today's demo) → rail flips to crafts.
-- **New beat:** fresh session, ONE cart-add on a crafts product → rail
-  shifts at least as far as two clicks did. Asserted in e2e.
+- **New beat:** the cart-vs-clicks magnitude claim (one cart out-weighs two clicks on every affinity facet) is pinned deterministically against the real engine fold in `signals/gradedSignals.test.ts`; the e2e asserts the visible half — a SINGLE cart-add alone re-orders the rail (set-stability is expected in the settled, category-saturated pool; the ranking is what moves).
 - Flywheel: collector export now shows typed events; `edgereco retrain`
   output already grades them 4/3/1/0.2 — no script change, richer story.
 
@@ -143,7 +141,7 @@ simple and explainable:
 - **Component:** ProductCard affordances render, fire callbacks, reflect
   state.
 - **e2e (Playwright):** favorite and cart each visibly re-rank the rail;
-  the one-cart-beats-two-clicks beat; flywheel run asserts typed events
+  the single-cart visible re-rank beat (facet dominance pinned in the engine-fold unit test); flywheel run asserts typed events
   reach the collector export.
 - **Backend:** one integration test asserting `/events` accepts all four
   event types (verification of the zero-change claim).
