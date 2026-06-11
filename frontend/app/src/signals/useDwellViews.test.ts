@@ -120,6 +120,18 @@ describe("useDwellViews", () => {
 		expect(result.current(product)).toBe(result.current(product));
 	});
 
+	it("unmount clears pending dwell timers (no fire after teardown)", () => {
+		const onDwell = vi.fn();
+		const { result, unmount } = renderHook(() => useDwellViews(onDwell));
+		const el = document.createElement("div");
+		result.current(makeProduct("P1"))(el);
+		lastObserver().intersect(el, true);
+		vi.advanceTimersByTime(DWELL_MS - 500);
+		unmount();
+		vi.advanceTimersByTime(DWELL_MS * 3);
+		expect(onDwell).not.toHaveBeenCalled();
+	});
+
 	it("unmount disconnects the observer", () => {
 		const { result, unmount } = renderHook(() => useDwellViews(vi.fn()));
 		result.current(makeProduct("P1"))(document.createElement("div"));

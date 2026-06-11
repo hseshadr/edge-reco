@@ -17,6 +17,8 @@ type DwellRef = (el: HTMLElement | null) => void;
  * that product's card root. Stability matters: the grid re-renders on every
  * rail refresh, and an unstable ref would re-mount observation and reset the
  * dwell timer each time.
+ * The registrar cache is bounded by distinct products seen this session
+ * (≤ catalog size) — intentional, the price of ref stability, not a leak.
  *
  * Honesty guards: timers cancel when the card leaves the viewport or the tab
  * hides. (After a tab re-show the timer restarts on the next intersection
