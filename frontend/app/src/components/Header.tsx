@@ -4,6 +4,7 @@ interface HeaderProps {
 	categories: string[];
 	activeCategory: string | null;
 	onSelectCategory: (category: string | null) => void;
+	cartCount: number;
 }
 
 export function Header({
@@ -12,6 +13,7 @@ export function Header({
 	categories,
 	activeCategory,
 	onSelectCategory,
+	cartCount,
 }: HeaderProps) {
 	return (
 		<header className="nimbus-header">
@@ -60,6 +62,32 @@ export function Header({
 					<span className="session-pill__dot" />
 					on-device personalization
 				</div>
+
+				{cartCount > 0 && (
+					<span
+						className="cart-pill"
+						title={`${cartCount} added to cart this session (demo signal — nothing is purchased)`}
+					>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="none"
+							aria-hidden="true"
+						>
+							<path
+								d="M3 4h2.4l2.3 11.2a1.6 1.6 0 0 0 1.6 1.3h7.6a1.6 1.6 0 0 0 1.6-1.2L20.5 8H6"
+								stroke="currentColor"
+								strokeWidth="2"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+							<circle cx="10" cy="20" r="1.4" fill="currentColor" />
+							<circle cx="17" cy="20" r="1.4" fill="currentColor" />
+						</svg>
+						{cartCount}
+					</span>
+				)}
 			</div>
 
 			{categories.length > 0 && (

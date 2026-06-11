@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveBundleBaseUrl } from "../api/bundleUrl";
-import {
-	browse,
-	catalogInfo,
-	recommend,
-	search,
-	sendEvent,
-} from "../api/client";
-import type { Product, SearchResult } from "../api/types";
+import { browse, catalogInfo, recommend, search } from "../api/client";
+import type { EventType, Product, SearchResult } from "../api/types";
 import { startMetricsObservers } from "../metrics/observe";
 import { record } from "../metrics/store";
+import { emitInteraction } from "../signals/emit";
+import { useDwellViews } from "../signals/useDwellViews";
 import { useDebounced } from "../useDebounced";
 import { Footer } from "./Footer";
 import { Header } from "./Header";
@@ -53,7 +49,14 @@ export function Storefront() {
 	const [gridLoading, setGridLoading] = useState(true);
 
 	const [railResults, setRailResults] = useState<SearchResult[]>([]);
-	const [sessionClicks, setSessionClicks] = useState(0);
+	// Explicit signals (click | favorite | cart) counted app-side: the engine's
+	// parity-locked clickCount only counts clicks, and the badge + cold-start
+	// gate must also register favorites/carts. Ambient views never count here.
+	const [sessionSignals, setSessionSignals] = useState(0);
+	const [cartCount, setCartCount] = useState(0);
+	const [favoritedIds, setFavoritedIds] = useState<ReadonlySet<string>>(
+		new Set(),
+	);
 	const [personalizing, setPersonalizing] = useState(false);
 
 	const [error, setError] = useState<string | null>(null);
@@ -65,7 +68,6 @@ export function Storefront() {
 		try {
 			const res = await recommend(RAIL_LIMIT);
 			setRailResults(res.results);
-			setSessionClicks(res.session_clicks);
 		} catch (err) {
 			setError(errorMessage(err));
 		} finally {
@@ -84,7 +86,7 @@ export function Storefront() {
 				setGrid({
 					products: res.results.map((r) => r.product),
 					kicker: "Search results",
-					title: `“${trimmed}”`,
+					title: `"${trimmed}"`,
 				});
 				return;
 			}
@@ -139,22 +141,63 @@ export function Storefront() {
 		toastTimer.current = window.setTimeout(() => setToast(null), TOAST_MS);
 	}, []);
 
-	const onPick = useCallback(
-		async (product: Product) => {
+	const emitExplicit = useCallback(
+		async (eventType: EventType, product: Product): Promise<boolean> => {
 			try {
-				await sendEvent({
-					event_type: "click",
-					product_id: product.id,
-					timestamp: new Date().toISOString(),
-				});
-				flashToast(`Added “${product.title}” to your taste`);
+				const { emitted, message } = await emitInteraction(eventType, product);
+				if (!emitted) return false;
+				if (message !== null) flashToast(message);
+				setSessionSignals((n) => n + 1);
 				await refreshRail();
+				return true;
 			} catch (err) {
 				setError(errorMessage(err));
+				return false;
 			}
 		},
 		[refreshRail, flashToast],
 	);
+
+	const onPick = useCallback(
+		async (product: Product) => {
+			await emitExplicit("click", product);
+		},
+		[emitExplicit],
+	);
+
+	const onFavorite = useCallback(
+		async (product: Product) => {
+			const wasFavorited = favoritedIds.has(product.id);
+			setFavoritedIds((prev) => {
+				const next = new Set(prev);
+				if (wasFavorited) next.delete(product.id);
+				else next.add(product.id);
+				return next;
+			});
+			// Unfavoriting is visual-only: negative signals are deferred (spec).
+			if (!wasFavorited) await emitExplicit("favorite", product);
+		},
+		[favoritedIds, emitExplicit],
+	);
+
+	const onAddToCart = useCallback(
+		async (product: Product) => {
+			if (await emitExplicit("cart", product)) setCartCount((n) => n + 1);
+		},
+		[emitExplicit],
+	);
+
+	const onDwell = useCallback(
+		(product: Product) => {
+			// Ambient impression: silent, uncounted, and failures never surface —
+			// a missed view must not interrupt browsing (same spirit as the uplink).
+			void emitInteraction("view", product)
+				.then((outcome) => (outcome.emitted ? refreshRail() : undefined))
+				.catch(() => undefined);
+		},
+		[refreshRail],
+	);
+	const registerDwell = useDwellViews(onDwell);
 
 	const onSelectCategory = useCallback((category: string | null) => {
 		setQuery("");
@@ -169,6 +212,7 @@ export function Storefront() {
 				categories={categories}
 				activeCategory={activeCategory}
 				onSelectCategory={onSelectCategory}
+				cartCount={cartCount}
 			/>
 
 			<MetricsStrip />
@@ -198,12 +242,16 @@ export function Storefront() {
 						title={grid.title}
 						loading={gridLoading}
 						onPick={onPick}
+						onFavorite={onFavorite}
+						onAddToCart={onAddToCart}
+						favoritedIds={favoritedIds}
+						registerDwell={registerDwell}
 					/>
 				</div>
 
 				<RecommendRail
 					results={railResults}
-					sessionClicks={sessionClicks}
+					sessionSignals={sessionSignals}
 					personalizing={personalizing}
 					onPick={onPick}
 				/>
