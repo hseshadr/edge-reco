@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-06-26
+
+### Added
+- **Installable, offline-capable PWA.** The Nimbus storefront is now an installable
+  Progressive Web App that works **fully offline after one online sync**. A Workbox
+  service worker precaches the app shell and the ~25 MB embedding model; the signed
+  catalog bundle stays OPFS-owned, preserving the Ed25519 + SHA-256 fail-closed
+  guarantees. Adds an in-app install affordance (install button + offline badge).
+  Offline operation is proven by a real-browser Playwright e2e (`test:e2e:offline`):
+  warm online, cut the network, reload — the store still mounts and ranks.
+- **`SECURITY.md`** — private vulnerability-reporting policy plus the signed-bundle
+  trust model (Ed25519 verify-before-trust, SHA-256 content-addressing, pinned key).
+- A **"View source on GitHub"** link on the landing page.
+
 ### Changed
 - **Open-source launch.** Relicensed from Apache-2.0 to **MIT** (LICENSE + all
   package manifests); `NOTICE` retained for third-party data attribution only.
@@ -14,12 +28,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dropped the private-sibling checkout + path-patch + `PORTFOLIO_PAT` secret and now
   builds exactly as an external cloner does. A commented path-source override remains
   for substrate co-development.
-- **Docs** lead with the value proposition (zero per-query cloud cost, scales on the
-  clients not the servers, resilient on weak/dropped connections) and cross-link the
-  `edge-reco → edge-proc → shared-libs-python` stack as one system.
+- **Plain-language docs.** README and the SPA landing lead with the value proposition
+  in non-technical terms (zero per-query cloud cost, scales on the clients not the
+  servers, resilient on weak/dropped connections), make explicit that companies — not
+  shoppers — bear cloud search/reco cost, add a Mermaid architecture diagram, and
+  cross-link the `edge-reco → edge-proc → shared-libs-python` stack as one system.
+- **Docs tidy for the public repo.** Removed the pre-pivot `docs/archive/` and the
+  internal `docs/superpowers/` planning docs from the published tree (preserved in
+  project history); fixed the references that pointed at them; relabeled the
+  `DEPLOY.md` compose snippet as abridged.
 
-### Added
-- A **"View source on GitHub"** link on the landing page.
+### Fixed
+- **`audit` now fails closed.** The `edgereco audit` path threads the bundle schema
+  version into the co-occurrence and ranking-config loaders, so a schema-mismatched or
+  corrupt bundle is rejected instead of silently degrading to an empty matrix / default
+  weights — matching the serving path.
+- **Demo `/events` collector hardened.** Request batches are capped
+  (`max_length=1000`, oversized → 422) and an optional fail-closed bearer token
+  (`EDGERECO_EVENTS_TOKEN`) guards `/events` and `/events/export` (unset = open, so the
+  local flywheel demo keeps working tokenless).
+- **Uplink no longer double-sends or drops events on tab unload.** The in-flight batch
+  is claimed before the network call, so a concurrent `flushBeacon()` only beacons the
+  un-sent tail (restoring order on failure). Still fire-and-forget, off the inference path.
+- **Browser engine validates bundle data fail-closed.** `products.jsonl`,
+  `catalog_meta.json`, and the vector state are now runtime-validated (rejecting
+  malformed data) instead of unchecked casts; live performance entries degrade-and-skip
+  rather than throwing.
+- Internal: the scorer's reputation penalty was rewritten to an explicit
+  single-subtraction form (behavior-preserving; Python↔TS scoring stays byte-identical).
 
 ## [0.9.0] — 2026-06-11
 
