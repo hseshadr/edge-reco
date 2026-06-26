@@ -22,7 +22,9 @@ Architecture:
 There is **no application backend in the request path**. The browser does the work.
 
 ```yaml
-# frontend/docker-compose.yml — verbatim, modulo your TLS cert
+# frontend/docker-compose.yml — abridged (omits the `name: nimbus-demo`
+# project name, the demo `collector` service, and healthchecks; see the
+# file itself for the full config). Modulo your TLS cert.
 services:
   origin:
     image: python:3.13-slim

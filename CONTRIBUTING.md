@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions are welcome. EdgeReco is small enough to read end-to-end in an afternoon — start with [`docs/superpowers/specs/edgereco-python-v1.md`](docs/superpowers/specs/edgereco-python-v1.md).
+Contributions are welcome. EdgeReco is small enough to read end-to-end in an afternoon — start with the [README](README.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Local setup
 
@@ -29,4 +29,4 @@ New behavior: write the failing test first, then the smallest implementation tha
 
 ## Invariants
 
-The scoring formula and interaction weights are spec-locked — see `docs/superpowers/specs/edgereco-python-v1.md` §5. Changes there require a spec PR alongside the code change.
+The scoring formula and interaction weights are spec-locked — see the scoring section of [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The weights ship as bundle-carried config (`ranking_config.json`), so retuning ranking is a data republish, not a code change; altering the formula itself requires updating the docs alongside the code.

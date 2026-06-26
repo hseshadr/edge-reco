@@ -163,6 +163,3 @@ Regenerate via `backend/scripts/gen_*_fixture.py`. The browser tests under `fron
 - [`QUICKSTART.md`](QUICKSTART.md) — clone → run.
 - [`DEPLOY.md`](DEPLOY.md) — backend-free in-browser vs edge-origin shapes.
 - [`diagrams/`](diagrams/) — the rest of the d2 sources (manifest lifecycle, artifact distribution, event uplink, personalization flywheel).
-- [`superpowers/specs/2026-06-20-multi-strategy-recommendations-spec.md`](superpowers/specs/2026-06-20-multi-strategy-recommendations-spec.md) — the multi-strategy rails + PDP spec.
-- [`superpowers/specs/2026-06-20-collaborative-filtering-audit-spec.md`](superpowers/specs/2026-06-20-collaborative-filtering-audit-spec.md) — the co-occurrence + retrain/audit spec.
-- [`archive/`](archive/) — historical phase docs (pre-pivot TS/WASM design, MVP roadmap, PRD, tech spec).

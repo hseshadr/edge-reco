@@ -465,7 +465,12 @@ content.
 - `frontend/` — pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`).
   - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
   - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine
-- `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `diagrams/` · `archive/`
+- `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `diagrams/`
+
+## Security
+
+The catalog bundle is Ed25519-signed and verified fail-closed on both tiers. Found a
+hole? See [`SECURITY.md`](SECURITY.md) for the trust model and private reporting.
 
 ## License
 

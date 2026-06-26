@@ -19,7 +19,6 @@ bundle) → both tiers re-sync the new ranking. See `poe demo-flywheel` +
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run demo
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns
 - [`docs/diagrams/`](docs/diagrams/) — d2 sources + rendered SVGs
-- [`docs/archive/`](docs/archive/) — historical phase docs
 
 ## Stack
 Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAPI · Typer · pytest-bdd · uv · Ruff · mypy strict · Docker Compose (origin + Caddy edge + app)
@@ -37,7 +36,7 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - `frontend/` — npm workspace root
   - `frontend/app/` — the Nimbus React storefront (Vite + TS)
   - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser tier (signed-bundle sync + OPFS + transformers.js embedder + hybrid search engine); parity-tested against the Python core
-- `docs/` — ARCHITECTURE / QUICKSTART / DEPLOY / diagrams / archive (no `legacy/`)
+- `docs/` — ARCHITECTURE / QUICKSTART / DEPLOY / diagrams
 
 ## Invariants (don't break without updating the spec)
 - **Scoring formula**: `0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`. The weights are **bundle-carried config**, not hardcoded constants: the signed `ranking_config.json` holds them (typed `RankingConfig`, `reco/ranking_config.py`), the scorer reads them off the loaded config, and `DEFAULT_RANKING_CONFIG` reproduces these exact values — so retuning ranking is a data republish, no code change. A bundle predating the file falls back to the default.

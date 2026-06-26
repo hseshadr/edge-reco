@@ -3,7 +3,7 @@
 //
 // The engine, uplink, and retrain already grade the full vocabulary
 // (click | view | favorite | cart); this module owns the per-type EMIT RULES
-// from docs/superpowers/specs/2026-06-11-richer-signals-design.md:
+// (one rule per signal type):
 //
 //   click     every press
 //   favorite  once per product per session, on the first transition to
