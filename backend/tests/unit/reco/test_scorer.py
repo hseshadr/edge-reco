@@ -59,6 +59,30 @@ def test_repetition_penalty() -> None:
     assert abs(result.score - expected) < 1e-10
 
 
+def test_repetition_penalty_component_stays_positive_for_ts_parity() -> None:
+    """The ``repetition_penalty`` component is stored as the positive penalty
+    magnitude (``+0.25``), mirroring the TS browser reranker byte-for-byte. The
+    subtraction happens in the ``score``, never in the stored component. Flipping
+    this sign would break Python<->TS parity (reranker.test.ts asserts +0.25) and
+    the WhyPopover UI, so it is pinned here."""
+    product = _product(id="seen", popularity_score=1.0, freshness_score=0, tags=[], brand="")
+    profile = SessionProfile(recently_viewed=["seen"])
+    result = score_product(product, profile, _W)
+    assert result.score_components["repetition_penalty"] == _W.repetition_penalty
+    assert result.score_components["repetition_penalty"] > 0
+    # And the penalty is applied exactly once in the score (not zero, not double).
+    expected = _W.popularity * 1.0 - _W.repetition_penalty
+    assert abs(result.score - expected) < 1e-12
+
+
+def test_no_penalty_leaves_score_and_component_untouched() -> None:
+    """A product not recently viewed has a zero penalty component and no deduction."""
+    product = _product(id="fresh", popularity_score=1.0, freshness_score=0, tags=[], brand="")
+    result = score_product(product, SessionProfile(), _W)
+    assert result.score_components["repetition_penalty"] == 0.0
+    assert abs(result.score - _W.popularity * 1.0) < 1e-12
+
+
 def test_breakdown_sums_to_score() -> None:
     product = _product(popularity_score=0.7, freshness_score=0.4)
     profile = SessionProfile(

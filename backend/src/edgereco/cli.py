@@ -251,8 +251,11 @@ def _build_audit(
         products=load_jsonl(local / "products.jsonl"),
         logs=logs,
         alpha=alpha,
-        current_cooccurrence=ServiceContainer._load_cooccurrence(local),
+        current_cooccurrence=ServiceContainer._load_cooccurrence(
+            local, meta_schema=meta.schema_version
+        ),
     )
+    ranking_config = ServiceContainer._load_ranking_config(local, meta_schema=meta.schema_version)
     return build_audit_report(
         logs=logs,
         before=inputs.before,
@@ -261,7 +264,7 @@ def _build_audit(
         after_cooccurrence=inputs.after_cooccurrence,
         current_version=meta.version,
         new_version=bump_version(meta.version),
-        schema_version=ServiceContainer._load_ranking_config(local).schema_version,
+        schema_version=ranking_config.schema_version,
     )
 
 

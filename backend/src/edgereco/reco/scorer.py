@@ -43,7 +43,19 @@ def score_product(
         "freshness": weights.freshness * product.freshness_score,
         "similarity": weights.similarity * similarity,
         "cooccurrence": weights.cooccurrence * cooccurrence,
+        # Stored as the POSITIVE penalty magnitude so the breakdown mirrors the TS
+        # browser reranker byte-for-byte (reranker.ts:69 / reranker.test.ts: +0.25).
+        # The subtraction lives only in ``score`` below.
         "repetition_penalty": penalty,
     }
-    score = sum(components.values()) - 2 * penalty
+    score = (
+        components["popularity"]
+        + components["category_match"]
+        + components["tag_match"]
+        + components["brand_match"]
+        + components["freshness"]
+        + components["similarity"]
+        + components["cooccurrence"]
+        - components["repetition_penalty"]
+    )
     return SearchResult(product=product, score=score, score_components=components)
