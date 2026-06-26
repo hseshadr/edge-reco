@@ -1,0 +1,261 @@
+// The data layer is now backend-free: every call runs the in-browser engine over
+// the synced bundle, and sendEvent folds clicks into the in-tab session profile
+// (no network) so the next recommend() re-ranks. These tests bootstrap the client
+// against the REAL committed bundle via an injected fake sync-Worker + a stub
+// embedder, then assert the contract shapes and the live re-rank loop in Node.
+
+import {
+	EMBEDDING_DIM,
+	type Embedder,
+	type EnginePort,
+	type SyncResult,
+} from "@edgeproc/browser";
+import {
+	type IndexManifest,
+	MemoryCacheStore,
+	materializeFile,
+	syncIndex,
+	type Verify,
+} from "@edgeproc/browser/testing";
+import { catalogFetch } from "@edgeproc/browser/testing/fixtures";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getSnapshot } from "../metrics/store";
+import {
+	__setRuntimeForTests,
+	bootstrap,
+	browse,
+	catalog,
+	catalogInfo,
+	recommend,
+	recommendStrategy,
+	search,
+	sendEvent,
+	similar,
+	strategies,
+} from "./client";
+import type { Product } from "./types";
+
+const acceptVerify: Verify = () => Promise.resolve();
+const DECODER = new TextDecoder();
+
+/** A fake sync Worker backed by the real committed bundle (no network, no OPFS). */
+function fakeEnginePort(): EnginePort {
+	const store = new MemoryCacheStore();
+	const { fetchBytes } = catalogFetch();
+	let manifest: IndexManifest | null = null;
+	return {
+		async sync(): Promise<SyncResult> {
+			const result = await syncIndex({
+				baseUrl: "/cat",
+				store,
+				fetchBytes,
+				verify: acceptVerify,
+			});
+			manifest = JSON.parse(
+				DECODER.decode(await store.getManifest(result.manifestHash)),
+			) as IndexManifest;
+			return result;
+		},
+		readFile(path: string): Promise<Uint8Array> {
+			if (manifest === null) {
+				throw new Error("sync first");
+			}
+			return materializeFile(store, manifest, path);
+		},
+	};
+}
+
+// A unit query vector — the embedder is unused for the contract assertions, but
+// search() must get a valid 384-d vector to run the vector leg.
+const stubEmbedder: Embedder = {
+	embed(): Promise<Float32Array> {
+		const v = new Float32Array(EMBEDDING_DIM);
+		v[0] = 1;
+		return Promise.resolve(v);
+	},
+};
+
+describe("backend-free data layer", () => {
+	beforeEach(async () => {
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+		await bootstrap();
+	});
+
+	afterEach(() => {
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+	});
+
+	it("bootstrap reports stages ending in 'ready'", async () => {
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+		const stages: string[] = [];
+		await bootstrap((stage) => stages.push(stage.kind));
+		expect(stages[0]).toBe("syncing");
+		expect(stages.at(-1)).toBe("ready");
+	});
+
+	it("search() returns the SearchResponse shape from the engine", async () => {
+		const res = await search("headphones", { limit: 5 });
+		expect(res.query).toBe("headphones");
+		expect(Array.isArray(res.results)).toBe(true);
+		expect(res.results.length).toBeLessThanOrEqual(5);
+		expect(typeof res.total).toBe("number");
+	});
+
+	it("browse() lists products with categories", async () => {
+		const res = await browse({ limit: 8 });
+		expect(res.products).toHaveLength(8);
+		expect(res.categories.length).toBeGreaterThan(0);
+	});
+
+	it("catalogInfo() reports the catalog size", async () => {
+		const info = await catalogInfo();
+		expect(info.count).toBe((await browse({ limit: 10_000 })).total);
+	});
+
+	it("a click folds into the profile and re-ranks the next recommend (no network)", async () => {
+		const cold = await recommend(10);
+		expect(cold.session_clicks).toBe(0);
+		const coldOrder = cold.results.map((r) => r.product.id).join(",");
+
+		// Click 3 products in one category — clicks update the IN-TAB profile only.
+		const target = cold.results[0]?.product as Product;
+		const sameCategory = (await browse({ limit: 10_000 })).products
+			.filter((p) => p.category === target.category)
+			.slice(0, 3);
+		for (const product of sameCategory) {
+			await sendEvent({
+				event_type: "click",
+				product_id: product.id,
+				timestamp: new Date().toISOString(),
+			});
+		}
+
+		const warm = await recommend(10);
+		expect(warm.session_clicks).toBe(3);
+		const warmOrder = warm.results.map((r) => r.product.id).join(",");
+		expect(warmOrder).not.toBe(coldOrder);
+
+		// Meaningful personalization (not just a tie-break reshuffle): the affinity-aware
+		// pool surfaces at least one product the cold rail never showed.
+		const coldIds = new Set(cold.results.map((r) => r.product.id));
+		const newcomers = warm.results.filter((r) => !coldIds.has(r.product.id));
+		expect(newcomers.length).toBeGreaterThan(0);
+	});
+
+	it("ignores clicks on unknown product ids", async () => {
+		await sendEvent({
+			event_type: "click",
+			product_id: "does-not-exist",
+			timestamp: new Date().toISOString(),
+		});
+		const res = await recommend(5);
+		expect(res.session_clicks).toBe(0);
+	});
+
+	it("records a non-negative searchMs latency when search() runs", async () => {
+		await search("headphones", { limit: 3 });
+		const { searchMs } = getSnapshot();
+		expect(typeof searchMs).toBe("number");
+		expect(searchMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("records a non-negative recommendMs latency when recommend() runs", async () => {
+		await recommend(3);
+		const { recommendMs } = getSnapshot();
+		expect(typeof recommendMs).toBe("number");
+		expect(recommendMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("strategies() exposes the seed bundle's named strategies", () => {
+		const map = strategies();
+		expect(map.for_you?.label).toBe("Recommended for you");
+		expect(map.trending?.label).toBe("Trending now");
+		expect(map.new_arrivals?.label).toBe("New arrivals");
+		expect(map.similar_items?.candidate_policy).toBe("vector_similarity");
+		expect(map.because_viewed?.candidate_policy).toBe("vector_similarity");
+	});
+
+	it("catalog() returns the full product list", async () => {
+		const products = catalog();
+		expect(products.length).toBe((await browse({ limit: 10_000 })).total);
+		expect(typeof products[0]?.id).toBe("string");
+	});
+
+	it("recommendStrategy('trending') ignores the live profile (stable rail)", async () => {
+		const cold = await recommendStrategy("trending", { limit: 8 });
+		const coldOrder = cold.results.map((r) => r.product.id).join(",");
+		// Click 3 products — trending is popularity-driven, NOT affinity-driven,
+		// so its order must not move with the session profile.
+		const target = cold.results[0]?.product as Product;
+		const sameCategory = catalog()
+			.filter((p) => p.category === target.category)
+			.slice(0, 3);
+		for (const product of sameCategory) {
+			await sendEvent({
+				event_type: "click",
+				product_id: product.id,
+				timestamp: new Date().toISOString(),
+			});
+		}
+		const warm = await recommendStrategy("trending", { limit: 8 });
+		expect(warm.results.map((r) => r.product.id).join(",")).toBe(coldOrder);
+	});
+
+	it("recommendStrategy('for_you') threads the live profile and re-ranks", async () => {
+		const cold = await recommendStrategy("for_you", { limit: 10 });
+		const coldOrder = cold.results.map((r) => r.product.id).join(",");
+		const target = cold.results[0]?.product as Product;
+		const sameCategory = catalog()
+			.filter((p) => p.category === target.category)
+			.slice(0, 3);
+		for (const product of sameCategory) {
+			await sendEvent({
+				event_type: "click",
+				product_id: product.id,
+				timestamp: new Date().toISOString(),
+			});
+		}
+		const warm = await recommendStrategy("for_you", { limit: 10 });
+		expect(warm.session_clicks).toBe(3);
+		expect(warm.results.map((r) => r.product.id).join(",")).not.toBe(coldOrder);
+	});
+
+	it("similar(seed) returns seed-relevant items that exclude the seed", async () => {
+		const seed = catalog()[0] as Product;
+		const res = await similar(seed.id, { limit: 6 });
+		expect(res.results.length).toBeGreaterThan(0);
+		expect(res.results.every((r) => r.product.id !== seed.id)).toBe(true);
+	});
+
+	it("recommendStrategy('because_viewed', {seed}) seeds a vector rail", async () => {
+		const seed = catalog()[0] as Product;
+		const res = await recommendStrategy("because_viewed", {
+			seed: seed.id,
+			limit: 6,
+		});
+		expect(res.results.length).toBeGreaterThan(0);
+		expect(res.results.every((r) => r.product.id !== seed.id)).toBe(true);
+	});
+
+	it("recommendStrategy records a non-negative recommendMs latency", async () => {
+		await recommendStrategy("trending", { limit: 3 });
+		const { recommendMs } = getSnapshot();
+		expect(recommendMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("similar records a non-negative recommendMs latency", async () => {
+		const seed = catalog()[0] as Product;
+		await similar(seed.id, { limit: 3 });
+		const { recommendMs } = getSnapshot();
+		expect(recommendMs).toBeGreaterThanOrEqual(0);
+	});
+});

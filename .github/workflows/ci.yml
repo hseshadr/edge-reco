@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      # The substrate libs (edge-proc, shared-libs-python) are pulled from public
+      # GitHub via the git sources pinned in backend/pyproject.toml — exactly what
+      # an external cloner gets. No private-repo token, no path patching: CI builds
+      # the project the same way `git clone … && uv sync` does for anyone.
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+      - name: Pin Python
+        run: uv python install 3.13
+      # Not --frozen: the substrate git sources are pinned to immutable release
+      # tags, so a fresh resolve is deterministic without a committed cross-repo lock.
+      - name: Sync
+        run: uv sync --group dev
+      - name: Ruff format
+        run: uv run ruff format --check .
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy src
+      - name: Complexity (xenon)
+        run: uv run xenon --max-absolute B --max-modules B --max-average A src
+      - name: Tests with coverage
+        run: uv run pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90
+      # Dependency audit moved to its own workflow (security-audit.yml): it stays
+      # red while an upstream CVE has no fix — with one documented exception
+      # (CVE-2025-3000, see poe audit in backend/pyproject.toml) — without masking
+      # code regressions behind an expected failure here.

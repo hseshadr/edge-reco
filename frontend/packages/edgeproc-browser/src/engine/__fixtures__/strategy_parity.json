@@ -1,0 +1,237 @@
+{
+	"description": "Phase-2 multi-strategy recommendation parity fixture: for each named strategy (vector strategies use a fixed seed) the ordered top-k (id, score) edge-reco Python recommend() returns over the real examples/catalog bundle + its signed strategy-map ranking_config. Regenerate with scripts/gen_strategy_fixture.py.",
+	"limit": 10,
+	"seed_product": "B07FPCD8BM",
+	"cases": [
+		{
+			"strategy": "for_you",
+			"seed": null,
+			"expected": [
+				{
+					"id": "B0C1WBLVFT",
+					"score": 0.4370119843358895
+				},
+				{
+					"id": "B0BZDLXKTS",
+					"score": 0.43403361344537816
+				},
+				{
+					"id": "B0C4G3VQ9W",
+					"score": 0.42575373849557735
+				},
+				{
+					"id": "B0C8KSQRKY",
+					"score": 0.3873299976969994
+				},
+				{
+					"id": "B0BZ929DV9",
+					"score": 0.37364314272772664
+				},
+				{
+					"id": "B0BVKYB5D5",
+					"score": 0.3728838349486991
+				},
+				{
+					"id": "B0C9481VV3",
+					"score": 0.3720472925474949
+				},
+				{
+					"id": "B0C62MD9JY",
+					"score": 0.37168105742781615
+				},
+				{
+					"id": "B0C5TFFWNQ",
+					"score": 0.36878128052318415
+				},
+				{
+					"id": "B0C5RLJDSF",
+					"score": 0.3676153865796359
+				}
+			]
+		},
+		{
+			"strategy": "trending",
+			"seed": null,
+			"expected": [
+				{
+					"id": "B0BZDLXKTS",
+					"score": 0.8272268907563025
+				},
+				{
+					"id": "B0C1WBLVFT",
+					"score": 0.8251164056465689
+				},
+				{
+					"id": "B0C4G3VQ9W",
+					"score": 0.7904990736298102
+				},
+				{
+					"id": "B0BVKYB5D5",
+					"score": 0.7245911993091629
+				},
+				{
+					"id": "B0BZ929DV9",
+					"score": 0.7069501510016718
+				},
+				{
+					"id": "B0C8KSQRKY",
+					"score": 0.6894499113603852
+				},
+				{
+					"id": "B0C62MD9JY",
+					"score": 0.6717654762001701
+				},
+				{
+					"id": "B0C5TFFWNQ",
+					"score": 0.6674785274329229
+				},
+				{
+					"id": "B0C5RLJDSF",
+					"score": 0.6656509412264986
+				},
+				{
+					"id": "B0C4HS52X9",
+					"score": 0.6549275540060495
+				}
+			]
+		},
+		{
+			"strategy": "new_arrivals",
+			"seed": null,
+			"expected": [
+				{
+					"id": "B0CGT4VN73",
+					"score": 0.774612431850429
+				},
+				{
+					"id": "B0CGBMN8ND",
+					"score": 0.7603134991665021
+				},
+				{
+					"id": "B0CGQBRKLC",
+					"score": 0.7453286891421151
+				},
+				{
+					"id": "B0CG61GXFR",
+					"score": 0.7401374771681385
+				},
+				{
+					"id": "B0CHMQS5B9",
+					"score": 0.7193124199968202
+				},
+				{
+					"id": "B0CH36K3VG",
+					"score": 0.7185302427127062
+				},
+				{
+					"id": "B0CGNH5TC7",
+					"score": 0.6992214125537618
+				},
+				{
+					"id": "B0CF3YFXLP",
+					"score": 0.6929223477308628
+				},
+				{
+					"id": "B0CFHMH4RX",
+					"score": 0.6918192068435866
+				},
+				{
+					"id": "B0CHFTTCNK",
+					"score": 0.6910935576103174
+				}
+			]
+		},
+		{
+			"strategy": "similar_items",
+			"seed": "B07FPCD8BM",
+			"expected": [
+				{
+					"id": "B08X6QDLQH",
+					"score": 0.4423149359460733
+				},
+				{
+					"id": "B0C6NKFH9F",
+					"score": 0.43000858975289147
+				},
+				{
+					"id": "B0C6VT4FZ9",
+					"score": 0.4142820749016951
+				},
+				{
+					"id": "B09W8JG73R",
+					"score": 0.4025164622331472
+				},
+				{
+					"id": "B0C65JDLSW",
+					"score": 0.37859946247769893
+				},
+				{
+					"id": "B0B9B1Q3XY",
+					"score": 0.36792924784753095
+				},
+				{
+					"id": "B0922JGP16",
+					"score": 0.3674513181384521
+				},
+				{
+					"id": "B09KXSSHPS",
+					"score": 0.36300890435152294
+				},
+				{
+					"id": "B07Q6CKRQL",
+					"score": 0.3533604001267633
+				},
+				{
+					"id": "B07LF445MX",
+					"score": 0.34714220794367473
+				}
+			]
+		},
+		{
+			"strategy": "because_viewed",
+			"seed": "B07FPCD8BM",
+			"expected": [
+				{
+					"id": "B08X6QDLQH",
+					"score": 0.37966392288358747
+				},
+				{
+					"id": "B0C6NKFH9F",
+					"score": 0.3605171586847651
+				},
+				{
+					"id": "B09W8JG73R",
+					"score": 0.3572279011508299
+				},
+				{
+					"id": "B0C65JDLSW",
+					"score": 0.34051596436109816
+				},
+				{
+					"id": "B0B9B1Q3XY",
+					"score": 0.33533389189634305
+				},
+				{
+					"id": "B0922JGP16",
+					"score": 0.3257367029343658
+				},
+				{
+					"id": "B0C6VT4FZ9",
+					"score": 0.32302163987122573
+				},
+				{
+					"id": "B09KXSSHPS",
+					"score": 0.3225492040723392
+				},
+				{
+					"id": "B0BYVLBG8N",
+					"score": 0.2976621703898047
+				},
+				{
+					"id": "B07LF445MX",
+					"score": 0.292070746239285
+				}
+			]
+		}
+	]
+}

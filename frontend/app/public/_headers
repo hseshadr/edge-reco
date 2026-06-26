@@ -1,0 +1,5 @@
+# Keep the service worker and manifest fresh so updates propagate immediately.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest.webmanifest
+  Cache-Control: public, max-age=0, must-revalidate

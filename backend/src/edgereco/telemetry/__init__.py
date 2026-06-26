@@ -1,0 +1,1 @@
+"""Telemetry: interaction event buffer."""

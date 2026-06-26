@@ -1,0 +1,55 @@
+direction: right
+
+main_thread: Main Thread {
+  style.fill: "#e8f4f8"
+  app: Application Code
+  sdk_api: SDK API Layer
+  router: Hybrid Router
+}
+
+sw_thread: Service Worker Thread {
+  style.fill: "#f0e8f8"
+  sw_core: SW Core
+  manifest_mgr: Manifest Manager
+  artifact_cache: Artifact Cache Controller
+  bg_sync: Background Sync\nOrchestrator
+}
+
+cw_thread: Compute Worker Thread {
+  style.fill: "#e8f8e8"
+  engine: WASM Engine
+  sqlite: SQLite WASM
+  smoke: Smoke Test\nHarness
+}
+
+storage: Storage {
+  style.fill: "#f8f0e8"
+  opfs: OPFS\ncatalog.db + engine.wasm {
+    shape: cylinder
+  }
+  idb: IndexedDB\nmanifest, user_state,\nevents, metadata {
+    shape: cylinder
+  }
+  cache_api: Cache API\nartifact HTTP cache {
+    shape: cylinder
+  }
+}
+
+main_thread.app -> main_thread.sdk_api
+main_thread.sdk_api -> main_thread.router
+
+cw_port: postMessage
+fetch_backend: "fetch → Backend"
+
+main_thread.router -> cw_port: local path
+main_thread.router -> fetch_backend: fallback path
+
+cw_port -> cw_thread.engine
+cw_thread.engine -> cw_thread.sqlite
+cw_thread.sqlite -> storage.opfs
+
+sw_thread.sw_core -> sw_thread.manifest_mgr
+sw_thread.manifest_mgr -> sw_thread.artifact_cache
+sw_thread.artifact_cache -> storage.cache_api
+sw_thread.bg_sync -> storage.idb
+cw_thread.engine -> storage.idb

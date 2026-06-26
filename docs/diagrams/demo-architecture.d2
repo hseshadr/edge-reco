@@ -1,0 +1,72 @@
+# Nimbus storefront demo — architecture
+# Render: d2 --theme 1 --pad 32 docs/diagrams/demo-architecture.d2 docs/diagrams/demo-architecture.svg
+
+direction: down
+
+title: |md
+  # Nimbus storefront — how a click personalizes the feed
+| {near: top-center}
+
+shopper: Shopper {
+  shape: person
+  style.fill: "#FF4D2E"
+  style.font-color: "#FFFFFF"
+}
+
+fe: Nimbus storefront {
+  style.fill: "#FAF6EF"
+  "React + Vite + TypeScript": {shape: text}
+  "product grid · search · 'Recommended for you' rail": {shape: text}
+}
+
+api: "backend/demo_server  ·  FastAPI wrapper" {
+  style.fill: "#FFF6F2"
+  cors: "CORS + X-Session-Id" {shape: text}
+  browse: "GET /products (browse)" {shape: text}
+  app: "edge-reco create_app: /search /recommend /events" {shape: text}
+}
+
+engine: edge-reco engine {
+  style.fill: "#EAF1F2"
+  search: "Hybrid search\nBM25  ⊕  FAISS vector  →  RRF fusion"
+  recommend: "Session-aware recommend\nscorer + reranker"
+  sessions: "SessionStore\nper-session SessionProfile\n(category / tag / brand affinity)" {
+    style.fill: "#FFE7E0"
+  }
+}
+
+edgeproc: "EdgeProc substrate\nFaissVectorIndex · RRF · BM25 · TextEncoder" {
+  style.fill: "#1C3A4A"
+  style.font-color: "#FFFFFF"
+}
+
+shared: "shared-libs-python\nVectorIndex / IndexFactory contracts" {
+  style.fill: "#17120E"
+  style.font-color: "#FFFFFF"
+}
+
+shopper -> fe: browses
+fe -> api: "HTTP + CORS" {style.stroke-width: 2}
+api.browse -> engine.search: query
+api.app -> engine.search: "/search"
+api.app -> engine.recommend: "/recommend"
+engine.search -> edgeproc: encode + search
+engine.recommend -> engine.sessions: read profile
+engine.recommend -> edgeproc: vector search
+edgeproc -> shared: implements
+
+# The personalization loop — the demo's selling point.
+fe -> api.app: "click → POST /events" {
+  style.stroke: "#FF4D2E"
+  style.stroke-width: 3
+  style.bold: true
+}
+api.app -> engine.sessions: "update affinity" {
+  style.stroke: "#FF4D2E"
+  style.stroke-width: 3
+}
+engine.sessions -> fe: "next /recommend re-ranks toward you" {
+  style.stroke: "#FF4D2E"
+  style.stroke-width: 3
+  style.stroke-dash: 3
+}

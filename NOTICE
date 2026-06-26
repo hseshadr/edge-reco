@@ -1,0 +1,38 @@
+edge-reco
+Copyright (c) 2026 Harish Seshadri
+Licensed under the MIT License (see LICENSE).
+
+This NOTICE is retained for third-party data attribution (below); it is not a
+license requirement of MIT.
+
+================================================================================
+Third-party data attribution
+================================================================================
+
+The demo storefront ("Nimbus") ships a committed, signed product catalog bundle
+at `backend/examples/catalog/` (720 products, balanced across 12 categories,
+60 each). That catalog is a small curated subset derived from:
+
+    Amazon Reviews 2023 (item metadata)
+    Authors: Yupeng Hou, Jiacheng Li, Zhankui He, An Yan, Xiusi Chen,
+             Julian McAuley (McAuley Lab, UC San Diego)
+    Source:  https://amazon-reviews-2023.github.io/
+             (Hugging Face: McAuley-Lab/Amazon-Reviews-2023)
+    Cite:    Hou et al., "Bridging Language and Items for Retrieval and
+             Recommendation," 2024 (arXiv:2403.03952).
+    Use:     released for academic / research use.
+
+The committed bundle was produced by curating a balanced subset from the source
+metadata (`backend/scripts/curate_demo_catalog.py` -> `backend/examples/source/
+catalog.csv`), then `edgereco build-catalog` -> `edgereco index` ->
+`edgereco bundle`. You can regenerate it with the same commands (see README).
+
+--------------------------------------------------------------------------------
+IMPORTANT CAVEAT
+--------------------------------------------------------------------------------
+
+The dataset above is provided for research use; this attribution is NOT a license
+to the underlying content. The product listings, titles, and images originate from
+Amazon.com and are Amazon/third-party content that remains subject to Amazon's
+Conditions of Use. If you intend to redistribute or use the underlying content
+beyond this demo, verify your rights independently before doing so.

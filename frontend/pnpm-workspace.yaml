@@ -1,0 +1,29 @@
+packages:
+  - app
+  - packages/*
+
+# Security dependency overrides. pnpm v10+ reads `overrides` from here, not from
+# the package.json `pnpm` field (which v11 ignores). undici >=7.28.0 clears 6
+# Dependabot alerts (test-only, via jsdom); protobufjs >=7.6.3 clears 1 alert
+# (RUNTIME, pulled by the transformers.js embedder via onnxruntime-web).
+#
+# Both are pinned to their current major (<8) — a minimal security bump, not a
+# major upgrade:
+#   undici: jsdom@29.1.1 hard-requires undici's internal
+#     `lib/handler/wrap-handler.js`, which undici 8.x removed — an open `>=7.28.0`
+#     resolves to 8.x and breaks the jsdom test env. 7.28.0 (latest 7.x) clears all 6.
+#   protobufjs: the embedder resolved 7.6.2 naturally; 7.6.3 is the patch fix. An
+#     open `>=7.6.3` overshoots to 8.x (a needless runtime major bump), so keep 7.x.
+overrides:
+  undici: ">=7.28.0 <8"
+  protobufjs: ">=7.6.3 <8"
+
+# pnpm v11 does not run a dependency's build/postinstall scripts unless it is
+# explicitly allowlisted here (replaces v10's onlyBuiltDependencies). These are
+# transitive native deps of @huggingface/transformers, needed by the node-side
+# embedding parity tests: onnxruntime-node is the native ONNX backend, protobufjs
+# compiles its proto bindings, sharp builds its native image binary.
+allowBuilds:
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true

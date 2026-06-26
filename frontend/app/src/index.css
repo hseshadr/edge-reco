@@ -1,0 +1,1727 @@
+/* =========================================================================
+   NIMBUS — design system
+   Refined editorial concept-store. Warm paper, one signal red-orange,
+   deep cool secondary. Fraunces display + Hanken Grotesk body.
+   ========================================================================= */
+
+:root {
+	/* palette */
+	--paper: #faf6ef;
+	--paper-raise: #fffdf8;
+	--ink: #17120e;
+	--signal: #ff4d2e;
+	--signal-soft: rgba(255, 77, 46, 0.12);
+	--abyss: #1c3a4a;
+	--abyss-soft: rgba(28, 58, 74, 0.12);
+	--muted: #8c8378;
+	--line: #e5ddd0;
+
+	/* typography */
+	--font-display: "Fraunces", "Times New Roman", serif;
+	--font-body: "Hanken Grotesk", system-ui, sans-serif;
+
+	/* rhythm */
+	--gut: clamp(16px, 3vw, 40px);
+	--radius: 14px;
+	--radius-sm: 10px;
+	--shadow-card:
+		0 1px 2px rgba(23, 18, 14, 0.04), 0 8px 24px rgba(23, 18, 14, 0.06);
+	--shadow-lift:
+		0 6px 14px rgba(23, 18, 14, 0.08), 0 22px 48px rgba(23, 18, 14, 0.12);
+
+	color-scheme: light;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--font-body);
+	font-size: 16px;
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+	font-feature-settings: "ss01" on;
+}
+
+/* faint grain overlay over the whole page */
+body::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	pointer-events: none;
+	opacity: 0.04;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 1.05;
+	margin: 0;
+}
+
+button {
+	font-family: var(--font-body);
+	cursor: pointer;
+}
+
+input {
+	font-family: var(--font-body);
+}
+
+/* =========================================================================
+   HEADER
+   ========================================================================= */
+
+.nimbus-header {
+	position: sticky;
+	top: 0;
+	z-index: 50;
+	background: color-mix(in srgb, var(--paper) 88%, transparent);
+	backdrop-filter: saturate(140%) blur(12px);
+	border-bottom: 1px solid var(--line);
+}
+
+.nimbus-header__bar {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: 16px var(--gut) 14px;
+	display: flex;
+	align-items: center;
+	gap: clamp(16px, 4vw, 48px);
+}
+
+.wordmark {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	flex-shrink: 0;
+}
+
+.wordmark__name {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 26px;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--ink);
+}
+
+.wordmark__dot {
+	color: var(--signal);
+}
+
+.wordmark__tag {
+	font-size: 10.5px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+}
+
+.search {
+	position: relative;
+	flex: 1;
+	max-width: 520px;
+}
+
+.search__icon {
+	position: absolute;
+	left: 16px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--muted);
+	pointer-events: none;
+}
+
+.search__input {
+	width: 100%;
+	padding: 12px 16px 12px 44px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--paper-raise);
+	color: var(--ink);
+	font-size: 15px;
+	transition:
+		border-color 0.18s ease,
+		box-shadow 0.18s ease;
+}
+
+.search__input::placeholder {
+	color: var(--muted);
+}
+
+.search__input:focus {
+	outline: none;
+	border-color: var(--signal);
+	box-shadow: 0 0 0 4px var(--signal-soft);
+}
+
+.session-pill {
+	margin-left: auto;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--muted);
+	letter-spacing: 0.04em;
+}
+
+.session-pill__dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--signal);
+	box-shadow: 0 0 0 4px var(--signal-soft);
+}
+
+/* category chips */
+.chips {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: 0 var(--gut) 14px;
+	display: flex;
+	gap: 8px;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+	display: none;
+}
+
+.chip {
+	flex-shrink: 0;
+	padding: 7px 15px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--ink);
+	font-size: 13px;
+	font-weight: 500;
+	white-space: nowrap;
+	transition: all 0.16s ease;
+}
+
+.chip:hover {
+	border-color: var(--ink);
+}
+
+.chip--active {
+	background: var(--ink);
+	border-color: var(--ink);
+	color: var(--paper);
+}
+
+/* =========================================================================
+   LAYOUT
+   ========================================================================= */
+
+.layout {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: clamp(24px, 4vw, 48px) var(--gut) 96px;
+	display: grid;
+	grid-template-columns: 2fr 1fr;
+	gap: clamp(28px, 4vw, 56px);
+	align-items: start;
+}
+
+@media (max-width: 920px) {
+	.layout {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* =========================================================================
+   SHOP LAYOUT — stacked rails over the grid (home) / PDP (product)
+   ========================================================================= */
+
+.shop {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: clamp(24px, 4vw, 48px) var(--gut) 96px;
+	display: flex;
+	flex-direction: column;
+	gap: clamp(32px, 4vw, 56px);
+}
+
+.rail-stack {
+	display: flex;
+	flex-direction: column;
+	gap: clamp(24px, 3vw, 40px);
+}
+
+/* A horizontally-scrolling rail variant (home stack + PDP rails). */
+.rail--row {
+	position: static;
+}
+
+.rail__track {
+	padding: 14px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scroll-snap-type: x proximity;
+	scrollbar-width: thin;
+	scrollbar-color: var(--line) transparent;
+}
+
+.rail__track:focus-visible {
+	outline: 2px solid var(--signal);
+	outline-offset: -2px;
+}
+
+.rail__track-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: row;
+	gap: 10px;
+}
+
+.rail__track::-webkit-scrollbar {
+	height: 8px;
+}
+
+.rail__track::-webkit-scrollbar-thumb {
+	background: var(--line);
+	border-radius: 999px;
+}
+
+/* The horizontal-variant card overrides live after the base .rail-card rules
+   (below) so specificity stays ascending in source order. */
+
+/* =========================================================================
+   PRODUCT DETAIL (PDP)
+   ========================================================================= */
+
+.pdp {
+	display: flex;
+	flex-direction: column;
+	gap: clamp(28px, 4vw, 44px);
+}
+
+.pdp__back {
+	align-self: flex-start;
+	border: 1px solid var(--line);
+	background: var(--paper-raise);
+	border-radius: 999px;
+	padding: 8px 16px;
+	font-family: var(--font-body);
+	font-weight: 600;
+	font-size: 14px;
+	color: var(--ink);
+	cursor: pointer;
+	box-shadow: var(--shadow-card);
+	transition: transform 0.14s ease;
+}
+
+.pdp__back:hover {
+	transform: translateX(-2px);
+}
+
+.pdp__back:focus-visible {
+	outline: 2px solid var(--signal);
+	outline-offset: 2px;
+}
+
+.pdp__hero {
+	display: grid;
+	grid-template-columns: minmax(280px, 1fr) 1.2fr;
+	gap: clamp(24px, 4vw, 48px);
+	align-items: start;
+}
+
+.pdp__media {
+	position: relative;
+	aspect-ratio: 4 / 3;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	overflow: hidden;
+	background: var(--paper-raise);
+	box-shadow: var(--shadow-card);
+}
+
+.pdp__info {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding-top: 8px;
+}
+
+.pdp__brand {
+	font-size: 12px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+}
+
+.pdp__title {
+	font-family: var(--font-display);
+	font-size: clamp(26px, 4vw, 40px);
+	font-weight: 600;
+	line-height: 1.1;
+}
+
+.pdp__price {
+	font-family: var(--font-display);
+	font-size: 26px;
+	font-weight: 600;
+	color: var(--signal);
+}
+
+.pdp__desc {
+	font-size: 15px;
+	line-height: 1.6;
+	color: var(--ink);
+	max-width: 60ch;
+}
+
+.pdp__cat {
+	align-self: flex-start;
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	padding: 5px 12px;
+	font-weight: 600;
+}
+
+@media (max-width: 760px) {
+	.pdp__hero {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* =========================================================================
+   SECTION HEADER
+   ========================================================================= */
+
+.section-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 16px;
+	padding-bottom: 16px;
+	margin-bottom: 24px;
+	border-bottom: 1px solid var(--line);
+}
+
+.section-head__kicker {
+	font-size: 11px;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+.section-head__title {
+	font-size: clamp(28px, 4vw, 38px);
+	font-weight: 600;
+}
+
+.section-head__title em {
+	font-style: italic;
+	color: var(--signal);
+}
+
+.section-head__count {
+	font-size: 13px;
+	color: var(--muted);
+	white-space: nowrap;
+}
+
+/* =========================================================================
+   PRODUCT GRID + CARD
+   ========================================================================= */
+
+.grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: clamp(16px, 2vw, 24px);
+}
+
+.card {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--paper-raise);
+	overflow: hidden;
+	cursor: pointer;
+	text-align: left;
+	padding: 0;
+	color: inherit;
+	box-shadow: var(--shadow-card);
+	will-change: transform;
+}
+
+.card__media {
+	position: relative;
+	aspect-ratio: 4 / 3;
+	overflow: hidden;
+	pointer-events: none; /* overlay button (z-index 1) handles card clicks */
+}
+
+.card__body {
+	padding: 14px 16px 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex: 1;
+}
+
+.card__brand {
+	font-size: 10.5px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+}
+
+.card__title {
+	font-family: var(--font-display);
+	font-size: 17px;
+	font-weight: 500;
+	line-height: 1.2;
+	color: var(--ink);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.card__foot {
+	margin-top: auto;
+	padding-top: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.card__price {
+	font-family: var(--font-display);
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.card__pick {
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--signal);
+	opacity: 0;
+	transform: translateX(-4px);
+	transition:
+		opacity 0.18s ease,
+		transform 0.18s ease;
+}
+
+.card:hover .card__pick {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+/* Signal affordances (v0.9.0): the card root is an <article>; the full-card
+   "add to taste" action is the transparent overlay button, and the
+   favorite / add-to-cart signal buttons are layered above it. */
+.card__overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.card__actions {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 2;
+	display: flex;
+	gap: 6px;
+}
+
+.card__action {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--paper-raise);
+	color: var(--muted);
+	cursor: pointer;
+	box-shadow: var(--shadow-card);
+	transition:
+		color 0.18s ease,
+		transform 0.18s ease;
+}
+
+.card__action:hover {
+	color: var(--signal);
+	transform: translateY(-1px);
+}
+
+.card__action--active {
+	color: var(--signal);
+	border-color: var(--signal);
+}
+
+.card__overlay:focus-visible,
+.card__action:focus-visible {
+	outline: 2px solid var(--signal);
+	outline-offset: 2px;
+}
+
+/* The overlay button sits above the media, so the old element-local hover
+   zoom can't receive pointer events — drive it from the card hover instead. */
+.card__zoom {
+	transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card:hover .card__zoom {
+	transform: scale(1.06);
+}
+
+/* =========================================================================
+   PRODUCT IMAGE — category-tinted gradient stand-ins
+   ========================================================================= */
+
+.pimg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.pimg-tile {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	padding: 16px;
+	color: #fff;
+	overflow: hidden;
+}
+
+.pimg-tile::after {
+	/* soft sheen */
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(
+		120% 80% at 80% 0%,
+		rgba(255, 255, 255, 0.28),
+		rgba(255, 255, 255, 0) 55%
+	);
+	pointer-events: none;
+}
+
+.pimg-tile__glyph {
+	font-size: 30px;
+	line-height: 1;
+	filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+	z-index: 1;
+}
+
+.pimg-tile__title {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 15px;
+	line-height: 1.15;
+	letter-spacing: -0.01em;
+	text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+	z-index: 1;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.pimg-tile__cat {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	font-size: 9px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	font-weight: 700;
+	padding: 4px 8px;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.22);
+	backdrop-filter: blur(4px);
+	z-index: 1;
+}
+
+/* category gradients */
+.pimg-tile--electronics {
+	background: linear-gradient(135deg, #1c3a4a 0%, #2f6d7e 55%, #4fb0a8 100%);
+}
+.pimg-tile--clothing {
+	background: linear-gradient(135deg, #6b2737 0%, #b14a52 55%, #e88d6a 100%);
+}
+.pimg-tile--home {
+	background: linear-gradient(135deg, #4a3b1c 0%, #9a7a3e 55%, #d8b266 100%);
+}
+.pimg-tile--sports {
+	background: linear-gradient(135deg, #173a2a 0%, #2f7d4f 55%, #7fc06a 100%);
+}
+.pimg-tile--books {
+	background: linear-gradient(135deg, #2a2440 0%, #5a4f8a 55%, #b08fd6 100%);
+}
+.pimg-tile--default {
+	background: linear-gradient(135deg, #2b2622 0%, #5a4f45 55%, #9c8d7c 100%);
+}
+
+/* =========================================================================
+   RECOMMEND RAIL
+   ========================================================================= */
+
+.rail {
+	position: sticky;
+	top: 116px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--paper-raise);
+	box-shadow: var(--shadow-card);
+	overflow: hidden;
+}
+
+.rail__head {
+	padding: 20px 20px 16px;
+	border-bottom: 1px solid var(--line);
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.rail__title {
+	font-size: 21px;
+	font-weight: 600;
+	line-height: 1.1;
+}
+
+.rail__sub {
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+	margin-top: 6px;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.rail__pulse {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--signal);
+}
+
+.rail__pulse--on {
+	animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.35;
+		transform: scale(0.75);
+	}
+}
+
+.clicks-badge {
+	flex-shrink: 0;
+	min-width: 34px;
+	height: 34px;
+	padding: 0 10px;
+	border-radius: 999px;
+	background: var(--signal);
+	color: #fff;
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 15px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 12px var(--signal-soft);
+}
+
+.cart-pill {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: var(--paper-raise);
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 15px;
+}
+
+.rail__list {
+	list-style: none;
+	margin: 0;
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.rail__cold {
+	padding: 32px 24px 36px;
+	text-align: center;
+}
+
+.rail__cold-glyph {
+	font-size: 28px;
+	margin-bottom: 12px;
+}
+
+.rail__cold-title {
+	font-family: var(--font-display);
+	font-size: 18px;
+	font-weight: 600;
+	margin-bottom: 8px;
+}
+
+.rail__cold-copy {
+	font-size: 13.5px;
+	color: var(--muted);
+	line-height: 1.5;
+	max-width: 30ch;
+	margin: 0 auto;
+}
+
+/* rail card */
+.rail-card {
+	display: flex;
+	flex-direction: column;
+	border-radius: var(--radius-sm);
+	padding: 10px;
+	transition: background 0.16s ease;
+}
+
+.rail-card:hover {
+	background: var(--paper);
+}
+
+.rail-card__main {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	width: 100%;
+	text-align: left;
+	background: none;
+	border: none;
+	padding: 0;
+	color: inherit;
+	cursor: pointer;
+}
+
+.rail-card__rank {
+	flex-shrink: 0;
+	width: 22px;
+	font-family: var(--font-display);
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--muted);
+	text-align: center;
+}
+
+.rail-card__media {
+	position: relative;
+	flex-shrink: 0;
+	width: 58px;
+	height: 58px;
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.rail-card__media .pimg-tile {
+	padding: 8px;
+}
+
+.rail-card__media .pimg-tile__title {
+	font-size: 9px;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+}
+
+.rail-card__media .pimg-tile__glyph {
+	font-size: 16px;
+}
+
+.rail-card__media .pimg-tile__cat {
+	display: none;
+}
+
+.rail-card__info {
+	flex: 1;
+	min-width: 0;
+}
+
+.rail-card__title {
+	font-family: var(--font-display);
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.15;
+	color: var(--ink);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.rail-card__meta {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.rail-card__price {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.rail-card__score {
+	font-size: 11px;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.rail-card__why-btn {
+	align-self: flex-start;
+	margin: 8px 0 0 34px;
+	padding: 3px 10px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--abyss);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	transition: all 0.15s ease;
+}
+
+.rail-card__why-btn:hover {
+	border-color: var(--abyss);
+}
+
+.rail-card__why-btn--open {
+	background: var(--abyss);
+	border-color: var(--abyss);
+	color: #fff;
+}
+
+/* Horizontal-variant card: thumbnail stacks above the info, rank overlays it.
+   Placed after the base .rail-card rules so specificity ascends in source. */
+.rail--row .rail-card {
+	position: relative;
+	flex: 0 0 clamp(220px, 24vw, 280px);
+	scroll-snap-align: start;
+	border: 1px solid var(--line);
+	background: var(--paper-raise);
+}
+
+.rail--row .rail-card__main {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+}
+
+.rail--row .rail-card__media {
+	width: 100%;
+	height: 132px;
+}
+
+.rail--row .rail-card__rank {
+	position: absolute;
+	margin: 6px 0 0 6px;
+}
+
+/* =========================================================================
+   WHY POPOVER
+   ========================================================================= */
+
+.why {
+	overflow: hidden;
+	margin: 8px 0 2px 34px;
+}
+
+.why__inner {
+	padding: 14px;
+	border-radius: var(--radius-sm);
+	background: var(--paper);
+	border: 1px solid var(--line);
+}
+
+.why__head {
+	font-size: 10.5px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 700;
+	margin-bottom: 12px;
+}
+
+.why__row {
+	margin-bottom: 11px;
+}
+
+.why__row:last-child {
+	margin-bottom: 0;
+}
+
+.why__label {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	font-size: 12px;
+	margin-bottom: 4px;
+}
+
+.why__label-name {
+	color: var(--ink);
+	font-weight: 500;
+}
+
+.why__label-val {
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+	font-size: 11px;
+}
+
+.why__track {
+	position: relative;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--line);
+	overflow: hidden;
+}
+
+.why__bar {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	border-radius: 999px;
+}
+
+.why__bar--signal {
+	left: 0;
+	background: var(--signal);
+}
+
+.why__bar--abyss {
+	left: 0;
+	background: var(--abyss);
+}
+
+.why__bar--penalty {
+	right: 0;
+	background: var(--muted);
+	opacity: 0.65;
+}
+
+.why__row--penalty .why__label-name {
+	color: var(--muted);
+}
+
+/* =========================================================================
+   STATES: loading / error / toast / skeleton
+   ========================================================================= */
+
+.banner {
+	border-radius: var(--radius);
+	padding: 16px 20px;
+	font-size: 14px;
+	margin-bottom: 24px;
+}
+
+.banner--error {
+	background: var(--signal-soft);
+	border: 1px solid var(--signal);
+	color: #8a2515;
+}
+
+.banner__title {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 15px;
+	margin-bottom: 4px;
+}
+
+.banner__retry {
+	margin-top: 10px;
+	padding: 6px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--signal);
+	background: transparent;
+	color: #8a2515;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.skeleton {
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--paper-raise);
+	overflow: hidden;
+}
+
+.skeleton__media {
+	aspect-ratio: 4 / 3;
+	background: linear-gradient(
+		100deg,
+		var(--line) 30%,
+		rgba(229, 221, 208, 0.4) 50%,
+		var(--line) 70%
+	);
+	background-size: 200% 100%;
+	animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton__line {
+	height: 12px;
+	margin: 12px 16px;
+	border-radius: 6px;
+	background: var(--line);
+}
+
+.skeleton__line--short {
+	width: 50%;
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+.toast {
+	position: fixed;
+	left: 50%;
+	bottom: 32px;
+	transform: translateX(-50%);
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 13px 20px;
+	border-radius: 999px;
+	background: var(--ink);
+	color: var(--paper);
+	font-size: 14px;
+	font-weight: 500;
+	box-shadow: var(--shadow-lift);
+}
+
+.toast__dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--signal);
+}
+
+.empty {
+	padding: 48px 24px;
+	text-align: center;
+	color: var(--muted);
+	font-size: 14px;
+}
+
+/* Flywheel uplink status pill — unobtrusive, sits above the footer. */
+.sync-badge {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 24px auto 0;
+	padding: 7px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+	background: var(--paper);
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+	width: fit-content;
+}
+
+.sync-badge__dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--signal);
+}
+
+/* On-device (uplink disabled): a calmer, dimmer dot. */
+.sync-badge--local .sync-badge__dot {
+	background: var(--muted);
+}
+
+/* =========================================================================
+   BOOT: in-browser engine bootstrap screen (sync bundle / load model)
+   ========================================================================= */
+
+.boot {
+	min-height: 100dvh;
+	display: grid;
+	place-items: center;
+	padding: var(--gut);
+}
+
+.boot__card {
+	width: min(440px, 100%);
+	background: var(--paper-raise);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-card);
+	padding: clamp(24px, 5vw, 40px);
+}
+
+.boot__mark {
+	margin-bottom: 18px;
+}
+
+.boot__lede {
+	font-size: 14px;
+	color: var(--muted);
+	line-height: 1.5;
+	margin: 0 0 22px;
+}
+
+.boot__steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.boot__step {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	transition: opacity 0.2s ease;
+}
+
+.boot__step--pending {
+	opacity: 0.45;
+}
+
+.boot__dot {
+	flex-shrink: 0;
+	width: 12px;
+	height: 12px;
+	margin-top: 3px;
+	border-radius: 50%;
+	border: 2px solid var(--line);
+	background: transparent;
+}
+
+.boot__step--active .boot__dot {
+	border-color: var(--signal);
+	background: var(--signal);
+	box-shadow: 0 0 0 4px var(--signal-soft);
+	animation: pulse 1.1s ease-in-out infinite;
+}
+
+.boot__step--done .boot__dot {
+	border-color: var(--abyss);
+	background: var(--abyss);
+}
+
+.boot__step-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.boot__step-label {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.boot__step-detail {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.boot__error-title {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 16px;
+	margin-bottom: 6px;
+}
+
+.boot__error-copy {
+	font-size: 13.5px;
+	color: var(--muted);
+	line-height: 1.5;
+	margin: 0 0 14px;
+}
+
+/* =========================================================================
+   FOOTER
+   ========================================================================= */
+
+.nimbus-footer {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: 28px var(--gut) 56px;
+	border-top: 1px solid var(--line);
+}
+
+.nimbus-footer__line {
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--ink);
+	margin: 0 0 6px;
+}
+
+.nimbus-footer__line--muted {
+	color: var(--muted);
+	margin-bottom: 0;
+}
+
+.nimbus-footer__link {
+	color: var(--signal);
+	text-decoration: none;
+}
+
+.nimbus-footer__link:hover {
+	text-decoration: underline;
+}
+
+/* Landing — intro shown before the engine boots (gated behind Launch). Reuses the
+   full-viewport centered shell idiom from .boot and the header's frosted-paper
+   aesthetic; metric tiles echo the .clicks-badge / .sync-badge vocabulary. */
+.landing {
+	min-height: 100dvh;
+	display: grid;
+	place-items: start center;
+	padding: var(--gut);
+}
+
+.landing__wrap {
+	width: min(1080px, 100%);
+	padding: clamp(8px, 2vw, 24px) 0 32px;
+}
+
+.landing__hero {
+	margin-bottom: 8px;
+}
+
+.landing__eyebrow {
+	font-size: 10.5px;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+	margin-bottom: 12px;
+}
+
+.landing__title {
+	margin: 18px 0 14px;
+	max-width: 14ch;
+	font-size: clamp(34px, 5.5vw, 56px);
+	line-height: 1.04;
+}
+
+.landing__kicker {
+	font-size: 18px;
+	max-width: 60ch;
+	color: var(--ink);
+	font-weight: 600;
+	line-height: 1.4;
+	margin: 0 0 4px;
+}
+
+.landing__lede {
+	font-size: 17px;
+	max-width: 60ch;
+	color: var(--ink);
+	opacity: 0.78;
+	line-height: 1.55;
+}
+
+.landing__cta {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin: 26px 0 8px;
+	flex-wrap: wrap;
+}
+
+.landing__btn {
+	font-family: var(--font-body);
+	font-weight: 600;
+	font-size: 15px;
+	border-radius: 999px;
+	padding: 11px 22px;
+	cursor: pointer;
+	border: 1px solid var(--signal);
+	text-decoration: none;
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.landing__btn--primary {
+	background: var(--signal);
+	color: #fff;
+	box-shadow: 0 4px 12px var(--signal-soft);
+}
+
+.landing__btn--primary:hover {
+	box-shadow: var(--shadow-lift);
+}
+
+.landing__btn--ghost {
+	background: transparent;
+	color: var(--ink);
+	border-color: var(--line);
+}
+
+.landing__demo-note {
+	font-size: 13px;
+	max-width: 60ch;
+	color: var(--ink);
+	opacity: 0.72;
+	line-height: 1.5;
+	margin-top: 4px;
+}
+
+.landing__footnote {
+	font-size: 12px;
+	color: var(--muted);
+	margin-top: 6px;
+}
+
+/* metric band — the centerpiece */
+.landing__band {
+	margin: 40px 0 8px;
+	background: var(--paper-raise);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-card);
+	overflow: hidden;
+}
+
+.landing__band-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+	padding: 16px 22px 10px;
+	border-bottom: 1px solid var(--line);
+}
+
+.landing__band-title {
+	font-size: 20px;
+	margin: 0;
+}
+
+.landing__band-live {
+	font-size: 11px;
+	color: var(--muted);
+}
+
+.landing__tiles {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+}
+
+.metric-tile {
+	padding: 20px 22px;
+	border-right: 1px solid var(--line);
+	border-top: 1px solid var(--line);
+}
+
+.metric-tile:nth-child(3n) {
+	border-right: none;
+}
+
+.metric-tile:nth-child(-n + 3) {
+	border-top: none;
+}
+
+.metric-tile__num {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 34px;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	color: var(--ink);
+}
+
+.metric-tile__num--hot {
+	color: var(--signal);
+}
+
+.metric-tile__num--pos {
+	color: var(--abyss);
+}
+
+.metric-tile__unit {
+	font-size: 16px;
+	color: var(--muted);
+	font-weight: 500;
+	margin-left: 3px;
+}
+
+.metric-tile__label {
+	font-size: 13px;
+	color: var(--muted);
+	margin-top: 8px;
+}
+
+.metric-tile__sub {
+	font-size: 11px;
+	color: var(--muted);
+	opacity: 0.85;
+	margin-top: 3px;
+}
+
+/* why cards */
+.landing__why {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 14px;
+	margin: 34px 0;
+}
+
+.landing__why-card {
+	background: var(--paper-raise);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	padding: 16px;
+}
+
+.landing__why-key {
+	font-family: var(--font-display);
+	font-size: 16px;
+	font-weight: 600;
+	margin-bottom: 5px;
+}
+
+.landing__why-desc {
+	font-size: 13px;
+	color: var(--muted);
+	line-height: 1.45;
+}
+
+/* how-it-works strip */
+.landing__how {
+	margin-top: 36px;
+}
+
+.landing__how-title {
+	font-size: 10.5px;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-weight: 600;
+	margin-bottom: 12px;
+}
+
+.landing__steps {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	align-items: center;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.landing__step-item {
+	display: inline-flex;
+	gap: 10px;
+	align-items: center;
+}
+
+.landing__step {
+	font-size: 13px;
+	color: var(--ink);
+	background: var(--paper-raise);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	padding: 7px 14px;
+}
+
+.landing__step b {
+	font-family: var(--font-display);
+	color: var(--signal);
+	font-weight: 600;
+	margin-right: 6px;
+}
+
+.landing__arrow {
+	color: var(--muted);
+}
+
+@media (max-width: 720px) {
+	.landing__tiles {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.metric-tile:nth-child(3n) {
+		border-right: 1px solid var(--line);
+	}
+
+	.metric-tile:nth-child(2n) {
+		border-right: none;
+	}
+
+	.metric-tile:nth-child(-n + 3) {
+		border-top: 1px solid var(--line);
+	}
+
+	.metric-tile:nth-child(-n + 2) {
+		border-top: none;
+	}
+
+	.landing__why {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+/* MetricsStrip — a thin row of LIVE in-tab telemetry under the store header.
+   Echoes the .clicks-badge / .session-pill vocabulary: Fraunces numbers, pill
+   shapes, --line dividers, the steady "0" in --abyss, --muted labels. Kept
+   compact — a status row, not a panel. */
+.metrics-strip {
+	max-width: 1320px;
+	margin: 0 auto;
+	padding: 0 var(--gut) 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.metrics-strip__tile {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	padding: 6px 12px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--paper);
+}
+
+.metrics-strip__value {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 14px;
+	color: var(--signal);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+
+/* The steady backend-call "0": calmer --abyss, not the hot --signal. */
+.metrics-strip__value--steady {
+	color: var(--abyss);
+}
+
+.metrics-strip__label {
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--muted);
+	text-transform: lowercase;
+}
+
+@media (max-width: 720px) {
+	.metrics-strip {
+		overflow-x: auto;
+		flex-wrap: nowrap;
+		scrollbar-width: none;
+	}
+
+	.metrics-strip__tile {
+		flex-shrink: 0;
+	}
+}
+
+/* =========================================================================
+   PWA — offline badge + install pill (fixed, unobtrusive, brand-consistent)
+   ========================================================================= */
+
+.offline-badge {
+	position: fixed;
+	left: 50%;
+	bottom: 18px;
+	transform: translateX(-50%);
+	z-index: 10000;
+	padding: 8px 16px;
+	border-radius: 999px;
+	background: var(--abyss);
+	color: var(--paper);
+	font-size: 13px;
+	font-weight: 500;
+	box-shadow: var(--shadow-lift);
+}
+
+.install-pill {
+	position: fixed;
+	right: 18px;
+	bottom: 18px;
+	z-index: 10000;
+	padding: 9px 16px;
+	border: 0;
+	border-radius: 999px;
+	background: var(--signal);
+	color: #fff;
+	font-size: 13px;
+	font-weight: 600;
+	box-shadow: var(--shadow-lift);
+}

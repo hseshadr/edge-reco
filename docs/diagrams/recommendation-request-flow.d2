@@ -1,0 +1,28 @@
+shape: sequence_diagram
+
+app: Application
+router: Hybrid Router
+cw: Compute Worker
+idb: IndexedDB
+api: Backend API
+
+app -> router: getRecommendations(request)
+router -> router: Check engine ready + kill switch
+
+"Local engine ready, no kill switch": {
+  router -> cw: postMessage(RecoQuery)
+  cw -> idb: Read user local state
+  cw -> cw: "WASM inference\n(engine + catalog + state)"
+  cw -> router: postMessage(RecoResult)
+  router -> app: "RecoResponse {source: \"local\"}"
+}
+
+"Engine not ready / kill switch / timeout": {
+  router -> api: POST /v1/recommendations
+  api -> router: JSON response
+  router -> app: "RecoResponse {source: \"backend\"}"
+}
+
+app -> router: reportInteraction(event)
+router -> idb: Queue event for uplink
+router -> idb: Update user local state

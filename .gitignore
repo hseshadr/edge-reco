@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.coverage
+coverage/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+
+# Test artifacts (playwright screenshots, traces, reports)
+test-results/
+
+# IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Agent / MCP tooling
+.serena/
+
+# Docker
+.docker/
+
+# uv
+.uv/
+
+# CI-only sibling checkouts (never present in local dev)
+.deps/
+
+# Environment
+.env
+.env.local
+
+# Bundle signing: NEVER commit private keys. The PUBLIC verify key IS committed
+# (pinned at examples/keys/public.key) so devices can verify the signed origin.
+private.key
+*private*.key
+# generated producer staging / origin scratch dirs (the committed origin lives at
+# examples/catalog/ and is intentionally tracked)
+staging/
+origin/
+*.bundle/
+# Flywheel retrain: the runtime origin the demo edge serves (seeded from the
+# committed examples/catalog/ at demo start, then republished into) + the retrain
+# job's sync/staging scratch. Both disposable — the committed seed stays pristine.
+.demo-origin/
+.retrain-cache/
+.superpowers/
+# Internal launch/publish notes — local scratch, never shipped in the public repo.
+.publish-drafts/

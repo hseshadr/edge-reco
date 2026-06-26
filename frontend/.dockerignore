@@ -1,0 +1,11 @@
+# Build context is the workspace root (frontend/). Keep it small + reproducible.
+node_modules
+**/node_modules
+**/dist
+**/.env
+**/*.log
+.DS_Store
+**/test-results
+**/playwright-report
+app/Dockerfile
+.dockerignore

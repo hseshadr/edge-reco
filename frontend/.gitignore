@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+# pnpm workspace: deps link into frontend/node_modules; members keep local ones too.
+node_modules/
+packages/*/node_modules/
+app/node_modules/
+app/dist/
+app/test-results/
+app/playwright-report/
+packages/*/dist/
+.env

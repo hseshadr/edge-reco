@@ -1,0 +1,33 @@
+{
+	"name": "@edgeproc/browser",
+	"private": true,
+	"version": "0.4.0",
+	"license": "MIT",
+	"type": "module",
+	"description": "In-browser signed-bundle sync + hybrid search engine (the edge-proc browser tier).",
+	"exports": {
+		".": "./src/index.ts",
+		"./engine": "./src/engine.ts",
+		"./testing": "./src/testing.ts",
+		"./testing/fixtures": "./src/engine/fixtures.ts"
+	},
+	"scripts": {
+		"lint": "biome check .",
+		"typecheck": "tsc -b",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@hpcc-js/wasm-zstd": "^1.13.0",
+		"@huggingface/transformers": "^4.2.0",
+		"@noble/ed25519": "^3.1.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.16",
+		"@types/node": "^24.13.1",
+		"@vitejs/plugin-react": "^6.0.2",
+		"jsdom": "^29.1.1",
+		"typescript": "~6.0.3",
+		"vite": "^8.0.16",
+		"vitest": "^4.1.8"
+	}
+}

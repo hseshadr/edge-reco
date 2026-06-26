@@ -1,0 +1,183 @@
+[project]
+name = "edgereco"
+version = "0.9.0"
+description = "Local-first product recommendations — hybrid search + session-aware reranking that runs on the shopper's device, zero backend calls after sync"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+  "pydantic>=2.9",
+  "pydantic-settings>=2.14.2",  # GHSA-4xgf-cpjx-pc3j fix
+  "polars>=1.0",
+  "faiss-cpu>=1.9",
+  "sentence-transformers>=5.5",
+  "rank-bm25>=0.2",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "typer>=0.15",
+  "httpx>=0.27",
+  "numpy>=2.0",
+  "structlog>=24.4",
+  "edge-proc[localvec,bundles]",
+  # Security floors on transitive deps (pulled via fastapi / edge-proc[bundles] /
+  # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
+  # where a fix exists. See `poe audit`.
+  "starlette>=1.3.1",       # CVE-2026-54283 + CVE-2026-54282 (transitive via fastapi)
+  "cryptography>=48.0.1",   # GHSA-537c-gmf6-5ccf (transitive via edge-proc signing)
+  "msgpack>=1.2.1",         # GHSA-6v7p-g79w-8964 (transitive)
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.0",
+  "pytest-cov>=7.1",
+  "pytest-bdd>=8.1",
+  "mypy>=2.1",
+  "ruff>=0.6",
+  "poethepoet>=0.30",
+  "pip-audit>=2.7",
+  "xenon>=0.9",
+]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+# Open-source onboarding: clone ONLY this repo and `uv sync` — the substrate libs
+# are pulled from public GitHub, pinned to release tags. (uv applies these sources
+# from the root project for ALL deps by name, so shared-libs-python — a transitive
+# dep of edge-proc — must be sourced here too; neither lib is on PyPI.)
+edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", tag = "v0.1.1" }
+shared-libs-python = { git = "https://github.com/hseshadr/shared-libs-python.git", tag = "v0.1.2" }
+
+# Co-developing the substrate locally? Clone the siblings next to this repo and
+# swap the two lines above for path sources (uncomment):
+#   edge-proc = { path = "../../edge-proc" }
+#   shared-libs-python = { path = "../../shared-libs-python" }
+
+[project.scripts]
+edgereco = "edgereco.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+pythonpath = ["src"]
+bdd_features_base_dir = "features/"
+markers = [
+  "bdd: BDD acceptance tests",
+  "integration: integration tests",
+  "e2e: end-to-end tests",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["edgereco"]
+# Source roots for mypy to resolve first-party + non-editable sibling path
+# deps (edgeproc, shared_libs_python) WITHOUT installing them. Both siblings use
+# a flat layout (package dir at repo root), so the repo root is the source root.
+# Local dev uses ../edge-proc and ../shared-libs-python; CI checks the siblings
+# out into .deps/ — both are listed so `python -m mypy src` mirrors CI either way.
+mypy_path = [
+  "src",
+  "../../edge-proc",
+  "../../shared-libs-python",
+  "../.deps/edge-proc",
+  "../.deps/shared-libs-python",
+]
+
+[[tool.mypy.overrides]]
+module = ["faiss"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["rank_bm25"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+exclude = ["../.deps", "demo_server"]  # sibling checkouts only present in CI; demo_server is an optional example launcher
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF"]
+ignore = ["S101"]  # allow assert in tests
+
+[tool.coverage.run]
+source = ["edgereco"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.poe.tasks]
+fmt-check = "ruff format --check ."
+lint = "ruff check ."
+typecheck = "mypy src"
+# Complexity gate: no function worse than Radon rank B, no module worse than B,
+# average A. Catches NEW over-complex code without churning the few cohesive
+# rank-B CLI handlers (legacy is a cleanup signal, not a release blocker).
+complexity = "xenon --max-absolute B --max-modules B --max-average A src"
+# Dependency vulnerability scan (network-dependent — hits the PyPI advisory DB).
+# Runs in its own "Security audit" workflow (.github/workflows/security-audit.yml),
+# which goes honestly RED on any finding, so the main CI gate stays meaningful for
+# code changes. ONE documented exception (below); everything else stays visible.
+#
+# --ignore-vuln CVE-2025-3000 (GHSA-rrmf-rvhw-rf47, PYSEC-2025-194): torch 2.12.0
+# memory corruption via torch.jit.script. Suppressed because the vector is LOCAL-only
+# (CVSS3.1 AV:L, C:L/I:L/A:L), this codebase never calls torch.jit.script on
+# untrusted input (torch is only sentence-transformers' embedding backend), and NO
+# fixed torch release exists (2.12.0 is the latest on PyPI). This is the SOLE
+# documented suppression — the audit still fails on ANY other finding. Dependabot
+# continues to track the upstream fix; DROP this flag the moment a fixed torch ships.
+audit = "pip-audit --ignore-vuln CVE-2025-3000"
+test = "pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90"
+fmt = "ruff format ."
+# `gate` mirrors CI's quality steps (format-check + lint + typecheck + complexity +
+# test-with-coverage). `pip-audit` runs in the separate Security audit workflow.
+gate = ["fmt-check", "lint", "typecheck", "complexity", "test"]
+
+# `demo` is the turnkey, backend-free showcase: it brings up the Caddy edge (signed
+# bundle on :8081), starts the Vite SPA (:5174), and opens your browser. Reuses the
+# same edge + Vite + trap-teardown sequence as frontend/Makefile:dev, plus a deps
+# guard and Vite's `--open`. The demo runs entirely in-browser — no FastAPI here.
+[tool.poe.tasks.demo]
+help = "Turnkey backend-free demo — edge + Vite SPA on free ports, opens your browser."
+cwd = "../frontend"            # poe resolves this relative to the project root (backend/)
+# Thin wrapper over the single orchestrator (frontend/app/scripts/demo.mjs), which
+# allocates random free ports per run and wires them through compose/Vite/CORS/the
+# preflight. Kept in sync with poe_tasks.toml's [tasks.demo].
+shell = "node app/scripts/demo.mjs"
+
+# Same demo, PLUS the flywheel uplink: interaction events are captured in-tab and
+# periodically flushed to a mimicked-cloud collector (the FastAPI /events). Inference
+# stays 100% local — the uplink is an optional, off-path beacon.
+# Kept in sync with poe_tasks.toml's [tasks.demo-flywheel].
+[tool.poe.tasks.demo-flywheel]
+help = "Demo + flywheel uplink — events flush to a mimicked cloud collector (free port)."
+cwd = "../frontend"
+shell = "node app/scripts/demo.mjs --flywheel"
+
+# The CLOUD half of the flywheel: recompute popularity from the collected events
+# and republish a freshly signed bundle into the runtime origin. The edge
+# revalidates `latest` within 30s, so a browser refresh re-ranks the rail toward
+# what you clicked. The collector's randomly-chosen port is read from the
+# demo-ports.env the flywheel run wrote. Kept in sync with poe_tasks.toml's
+# [tasks.demo-retrain].
+[tool.poe.tasks.demo-retrain]
+help = "Flywheel retrain — recompute popularity from collected events, republish the signed bundle."
+shell = """
+set -e
+ORIGIN=../frontend/.demo-origin
+[ -d "$ORIGIN/manifest" ] || { echo 'No runtime origin yet — run `poe demo-flywheel` first, click around, then retrain.'; exit 1; }
+[ -f examples/keys/private.key ] || { echo 'Missing examples/keys/private.key (gitignored). Retrain re-signs the bundle, so the maintainer signing key is required.'; exit 1; }
+# The flywheel run records its randomly-chosen collector port here; fall back to 8000.
+COLLECTOR_PORT=8000
+[ -f "$ORIGIN/demo-ports.env" ] && . "$ORIGIN/demo-ports.env"
+echo ">> retrain -> syncing the current bundle, folding in collected engagement, republishing… (collector :$COLLECTOR_PORT)"
+uv run edgereco retrain "$ORIGIN" "$ORIGIN" examples/keys/private.key examples/keys/public.key --events-url "http://localhost:${COLLECTOR_PORT}/events/export" --alpha 0.5 --cache-dir .retrain-cache
+echo '>> done. Refresh the SPA tab — the rail re-ranks toward what you clicked.'
+"""

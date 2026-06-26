@@ -1,0 +1,9 @@
+{
+  "catalog_id": "test-mini",
+  "version": "2026-04-24T00:00:00Z",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "embedding_dim": 384,
+  "files": [
+    {"path": "mini_catalog.jsonl", "file_type": "products", "checksum": "sha256:placeholder", "rows": 50}
+  ]
+}

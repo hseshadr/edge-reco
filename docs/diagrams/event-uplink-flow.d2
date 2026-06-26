@@ -1,0 +1,28 @@
+shape: sequence_diagram
+
+app: Application
+sdk: SDK
+idb: IndexedDB
+sw: Service Worker
+api: Event Ingestion
+
+app -> sdk: reportInteraction(event)
+sdk -> idb: Append to event_queue
+sdk -> idb: Update user_state
+
+sw -> sw: "Periodic flush / page unload"
+
+sw -> idb: Read event_queue batch
+sw -> sw: Apply sampling rules
+sw -> sw: "Strip PII, build EventBatch"
+
+"Page unloading": {
+  sw -> api: sendBeacon(EventBatch)
+}
+
+"Background flush": {
+  sw -> api: "POST /v1/events (fetch)"
+  api -> sw: 200 OK
+}
+
+sw -> idb: Remove sent events from queue

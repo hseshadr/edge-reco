@@ -1,0 +1,48 @@
+direction: down
+
+datalake: Datalake {
+  style.fill: "#e8f4f8"
+  train: Model Training Pipeline
+}
+
+backend: Backend {
+  style.fill: "#f0e8f8"
+  api: Recommendation API\n(fallback)
+  event_sink: Event Ingestion\nService
+  publisher: Artifact Publisher
+}
+
+cdn: CDN {
+  style.fill: "#e8f8e8"
+  manifest: Manifest JSON
+  wasm_art: WASM Engine\nArtifacts
+  catalog_art: Catalog Snapshots\n& Delta Patches
+  config_art: Config Artifacts
+}
+
+browser: Browser {
+  style.fill: "#f8f0e8"
+  sdk: EdgeReco SDK
+  sw: Service Worker
+  cw: Compute Worker
+  store: Local Storage\nOPFS + IDB {
+    shape: cylinder
+  }
+}
+
+datalake.train -> backend.publisher: trained model
+backend.publisher -> cdn: publish artifacts
+
+cdn.manifest -> browser.sw: fetch {style.stroke-dash: 3}
+cdn.wasm_art -> browser.sw: fetch {style.stroke-dash: 3}
+cdn.catalog_art -> browser.sw: fetch {style.stroke-dash: 3}
+cdn.config_art -> browser.sw: fetch {style.stroke-dash: 3}
+
+browser.sw -> browser.store: cache artifacts
+browser.cw -> browser.store: read artifacts
+browser.sdk -> browser.cw: reco request
+browser.sdk -> backend.api: fallback request
+browser.sdk -> backend.event_sink: interaction events
+backend.event_sink -> datalake.train: raw events
+backend.api -> browser.sdk: fallback response
+browser.cw -> browser.sdk: reco response

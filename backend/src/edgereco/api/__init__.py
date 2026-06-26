@@ -1,0 +1,1 @@
+"""EdgeReco FastAPI application."""
