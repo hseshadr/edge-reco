@@ -3,7 +3,11 @@ import { catalogFetch, latestBytes } from "./fixtures";
 import { MemoryCacheStore } from "./memoryStore";
 import { materializeFile, syncIndex } from "./sync";
 import type { IndexManifest, Verify, VersionPointer } from "./types";
-import { loadVectorIndex, type VectorIndexFiles } from "./vectorIndex";
+import {
+	loadVectorIndex,
+	VectorIndexError,
+	type VectorIndexFiles,
+} from "./vectorIndex";
 
 const acceptVerify: Verify = () => Promise.resolve();
 const DECODER = new TextDecoder();
@@ -191,5 +195,98 @@ describe("VectorIndex.nearest (kNN-to-seed primitive)", () => {
 			expect(hit.score).toBeLessThanOrEqual(1 + 1e-5);
 			expect(hit.score).toBeGreaterThanOrEqual(-1 - 1e-5);
 		}
+	});
+});
+
+/**
+ * A corrupt-but-signed catalog (products.jsonl / catalog_meta.json / state.json)
+ * must fail CLOSED, not be blindly `JSON.parse(...) as T` cast into the index where
+ * a non-string id or non-finite dim would silently corrupt retrieval. Mirrors the
+ * fail-closed validation rankingConfig.ts / cooccurrence.ts already do: a missing
+ * field, wrong type, or non-finite number must THROW (VectorIndexError).
+ */
+describe("loadVectorIndex fail-closed validation", () => {
+	const text = new TextEncoder();
+
+	/** A structurally valid set of files we mutate per-case to isolate one defect. */
+	function validFiles(): VectorIndexFiles {
+		const enc = encoder([
+			[1, 0],
+			[0, 1],
+		]);
+		return {
+			meta: enc.meta,
+			state: enc.state,
+			embeddings: enc.embeddings,
+			products: enc.products,
+		};
+	}
+
+	function encode(value: unknown): Uint8Array {
+		return text.encode(JSON.stringify(value));
+	}
+
+	it("the valid baseline still loads", async () => {
+		await expect(loadVectorIndex(validFiles())).resolves.toBeDefined();
+	});
+
+	it("throws on non-JSON catalog_meta.json bytes", async () => {
+		const files = { ...validFiles(), meta: text.encode("{not json") };
+		await expect(loadVectorIndex(files)).rejects.toThrow();
+	});
+
+	it("throws when catalog_meta embedding_dim is not a finite number", async () => {
+		const files = {
+			...validFiles(),
+			meta: encode({ embedding_count: 2, embedding_dim: null }),
+		};
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when catalog_meta embedding_count is the wrong type", async () => {
+		const files = {
+			...validFiles(),
+			meta: encode({ embedding_count: "2", embedding_dim: 2 }),
+		};
+		await expect(loadVectorIndex(files)).rejects.toThrow(/embedding_count/);
+	});
+
+	it("throws when state.json faiss_ids is not an array", async () => {
+		const files = { ...validFiles(), state: encode({ faiss_ids: "p0,p1" }) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(/faiss_ids/);
+	});
+
+	it("throws when a faiss_id is not a string", async () => {
+		const files = { ...validFiles(), state: encode({ faiss_ids: ["p0", 7] }) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when a products.jsonl line is not a JSON object", async () => {
+		const files = { ...validFiles(), products: text.encode('"p0"\n"p1"') };
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when a product is missing its string id", async () => {
+		const broken = [
+			JSON.stringify({ id: "p0", title: "ok", category: "c" }),
+			JSON.stringify({ title: "no id", category: "c" }),
+		].join("\n");
+		const files = { ...validFiles(), products: text.encode(broken) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(/id/);
+	});
+
+	it("throws when a product id is the wrong type", async () => {
+		const broken = JSON.stringify({ id: 7, title: "bad id", category: "c" });
+		const files = { ...validFiles(), products: text.encode(broken) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws on a non-JSON products.jsonl line", async () => {
+		const broken = [
+			JSON.stringify({ id: "p0", title: "ok", category: "c" }),
+			"{not json",
+		].join("\n");
+		const files = { ...validFiles(), products: text.encode(broken) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
 	});
 });

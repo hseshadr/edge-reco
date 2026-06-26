@@ -34,8 +34,76 @@ interface VectorState {
 	readonly faiss_ids: ReadonlyArray<string>;
 }
 
-function parseJson<T>(bytes: Uint8Array): T {
-	return JSON.parse(DECODER.decode(bytes)) as T;
+/**
+ * Thrown when present-but-malformed catalog bundle data (catalog_meta.json,
+ * vector/state.json, or products.jsonl) fails validation. The browser tier fails
+ * CLOSED here — like rankingConfig.ts / cooccurrence.ts — so a corrupt-but-signed
+ * bundle surfaces loudly instead of being blindly `as T` cast into the index,
+ * where a non-string id or non-finite dim would silently corrupt retrieval and
+ * diverge from the Python tier.
+ */
+export class VectorIndexError extends Error {
+	public constructor(message: string) {
+		super(`malformed catalog bundle: ${message}`);
+		this.name = "VectorIndexError";
+	}
+}
+
+function asRecord(value: unknown, at: string): Record<string, unknown> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		throw new VectorIndexError(`${at} must be an object`);
+	}
+	return value as Record<string, unknown>;
+}
+
+/** A finite number — rejects strings, null, NaN and ±Infinity. */
+function assertFiniteNumber(value: unknown, at: string): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		throw new VectorIndexError(`${at} must be a finite number`);
+	}
+	return value;
+}
+
+function parseJsonBytes(bytes: Uint8Array, at: string): unknown {
+	try {
+		return JSON.parse(DECODER.decode(bytes));
+	} catch {
+		throw new VectorIndexError(`${at} is not valid JSON`);
+	}
+}
+
+/** Validate catalog_meta.json into a typed CatalogMeta, or fail closed. */
+function parseCatalogMeta(bytes: Uint8Array): CatalogMeta {
+	const record = asRecord(
+		parseJsonBytes(bytes, "catalog_meta.json"),
+		"catalog_meta.json",
+	);
+	assertFiniteNumber(
+		record.embedding_count,
+		"catalog_meta.json.embedding_count",
+	);
+	assertFiniteNumber(record.embedding_dim, "catalog_meta.json.embedding_dim");
+	return record as unknown as CatalogMeta;
+}
+
+/** Validate vector/state.json into a typed VectorState, or fail closed. */
+function parseVectorState(bytes: Uint8Array): VectorState {
+	const record = asRecord(
+		parseJsonBytes(bytes, "vector/state.json"),
+		"vector/state.json",
+	);
+	const ids = record.faiss_ids;
+	if (!Array.isArray(ids)) {
+		throw new VectorIndexError("vector/state.json.faiss_ids must be an array");
+	}
+	ids.forEach((id, i) => {
+		if (typeof id !== "string") {
+			throw new VectorIndexError(
+				`vector/state.json.faiss_ids[${i}] must be a string`,
+			);
+		}
+	});
+	return record as unknown as VectorState;
 }
 
 /** Wrap embeddings.f32 as a typed view, asserting the byte length matches n*dim. */
@@ -57,13 +125,21 @@ function asMatrix(
 
 function parseProducts(bytes: Uint8Array): ReadonlyMap<string, Product> {
 	const map = new Map<string, Product>();
-	for (const line of DECODER.decode(bytes).split("\n")) {
+	const lines = DECODER.decode(bytes).split("\n");
+	lines.forEach((line, i) => {
 		if (line.trim().length === 0) {
-			continue;
+			return;
 		}
-		const product = JSON.parse(line) as Product;
-		map.set(product.id, product);
-	}
+		const at = `products.jsonl[${i}]`;
+		const record = asRecord(
+			parseJsonBytes(new TextEncoder().encode(line), at),
+			at,
+		);
+		if (typeof record.id !== "string") {
+			throw new VectorIndexError(`${at}.id must be a string`);
+		}
+		map.set(record.id, record as unknown as Product);
+	});
 	return map;
 }
 
@@ -194,10 +270,19 @@ export class VectorIndex {
 	}
 }
 
-/** Parse the synced files and build a query-ready VectorIndex. */
-export function loadVectorIndex(files: VectorIndexFiles): Promise<VectorIndex> {
-	const meta = parseJson<CatalogMeta>(files.meta);
-	const state = parseJson<VectorState>(files.state);
+/**
+ * Parse the synced files and build a query-ready VectorIndex.
+ *
+ * `async` so the fail-closed validators (parseCatalogMeta / parseVectorState /
+ * parseProducts) surface as a REJECTED promise rather than a synchronous throw —
+ * callers await this, so a corrupt-but-signed bundle rejects cleanly instead of
+ * tripping a sync throw the await site can't catch.
+ */
+export async function loadVectorIndex(
+	files: VectorIndexFiles,
+): Promise<VectorIndex> {
+	const meta = parseCatalogMeta(files.meta);
+	const state = parseVectorState(files.state);
 	const dim = meta.embedding_dim;
 	const ntotal = state.faiss_ids.length;
 	if (meta.embedding_count !== ntotal) {
@@ -207,7 +292,5 @@ export function loadVectorIndex(files: VectorIndexFiles): Promise<VectorIndex> {
 	}
 	const matrix = asMatrix(files.embeddings, ntotal, dim);
 	const products = parseProducts(files.products);
-	return Promise.resolve(
-		new VectorIndex(matrix, state.faiss_ids, products, dim),
-	);
+	return new VectorIndex(matrix, state.faiss_ids, products, dim);
 }

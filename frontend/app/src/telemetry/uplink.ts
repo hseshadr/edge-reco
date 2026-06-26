@@ -107,6 +107,11 @@ class ActiveUplink implements Uplink {
 	#syncedTotal = 0;
 	#listeners: Array<(total: number) => void> = [];
 	#inFlight: Promise<void> | null = null;
+	// The batch #drain() has claimed off #queue and is currently POSTing. It lives
+	// OUTSIDE #queue for the duration of the in-flight send so flushBeacon() can
+	// never re-transmit it (double-send) — the keepalive POST owns it until it
+	// either acks (dropped) or fails (restored to the front of #queue).
+	#inFlightBatch: InteractionEvent[] = [];
 
 	public constructor(url: string, cfg: UplinkConfig) {
 		this.#url = url;
@@ -169,13 +174,23 @@ class ActiveUplink implements Uplink {
 	/** Send batch-sized POSTs until empty or a send fails; never throws. */
 	async #drain(): Promise<void> {
 		while (this.#queue.length > 0) {
-			const batch = this.#queue.slice(0, this.#batchSize);
+			// CLAIM the batch off #queue up-front so it is owned by exactly one path.
+			// While it is in flight it lives in #inFlightBatch (not #queue), so a
+			// concurrent flushBeacon() beacons only the un-claimed tail — no overlap.
+			this.#inFlightBatch = this.#queue.slice(0, this.#batchSize);
+			this.#queue = this.#queue.slice(this.#inFlightBatch.length);
+			this.#persist();
+			const batch = this.#inFlightBatch;
 			const ok = await this.#send(batch);
 			if (!ok) {
-				return; // leave the batch at the front; retry next trigger
+				// Restore to the FRONT of whatever is queued now (events may have been
+				// enqueued during the send) so order is preserved and nothing is lost.
+				this.#inFlightBatch = [];
+				this.#queue = [...batch, ...this.#queue];
+				this.#persist();
+				return; // retry next trigger
 			}
-			this.#queue = this.#queue.slice(batch.length);
-			this.#persist();
+			this.#inFlightBatch = [];
 			this.#syncedTotal += batch.length;
 			this.#emit();
 		}

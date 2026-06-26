@@ -30,6 +30,31 @@ interface ResourceEntryLike {
 }
 
 /**
+ * Runtime guard from the raw `PerformanceEntry[]` the browser hands the observer
+ * to the {name, startTime} slice the counter reads. Unlike the signed-bundle
+ * vectorIndex path (which fails CLOSED), this reads LIVE, untrusted browser
+ * objects, so its contract is DEGRADE-and-skip: an entry missing either read
+ * field — or of the wrong type — is dropped, never thrown on. Throwing here would
+ * escape the PerformanceObserver callback and break metrics in odd browsers,
+ * which is exactly what `startMetricsObservers` promises never to do.
+ */
+export function toResourceEntries(
+	raw: readonly unknown[],
+): readonly ResourceEntryLike[] {
+	const out: ResourceEntryLike[] = [];
+	for (const entry of raw) {
+		if (typeof entry !== "object" || entry === null) {
+			continue;
+		}
+		const { name, startTime } = entry as Record<string, unknown>;
+		if (typeof name === "string" && typeof startTime === "number") {
+			out.push({ name, startTime });
+		}
+	}
+	return out;
+}
+
+/**
  * Pure counting helper (unit-tested directly). Given the resource entries seen
  * so far and the classify options, return the count of entries that represent a
  * real backend call: classified "edge" or "other", and starting at/after
@@ -94,9 +119,7 @@ function startResourceObserver(opts: ObserveOptions): () => void {
 	// entries (getEntriesByType returns the full list), so the count is the
 	// post-ready backend-call total regardless of how flushes batch.
 	const observer = new PerformanceObserver(() => {
-		const all = performance.getEntriesByType(
-			"resource",
-		) as unknown as ResourceEntryLike[];
+		const all = toResourceEntries(performance.getEntriesByType("resource"));
 		record({ backendCalls: countBackendCalls(all, opts) });
 	});
 	observer.observe({ type: "resource", buffered: true });

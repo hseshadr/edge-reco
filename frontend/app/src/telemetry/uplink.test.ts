@@ -206,6 +206,56 @@ describe("createUplink", () => {
 		expect(h.posts).toHaveLength(1);
 	});
 
+	it("sends each event at most once across an in-flight drain + a concurrent beacon", async () => {
+		// Regression: flushBeacon() used to re-beacon the WHOLE #queue without
+		// coordinating with an async #drain() that already had a batch on the wire.
+		// On unload that double-sent the in-flight events. We hold the transport
+		// open to keep a drain in flight, fire flushBeacon during that window, then
+		// release — and assert no event is transmitted twice (and none is lost).
+		// A holder object (not a bare `let`) so the assignment inside the transport
+		// closure does not narrow the captured binding to `never` at the call site
+		// under `strict` — property access keeps the declared union type.
+		const held: { resolve: ((ok: boolean) => void) | null } = { resolve: null };
+		const h = harness({
+			batchSize: 3,
+			transport: (url, body) => {
+				h.posts.push({ url, body, headers: {} });
+				return new Promise<boolean>((resolve) => {
+					held.resolve = resolve;
+				});
+			},
+		});
+		const up = createUplink(h.config);
+		for (let i = 0; i < 5; i++) up.enqueue(evt(`p${i}`)); // batchSize=3 → 1 batch claimed, 2 left
+
+		const draining = up.flush(); // claims [p0,p1,p2], awaits the held transport
+		expect(h.posts).toHaveLength(1); // first batch is on the wire
+
+		up.flushBeacon(); // unload fires mid-drain
+
+		held.resolve?.(true); // the in-flight POST finally acks
+		await draining;
+		await up.flush(); // settle any continuation
+
+		// Collect every product_id seen on EITHER path.
+		const fromPosts = h.posts.flatMap((p) =>
+			JSON.parse(p.body).events.map((e: InteractionEvent) => e.product_id),
+		);
+		const fromBeacons = h.beacons.flatMap((b) =>
+			JSON.parse(b.body).events.map((e: InteractionEvent) => e.product_id),
+		);
+		const all = [...fromPosts, ...fromBeacons];
+
+		// At most once: no id appears twice across the union of both paths.
+		expect(new Set(all).size).toBe(all.length);
+		// No loss: every enqueued event is accounted for exactly once.
+		expect([...all].sort()).toEqual(["p0", "p1", "p2", "p3", "p4"]);
+		// And specifically: the in-flight batch (p0,p1,p2) was NOT re-beaconed.
+		for (const id of fromBeacons) {
+			expect(["p0", "p1", "p2"]).not.toContain(id);
+		}
+	});
+
 	it("reports the cumulative confirmed count to onSynced (only on success)", async () => {
 		const h = harness({ batchSize: 2 });
 		const totals: number[] = [];
