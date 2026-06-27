@@ -105,7 +105,7 @@ _DEFAULT_SCORING_WEIGHTS = ScoringWeights(
     repetition_penalty=0.25,
 )
 
-#: The five shipped strategies. ``for_you`` re-uses the top-level weights verbatim
+#: The seven shipped strategies. ``for_you`` re-uses the top-level weights verbatim
 #: (Phase-1 parity); the others lean their dominant signal heaviest. ``similarity``
 #: is non-zero only for the vector-similarity strategies.
 _DEFAULT_STRATEGIES = {
