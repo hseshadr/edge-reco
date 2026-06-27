@@ -120,10 +120,18 @@ export default defineConfig({
 		],
 		coverage: {
 			// Off by default; enabled by `test:coverage` + the CI coverage gate.
-			// The storefront's React view layer (Storefront.tsx + presentational
-			// components) is proven by the Playwright e2e/offline suites, not jsdom
-			// units, so the floor is set to the measured unit-coverage level rather
-			// than the 90% core-logic standard the engine package enforces.
+			// The React view layer — Storefront (orchestration root), Header,
+			// ProductGrid, RailStack/RailCard, ProductDetail, SyncBadge, BootScreen,
+			// the metrics observer — now carries real @testing-library/react behavior
+			// specs (rendered output + interactions, engine boundary mocked), so the
+			// floor reflects genuine unit coverage rather than a placeholder.
+			//
+			// What stays e2e-only (proven by the Playwright e2e/offline suites, NOT
+			// gamed with hollow units): the IntersectionObserver dwell path
+			// (useDwellViews no-ops under jsdom by design; Storefront onDwell), motion
+			// enter/exit animation internals, and the optional fire-and-forget uplink
+			// transport internals (uplink.ts — its emit rules are unit-tested, the
+			// network/batching/retry path is integration territory).
 			provider: "v8",
 			reporter: ["text", "json-summary"],
 			include: ["src/**/*.{ts,tsx}"],
@@ -137,14 +145,16 @@ export default defineConfig({
 				"src/main.tsx",
 				"src/harness/**",
 			],
-			// Measured (excl. entry/type): lines 61.5 / statements 59.6 /
-			// functions 52.4 / branches 54.9. Floors sit ~5pts below so CI stays
-			// green; raising them is a follow-up as components gain unit specs.
+			// Measured (excl. entry/type): lines 92.4 / statements 91.7 /
+			// functions 89.0 / branches 85.1. Floors lock that in ~1pt below so a
+			// regression trips the gate; lines + statements hold the 90% standard,
+			// functions/branches sit at their honest achieved level (the residual
+			// gap is the e2e-only + telemetry-transport paths noted above).
 			thresholds: {
-				lines: 55,
-				statements: 53,
-				functions: 48,
-				branches: 50,
+				lines: 91,
+				statements: 90,
+				functions: 88,
+				branches: 84,
 			},
 		},
 	},

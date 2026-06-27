@@ -24,6 +24,7 @@ dependencies = [
   "starlette>=1.3.1",       # CVE-2026-54283 + CVE-2026-54282 (transitive via fastapi)
   "cryptography>=48.0.1",   # GHSA-537c-gmf6-5ccf (transitive via edge-proc signing)
   "msgpack>=1.2.1",         # GHSA-6v7p-g79w-8964 (transitive)
+  "torch>=2.12.1",          # CVE-2025-3000 fix (GHSA-rrmf-rvhw-rf47, PYSEC-2025-194); transitive via sentence-transformers
 ]
 
 [dependency-groups]
@@ -162,16 +163,14 @@ complexity = "xenon --max-absolute B --max-modules B --max-average A src"
 # Dependency vulnerability scan (network-dependent — hits the PyPI advisory DB).
 # Runs in its own "Security audit" workflow (.github/workflows/security-audit.yml),
 # which goes honestly RED on any finding, so the main CI gate stays meaningful for
-# code changes. ONE documented exception (below); everything else stays visible.
+# code changes. NO suppressions — every finding is fixed by a version floor, not
+# silenced. See the security-floor pins in [project].dependencies above.
 #
-# --ignore-vuln CVE-2025-3000 (GHSA-rrmf-rvhw-rf47, PYSEC-2025-194): torch 2.12.0
-# memory corruption via torch.jit.script. Suppressed because the vector is LOCAL-only
-# (CVSS3.1 AV:L, C:L/I:L/A:L), this codebase never calls torch.jit.script on
-# untrusted input (torch is only sentence-transformers' embedding backend), and NO
-# fixed torch release exists (2.12.0 is the latest on PyPI). This is the SOLE
-# documented suppression — the audit still fails on ANY other finding. Dependabot
-# continues to track the upstream fix; DROP this flag the moment a fixed torch ships.
-audit = "pip-audit --ignore-vuln CVE-2025-3000"
+# CVE-2025-3000 (GHSA-rrmf-rvhw-rf47, PYSEC-2025-194), torch.jit.script memory
+# corruption, is now FIXED by torch 2.12.1 (OSV last_affected 2.12.0). The earlier
+# `--ignore-vuln CVE-2025-3000` suppression has been DROPPED in favour of the real
+# fix — the `torch>=2.12.1` floor above. The audit runs clean with no ignore flags.
+audit = "pip-audit"
 test = "pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90"
 fmt = "ruff format ."
 # `gate` mirrors CI's quality steps (format-check + lint + typecheck + complexity +

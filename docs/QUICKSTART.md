@@ -52,9 +52,9 @@ If all five are green, the Python tier is healthy. (Or run them as one task:
 `uv run poe gate`. A separate `uv run poe audit` runs `pip-audit` against the
 dependency lock — it needs the network, so it lives in its own Security-audit
 workflow. It stays honestly red while any known CVE in the dependency tree has no
-released fix, with exactly one documented exception (CVE-2025-3000 in torch — a
-local-only `torch.jit.script` issue with no upstream fix; Dependabot still tracks
-it). Every other finding still fails the audit.)
+released fix, with no suppressions — every finding is fixed by a version floor, not
+silenced. (CVE-2025-3000 in torch, the one advisory ever ignored, is now fixed by
+the `torch>=2.12.1` floor; the `--ignore-vuln` flag has been dropped.))
 
 ## 2. Frontend gate (pnpm workspaces)
 

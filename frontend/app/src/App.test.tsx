@@ -49,4 +49,29 @@ describe("App launch gate", () => {
 			screen.queryByRole("button", { name: /Launch the live demo/i }),
 		).not.toBeInTheDocument();
 	});
+
+	it("mounts the Storefront once the engine boot resolves", async () => {
+		bootstrap.mockReturnValueOnce(Promise.resolve());
+		render(<App />);
+		await userEvent.click(
+			screen.getByRole("button", { name: /Launch the live demo/i }),
+		);
+		expect(await screen.findByText("storefront")).toBeInTheDocument();
+	});
+
+	it("surfaces a boot failure and recovers when Retry succeeds", async () => {
+		bootstrap
+			.mockImplementationOnce(() =>
+				Promise.reject(new Error("origin unreachable")),
+			)
+			.mockImplementationOnce(() => Promise.resolve());
+		render(<App />);
+		await userEvent.click(
+			screen.getByRole("button", { name: /Launch the live demo/i }),
+		);
+		expect(await screen.findByText("origin unreachable")).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+		expect(await screen.findByText("storefront")).toBeInTheDocument();
+	});
 });

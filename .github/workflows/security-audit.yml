@@ -1,10 +1,10 @@
 # Dependency vulnerability audit — deliberately its OWN workflow, not a CI step.
 #
-# Policy: ONE documented exception (CVE-2025-3000), everything else stays visible.
-# The sole suppression — torch 2.12.0 / torch.jit.script, local-only vector, no fixed
-# torch on PyPI — is the `--ignore-vuln` in `poe audit` (see backend/pyproject.toml
-# for the full rationale + drop-when-fixed note; Dependabot still tracks the fix).
-# If pip-audit finds ANYTHING else, this workflow is RED until upstream ships a fix —
+# Policy: NO suppressions — `poe audit` runs `pip-audit` with no `--ignore-vuln`
+# flags. Every finding is fixed by a version floor in backend/pyproject.toml, not
+# silenced. (CVE-2025-3000 in torch — the one advisory we ever ignored — is now
+# fixed by the `torch>=2.12.1` floor; the suppression has been dropped.)
+# If pip-audit finds ANYTHING, this workflow is RED until upstream ships a fix —
 # visibly, on every push and on a weekly schedule (new CVEs appear against unchanged
 # code, which is exactly how CVE-2025-3000/torch arrived). Keeping it out of the main
 # CI gate means a known-unfixable advisory can't mask real code regressions there.
@@ -36,5 +36,5 @@ jobs:
         run: uv python install 3.13
       - name: Sync
         run: uv sync --group dev
-      - name: Dependency audit (pip-audit; one documented ignore — CVE-2025-3000)
+      - name: Dependency audit (pip-audit; no suppressions — every finding fixed by a floor)
         run: uv run poe audit

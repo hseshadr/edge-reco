@@ -412,7 +412,7 @@ or pass them inline as in the publish→sync→serve quickstart above.
 cd backend
 uv sync --group dev
 uv run poe gate                                  # format + lint + types + complexity (xenon) + tests/coverage
-uv run poe audit                                 # pip-audit scan (network; own Security-audit workflow; one documented ignore: CVE-2025-3000)
+uv run poe audit                                 # pip-audit scan (network; own Security-audit workflow; no suppressions — CVE-2025-3000 fixed by torch>=2.12.1)
 
 # Frontend (Nimbus storefront + @edgeproc/browser)
 cd ../frontend

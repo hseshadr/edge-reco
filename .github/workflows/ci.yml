@@ -37,6 +37,6 @@ jobs:
       - name: Tests with coverage
         run: uv run pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90
       # Dependency audit moved to its own workflow (security-audit.yml): it stays
-      # red while an upstream CVE has no fix — with one documented exception
-      # (CVE-2025-3000, see poe audit in backend/pyproject.toml) — without masking
-      # code regressions behind an expected failure here.
+      # red while an upstream CVE has no fix — with no suppressions (every finding is
+      # fixed by a version floor in backend/pyproject.toml; CVE-2025-3000 in torch is
+      # now fixed by torch>=2.12.1) — without masking code regressions here.

@@ -3,12 +3,19 @@
 // directly: edge/other count, image/uplink don't, pre-readyAt entries are
 // ignored, and unparseable URLs fall through to "other" (i.e. counted).
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	countBackendCalls,
 	type ObserveOptions,
+	startMetricsObservers,
 	toResourceEntries,
 } from "./observe";
+import { record } from "./store";
+
+// The live wiring (startMetricsObservers) records into the metrics store; mock
+// it so we can assert on what the observer + memory poll push without touching
+// the real singleton.
+vi.mock("./store", () => ({ record: vi.fn() }));
 
 const READY_AT = 100;
 const OPTS: ObserveOptions = {
@@ -124,5 +131,98 @@ describe("toResourceEntries", () => {
 	it("returns an empty list (not a throw) for an all-malformed batch", () => {
 		expect(() => toResourceEntries([null, { name: 1 }, {}])).not.toThrow();
 		expect(toResourceEntries([null, { name: 1 }, {}])).toEqual([]);
+	});
+});
+
+// `startMetricsObservers` is the live wiring the pure helpers feed: a
+// PerformanceObserver over "resource" entries plus a ~1s memory poll. It must
+// degrade silently where the browser APIs are missing and return a cleanup that
+// disconnects both. We stub the globals so jsdom can drive both branches.
+type HeapPerformance = Performance & { memory?: { usedJSHeapSize: number } };
+
+class FakeObserver {
+	static instances: FakeObserver[] = [];
+	observe = vi.fn();
+	disconnect = vi.fn();
+	readonly flush: () => void;
+	constructor(flush: () => void) {
+		this.flush = flush;
+		FakeObserver.instances.push(this);
+	}
+}
+
+function setHeapBytes(bytes: number | null): void {
+	const perf = performance as HeapPerformance;
+	if (bytes === null) {
+		delete perf.memory;
+	} else {
+		perf.memory = { usedJSHeapSize: bytes };
+	}
+}
+
+const LIVE_OPTS: ObserveOptions = {
+	readyAt: 0,
+	edgeOrigin: "https://cdn.example.com",
+	eventsUrl: null,
+};
+
+describe("startMetricsObservers", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		FakeObserver.instances = [];
+		vi.mocked(record).mockReset();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+		setHeapBytes(null);
+	});
+
+	it("subscribes a resource observer + memory poll and cleans both up", () => {
+		vi.stubGlobal("PerformanceObserver", FakeObserver);
+		vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+			{ name: "https://cdn.example.com/manifest", startTime: 5 },
+		] as unknown as PerformanceEntryList);
+		setHeapBytes(50 * 1024 * 1024); // 50 MB
+
+		const stop = startMetricsObservers(LIVE_OPTS);
+
+		const observer = FakeObserver.instances[0];
+		expect(observer?.observe).toHaveBeenCalledWith({
+			type: "resource",
+			buffered: true,
+		});
+		// Initial heap sample recorded on start.
+		expect(vi.mocked(record)).toHaveBeenCalledWith({ heapMb: 50 });
+
+		// A flush recomputes the running post-ready backend-call total.
+		observer?.flush();
+		expect(vi.mocked(record)).toHaveBeenCalledWith({ backendCalls: 1 });
+
+		// The poll re-samples the heap every second.
+		setHeapBytes(60 * 1024 * 1024);
+		vi.advanceTimersByTime(1000);
+		expect(vi.mocked(record)).toHaveBeenCalledWith({ heapMb: 60 });
+
+		// Cleanup disconnects the observer and stops the poll.
+		stop();
+		expect(observer?.disconnect).toHaveBeenCalledOnce();
+		vi.mocked(record).mockClear();
+		vi.advanceTimersByTime(3000);
+		expect(vi.mocked(record)).not.toHaveBeenCalled();
+	});
+
+	it("degrades silently when PerformanceObserver + performance.memory are absent", () => {
+		vi.stubGlobal("PerformanceObserver", undefined);
+		setHeapBytes(null);
+
+		const stop = startMetricsObservers(LIVE_OPTS);
+
+		expect(FakeObserver.instances).toHaveLength(0);
+		// No heap sample is fabricated when performance.memory is missing.
+		expect(vi.mocked(record)).not.toHaveBeenCalled();
+		expect(() => stop()).not.toThrow();
 	});
 });
