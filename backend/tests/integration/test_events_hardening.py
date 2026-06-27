@@ -12,12 +12,14 @@ matching ``Authorization: Bearer <token>``.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
 
 from edgereco.api.app import create_app
 from edgereco.api.deps import ServiceContainer
-from edgereco.api.routes.events import MAX_EVENTS_PER_BATCH
+from edgereco.api.routes.events import MAX_EVENTS_PER_BATCH, MAX_SESSION_ID_LEN
 from edgereco.catalog.models import Product
 
 
@@ -132,3 +134,72 @@ def test_should_reject_export_when_token_missing(monkeypatch: pytest.MonkeyPatch
     response = client.get("/events/export")
     # Then it is rejected fail-closed
     assert response.status_code == 401
+
+
+def test_should_reject_non_ascii_token_with_401(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given a shared key configured
+    monkeypatch.setenv("EDGERECO_EVENTS_TOKEN", "s3cret")
+    client = _client()
+    # When /events is posted with a NON-ASCII bearer value (Starlette decodes headers
+    # latin-1, so a raw 0xFF byte reaches the guard as a non-ASCII str)
+    response = client.post(
+        "/events",
+        json={"events": [_event()]},
+        headers=[(b"authorization", b"Bearer \xff")],
+    )
+    # Then it is rejected fail-closed with 401 — never a 500 from a compare_digest TypeError
+    assert response.status_code == 401
+
+
+def test_should_reject_unknown_top_level_field_with_422() -> None:
+    # Given an otherwise-valid body carrying an unexpected extra key
+    client = _client()
+    # When it is posted
+    response = client.post("/events", json={"events": [_event()], "bogus": "x"})
+    # Then the wire boundary rejects the unknown field
+    assert response.status_code == 422
+
+
+def test_should_reject_unknown_event_field_with_422() -> None:
+    # Given an event object carrying an unexpected extra key
+    client = _client()
+    payload = {"events": [{**_event(), "injected": "x"}]}
+    # When it is posted
+    response = client.post("/events", json=payload)
+    # Then the nested wire boundary rejects the unknown field
+    assert response.status_code == 422
+
+
+def test_should_reject_overlong_session_id_with_422() -> None:
+    # Given a session_id one char longer than the cap
+    client = _client()
+    payload = {"events": [_event()], "session_id": "x" * (MAX_SESSION_ID_LEN + 1)}
+    # When it is posted
+    response = client.post("/events", json=payload)
+    # Then the Pydantic boundary rejects it
+    assert response.status_code == 422
+
+
+def test_should_accept_session_id_at_cap() -> None:
+    # Given a session_id exactly at the cap
+    client = _client()
+    payload = {"events": [_event()], "session_id": "x" * MAX_SESSION_ID_LEN}
+    # When it is posted
+    response = client.post("/events", json=payload)
+    # Then it is accepted
+    assert response.status_code == 200
+
+
+def test_should_log_unknown_products_at_most_once_per_request(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Given a batch of many unknown product_ids on a default-open collector
+    client = _client()
+    payload = {"events": [_event(f"missing-{i}") for i in range(5)]}
+    # When it is posted
+    with caplog.at_level(logging.WARNING, logger="edgereco.api.routes.events"):
+        response = client.post("/events", json=payload)
+    # Then it is accepted but does NOT emit one warning per unknown event
+    assert response.status_code == 200
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1

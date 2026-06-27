@@ -61,6 +61,7 @@ export function ProductDetail({
 				{visibleRails.map((rail) => (
 					<RailRow
 						key={rail.key}
+						railId={rail.key}
 						label={rail.label}
 						results={rail.results}
 						onPick={onPick}

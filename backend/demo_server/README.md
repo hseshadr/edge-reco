@@ -2,7 +2,7 @@
 
 **Not in the default demo path.** The Nimbus demo is **backend-free**: the SPA
 syncs the signed bundle and runs the whole engine in the browser — see
-[`../README.md`](../README.md). The default `docker compose up --build` does
+[`../../README.md`](../../README.md). The default `docker compose up --build` does
 not start anything in this directory.
 
 This directory is preserved for the optional **server-side API** use case: a

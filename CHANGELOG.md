@@ -5,6 +5,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **`/events` collector returns 401 (not 500) for a non-ASCII bearer token.** When
+  `EDGERECO_EVENTS_TOKEN` is set, a non-ASCII `Authorization: Bearer` value no longer
+  raises through `secrets.compare_digest`; the comparison is byte-based and still
+  rejects (no bypass).
+- **Uplink can no longer throw into the click handler.** `localStorage` reads/writes in
+  the telemetry uplink are now fully guarded, so a full/disabled store (quota, private
+  mode) degrades to in-memory instead of escaping the fire-and-forget path — upholding
+  the "uplink never blocks or breaks the app" invariant.
+- **Browser engine validates the whole product row.** `parseProducts` now type-checks
+  every ranking/display-critical field (numeric `popularity_score`/`price`, string
+  `title`/`category`/`brand`, array `tags`) before use, instead of casting after an
+  id-only check — a malformed-but-signed bundle fails closed rather than silently
+  corrupting ranking. Vector index/count must be positive integers; the byte-length
+  mismatch now raises the typed `VectorIndexError`.
+- **No duplicate cards in a rail.** Rails dedupe by normalized title at the render layer
+  (parity-safe), so the few duplicate-title catalog rows surface once.
+- **Stable, unique rail heading ids** derived from the rail key rather than the display
+  label (removes potential duplicate DOM ids / ambiguous `aria-labelledby`).
+- **Docs:** repaired broken relative links in `edgeproc-browser/README.md` and
+  `demo_server/README.md`; removed a stale `docs/superpowers/` reference from this file.
+
+### Changed
+- **`/events` hardening:** wire models reject unknown fields (`extra="forbid"`),
+  `session_id` is length-bounded, the unknown-product warning is aggregated per request,
+  and the auth settings are resolved once instead of per request. The fail-closed bundle
+  loaders are promoted to public functions in `api/deps.py`.
+- **README architecture diagram** now embeds a pre-rendered SVG (`docs/diagrams/architecture.svg`)
+  with the Mermaid source preserved in a collapsible block, so it renders even where
+  GitHub's `viewscreen` Mermaid iframe is blocked.
+
 ## [0.10.0] — 2026-06-26
 
 ### Added
@@ -90,8 +121,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   product images and the optional uplink; the cost figure is labelled
   "illustrative". New `src/metrics/*` (store + classifier + observers),
   `Landing` / `MetricsStrip` components, and instrumentation in `api/client.ts`,
-  `App.tsx`, and `Storefront.tsx`. Design spec in
-  `docs/superpowers/specs/2026-06-07-metrics-and-intro-landing-design.md`.
+  `App.tsx`, and `Storefront.tsx`. Design captured in an internal design spec
+  (since archived).
 
 ### Changed
 - **Demo allocates random free ports per run** — `make demo` / `poe demo` /

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InteractionEvent } from "../api/types";
-import { createUplink, type UplinkConfig } from "./uplink";
+import { createUplink, type Uplink, type UplinkConfig } from "./uplink";
 
 // A click event factory — the only event the demo emits today, but the buffer
 // is event-shape-agnostic.
@@ -95,6 +95,30 @@ describe("createUplink", () => {
 		const stored = JSON.parse(h.storage.map.get("nimbus_uplink_queue") ?? "[]");
 		expect(stored).toHaveLength(2);
 		expect(reborn.pendingCount()).toBe(2);
+	});
+
+	it("never throws when storage throws — degrades to in-memory", () => {
+		// Safari private mode / quota-exceeded / disabled storage make getItem and
+		// setItem throw. The uplink must swallow that (it is off the inference path
+		// and must NEVER break the click handler), keeping events in memory.
+		const throwingStorage: Pick<Storage, "getItem" | "setItem"> = {
+			getItem: () => {
+				throw new DOMException("denied", "SecurityError");
+			},
+			setItem: () => {
+				throw new DOMException("quota", "QuotaExceededError");
+			},
+		};
+		const h = harness({ storage: throwingStorage });
+
+		let up!: Uplink;
+		// Construction runs #load() (getItem) — must not throw.
+		expect(() => {
+			up = createUplink(h.config);
+		}).not.toThrow();
+		// enqueue runs #persist() (setItem) — must not throw, still queues.
+		expect(() => up.enqueue(evt("p1"))).not.toThrow();
+		expect(up.pendingCount()).toBe(1);
 	});
 
 	it("flushes one keepalive POST once the queue reaches BATCH_SIZE", async () => {

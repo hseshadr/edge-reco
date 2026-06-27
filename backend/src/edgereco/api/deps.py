@@ -29,6 +29,42 @@ _RANKING_CONFIG_NAME = "ranking_config.json"
 _COOCCURRENCE_NAME = "cooccurrence.json"
 
 
+def load_ranking_config(local: Path, *, meta_schema: int = 1) -> RankingConfig:
+    """Read the bundle's ``ranking_config.json`` (public fail-closed loader).
+
+    A genuinely pre-feature bundle (``meta_schema`` below the current schema) is
+    allowed to omit the file and falls back to ``DEFAULT_RANKING_CONFIG`` — true
+    backward compat. But a CURRENT bundle unexpectedly missing the file it should
+    carry is a corruption signal and raises (never silently bakes legacy weights).
+    """
+    config_path = local / _RANKING_CONFIG_NAME
+    if not config_path.exists():
+        if meta_schema >= CURRENT_META_SCHEMA:
+            raise FileNotFoundError(
+                f"{config_path} missing from a current-schema bundle "
+                f"(schema {meta_schema}); refusing to fall back to legacy weights"
+            )
+        return DEFAULT_RANKING_CONFIG
+    return RankingConfig.model_validate_json(config_path.read_bytes())
+
+
+def load_cooccurrence(local: Path, *, meta_schema: int = 1) -> CooccurrenceMatrix:
+    """Read the bundle's ``cooccurrence.json`` (public fail-closed loader).
+
+    A pre-feature bundle may omit it and gets an empty matrix; a CURRENT bundle
+    missing the file raises rather than silently degrading to an empty matrix.
+    """
+    cooc_path = local / _COOCCURRENCE_NAME
+    if not cooc_path.exists():
+        if meta_schema >= CURRENT_META_SCHEMA:
+            raise FileNotFoundError(
+                f"{cooc_path} missing from a current-schema bundle "
+                f"(schema {meta_schema}); refusing to fall back to an empty matrix"
+            )
+        return CooccurrenceMatrix()
+    return CooccurrenceMatrix.model_validate_json(cooc_path.read_bytes())
+
+
 @dataclass
 class ServiceContainer:
     catalog: list[Product]
@@ -42,41 +78,11 @@ class ServiceContainer:
     ranking_config: RankingConfig = field(default_factory=lambda: DEFAULT_RANKING_CONFIG)
     cooccurrence: CooccurrenceMatrix = field(default_factory=CooccurrenceMatrix)
 
-    @staticmethod
-    def _load_ranking_config(local: Path, *, meta_schema: int = 1) -> RankingConfig:
-        """Read the bundle's ``ranking_config.json``.
-
-        A genuinely pre-feature bundle (``meta_schema`` below the current schema) is
-        allowed to omit the file and falls back to ``DEFAULT_RANKING_CONFIG`` — true
-        backward compat. But a CURRENT bundle unexpectedly missing the file it should
-        carry is a corruption signal and raises (never silently bakes legacy weights).
-        """
-        config_path = local / _RANKING_CONFIG_NAME
-        if not config_path.exists():
-            if meta_schema >= CURRENT_META_SCHEMA:
-                raise FileNotFoundError(
-                    f"{config_path} missing from a current-schema bundle "
-                    f"(schema {meta_schema}); refusing to fall back to legacy weights"
-                )
-            return DEFAULT_RANKING_CONFIG
-        return RankingConfig.model_validate_json(config_path.read_bytes())
-
-    @staticmethod
-    def _load_cooccurrence(local: Path, *, meta_schema: int = 1) -> CooccurrenceMatrix:
-        """Read the bundle's ``cooccurrence.json``.
-
-        A pre-feature bundle may omit it and gets an empty matrix; a CURRENT bundle
-        missing the file raises rather than silently degrading to an empty matrix.
-        """
-        cooc_path = local / _COOCCURRENCE_NAME
-        if not cooc_path.exists():
-            if meta_schema >= CURRENT_META_SCHEMA:
-                raise FileNotFoundError(
-                    f"{cooc_path} missing from a current-schema bundle "
-                    f"(schema {meta_schema}); refusing to fall back to an empty matrix"
-                )
-            return CooccurrenceMatrix()
-        return CooccurrenceMatrix.model_validate_json(cooc_path.read_bytes())
+    # Back-compat shims: the loaders are now public module-level functions
+    # (``load_ranking_config`` / ``load_cooccurrence``); these thin staticmethods
+    # keep existing ``ServiceContainer._load_*`` callers working unchanged.
+    _load_ranking_config = staticmethod(load_ranking_config)
+    _load_cooccurrence = staticmethod(load_cooccurrence)
 
     @classmethod
     def from_catalog(
@@ -151,8 +157,8 @@ class ServiceContainer:
             vector=vector,
             encoder=ProductEncoder(),
             manifest=_manifest_from_meta(meta),
-            ranking_config=cls._load_ranking_config(local, meta_schema=meta.schema_version),
-            cooccurrence=cls._load_cooccurrence(local, meta_schema=meta.schema_version),
+            ranking_config=load_ranking_config(local, meta_schema=meta.schema_version),
+            cooccurrence=load_cooccurrence(local, meta_schema=meta.schema_version),
         )
 
 

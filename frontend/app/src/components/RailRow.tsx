@@ -3,6 +3,12 @@ import type { Product, SearchResult } from "../api/types";
 import { RailCard } from "./RailCard";
 
 interface RailRowProps {
+	/**
+	 * Stable, unique rail identity (the strategy key / PDP rail key) — NOT the
+	 * display label. The heading id derives from this so two rails that happen to
+	 * share a label still emit distinct DOM ids / aria-labelledby targets.
+	 */
+	railId: string;
 	label: string;
 	results: SearchResult[];
 	onPick: (product: Product) => void;
@@ -15,6 +21,28 @@ interface RailRowProps {
 }
 
 /**
+ * Drop later results whose normalized title already appeared in this rail. The
+ * catalog carries distinct-ASIN rows with identical titles (some even under
+ * different brands), and the card shows only the title — so without this an
+ * "also bought"/Trending rail could render two visually-identical cards. This is
+ * an APP-RENDER-LAYER concern only: the shared engine's ranking/selection output
+ * is untouched (parity preserved), we just hide the visual duplicate at display.
+ */
+function dedupeByTitle(results: SearchResult[]): SearchResult[] {
+	const seen = new Set<string>();
+	const unique: SearchResult[] = [];
+	for (const result of results) {
+		const key = result.product.title.toLowerCase().trim().replace(/\s+/g, " ");
+		if (seen.has(key)) {
+			continue;
+		}
+		seen.add(key);
+		unique.push(result);
+	}
+	return unique;
+}
+
+/**
  * A horizontally-scrolling rail: a labeled region (so screen readers announce
  * "Trending now, region") whose items reuse the same `RailCard` as the sticky
  * For-You rail. The scroller is keyboard-focusable (`tabIndex={0}`) with a
@@ -22,6 +50,7 @@ interface RailRowProps {
  * are hidden by the caller (PDP vector rails degrade gracefully).
  */
 export function RailRow({
+	railId,
 	label,
 	results,
 	onPick,
@@ -29,7 +58,8 @@ export function RailRow({
 	personalizing = false,
 	signalCount,
 }: RailRowProps) {
-	const headingId = `rail-${slug(label)}`;
+	const headingId = `rail-${slug(railId)}`;
+	const cards = dedupeByTitle(results);
 
 	return (
 		<section className="rail rail--row" aria-labelledby={headingId}>
@@ -72,7 +102,7 @@ export function RailRow({
 			>
 				<ul className="rail__track-list">
 					<AnimatePresence initial={false}>
-						{results.map((result, index) => (
+						{cards.map((result, index) => (
 							<RailCard
 								key={result.product.id}
 								product={result.product}

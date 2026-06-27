@@ -1,8 +1,8 @@
 """Regression: ``edgereco audit`` must fail closed exactly like the serving path.
 
 The serving consumer (``ServiceContainer.from_synced``) threads
-``meta_schema=meta.schema_version`` into ``_load_cooccurrence`` /
-``_load_ranking_config`` so a CURRENT-schema bundle that is missing the file it
+``meta_schema=meta.schema_version`` into the public ``load_cooccurrence`` /
+``load_ranking_config`` loaders so a CURRENT-schema bundle that is missing the file it
 should carry raises rather than silently degrading to an empty matrix / the
 legacy default weights. ``audit`` previews what a retrain would change and must
 honour the same fail-closed contract — a corrupt/tampered current-schema bundle
@@ -95,3 +95,20 @@ def test_audit_fail_closed_when_ranking_config_missing(
 
     with pytest.raises(FileNotFoundError):
         _run_audit(tmp_path)
+
+
+def test_public_loaders_are_exposed(tmp_path: Path) -> None:
+    # The fail-closed loaders are public module-level contract (cli + audit consume them).
+    local = _materialize_current_schema_dir(tmp_path)
+    assert deps.load_ranking_config(local, meta_schema=CURRENT_META_SCHEMA) is not None
+    assert deps.load_cooccurrence(local, meta_schema=CURRENT_META_SCHEMA) is not None
+
+
+def test_public_loaders_fail_closed_on_missing_current_schema_file(tmp_path: Path) -> None:
+    # A current-schema bundle missing a signed file must raise, never silently degrade.
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError):
+        deps.load_ranking_config(empty, meta_schema=CURRENT_META_SCHEMA)
+    with pytest.raises(FileNotFoundError):
+        deps.load_cooccurrence(empty, meta_schema=CURRENT_META_SCHEMA)

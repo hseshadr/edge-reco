@@ -48,7 +48,17 @@ function encoder(vectors: ReadonlyArray<ReadonlyArray<number>>): {
 	const ids = vectors.map((_v, i) => `p${i}`);
 	const flat = new Float32Array(vectors.flat());
 	const products = ids
-		.map((id) => JSON.stringify({ id, title: `title ${id}`, category: "c" }))
+		.map((id) =>
+			JSON.stringify({
+				id,
+				title: `title ${id}`,
+				category: "c",
+				brand: "b",
+				tags: ["t"],
+				popularity_score: 0.5,
+				price: 9.99,
+			}),
+		)
 		.join("\n");
 	const text = new TextEncoder();
 	return {
@@ -268,7 +278,15 @@ describe("loadVectorIndex fail-closed validation", () => {
 
 	it("throws when a product is missing its string id", async () => {
 		const broken = [
-			JSON.stringify({ id: "p0", title: "ok", category: "c" }),
+			JSON.stringify({
+				id: "p0",
+				title: "ok",
+				category: "c",
+				brand: "b",
+				tags: ["t"],
+				popularity_score: 0.5,
+				price: 1,
+			}),
 			JSON.stringify({ title: "no id", category: "c" }),
 		].join("\n");
 		const files = { ...validFiles(), products: text.encode(broken) };
@@ -283,10 +301,100 @@ describe("loadVectorIndex fail-closed validation", () => {
 
 	it("throws on a non-JSON products.jsonl line", async () => {
 		const broken = [
-			JSON.stringify({ id: "p0", title: "ok", category: "c" }),
+			JSON.stringify({
+				id: "p0",
+				title: "ok",
+				category: "c",
+				brand: "b",
+				tags: ["t"],
+				popularity_score: 0.5,
+				price: 1,
+			}),
 			"{not json",
 		].join("\n");
 		const files = { ...validFiles(), products: text.encode(broken) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	// A fully-valid product row we mutate per-case to isolate one ranking/display
+	// field defect (mirrors the field-by-field guard in rankingConfig.ts).
+	function product(
+		overrides: Record<string, unknown>,
+	): Record<string, unknown> {
+		return {
+			id: "p0",
+			title: "ok",
+			category: "c",
+			brand: "b",
+			tags: ["t"],
+			popularity_score: 0.5,
+			price: 9.99,
+			...overrides,
+		};
+	}
+
+	function withProductRow(row: Record<string, unknown>): VectorIndexFiles {
+		return { ...validFiles(), products: encode(row) };
+	}
+
+	it("throws when popularity_score is not a finite number", async () => {
+		const files = withProductRow(product({ popularity_score: "high" }));
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when a product is missing its title", async () => {
+		const { title: _omit, ...noTitle } = product({});
+		const files = withProductRow(noTitle);
+		await expect(loadVectorIndex(files)).rejects.toThrow(/title/);
+	});
+
+	it("throws when category is the wrong type", async () => {
+		const files = withProductRow(product({ category: 7 }));
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when tags is not an array", async () => {
+		const files = withProductRow(product({ tags: "a,b" }));
+		await expect(loadVectorIndex(files)).rejects.toThrow(/tags/);
+	});
+
+	it("throws when price is neither a finite number nor null", async () => {
+		const files = withProductRow(product({ price: "free" }));
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("accepts a null price (out-of-stock products carry no price)", async () => {
+		const files = withProductRow(product({ price: null }));
+		await expect(loadVectorIndex(files)).resolves.toBeDefined();
+	});
+
+	it("throws VectorIndexError when embedding_dim is zero", async () => {
+		const files = {
+			...validFiles(),
+			meta: encode({ embedding_count: 2, embedding_dim: 0 }),
+		};
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws VectorIndexError when embedding_dim is fractional", async () => {
+		const files = {
+			...validFiles(),
+			meta: encode({ embedding_count: 2, embedding_dim: 1.5 }),
+		};
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws VectorIndexError when embedding_count is fractional", async () => {
+		const files = {
+			...validFiles(),
+			meta: encode({ embedding_count: 2.5, embedding_dim: 2 }),
+		};
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("routes an embeddings byte-length mismatch through VectorIndexError", async () => {
+		// meta declares dim=2,count=2 -> 16 bytes expected; supply a short buffer.
+		const files = { ...validFiles(), embeddings: new Uint8Array(8) };
 		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
 	});
 });

@@ -64,6 +64,32 @@ function assertFiniteNumber(value: unknown, at: string): number {
 	return value;
 }
 
+/** A whole count ≥ 1 — rejects 0, negatives, fractions and non-numbers. */
+function assertPositiveInt(value: unknown, at: string): number {
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+		throw new VectorIndexError(`${at} must be an integer >= 1`);
+	}
+	return value;
+}
+
+/** A finite number OR null (price is optional per Product) — rejects all else. */
+function assertFiniteOrNull(value: unknown, at: string): void {
+	if (value === null) {
+		return;
+	}
+	assertFiniteNumber(value, at);
+}
+
+function assertStringField(
+	record: Record<string, unknown>,
+	field: string,
+	at: string,
+): void {
+	if (typeof record[field] !== "string") {
+		throw new VectorIndexError(`${at}.${field} must be a string`);
+	}
+}
+
 function parseJsonBytes(bytes: Uint8Array, at: string): unknown {
 	try {
 		return JSON.parse(DECODER.decode(bytes));
@@ -78,11 +104,11 @@ function parseCatalogMeta(bytes: Uint8Array): CatalogMeta {
 		parseJsonBytes(bytes, "catalog_meta.json"),
 		"catalog_meta.json",
 	);
-	assertFiniteNumber(
+	assertPositiveInt(
 		record.embedding_count,
 		"catalog_meta.json.embedding_count",
 	);
-	assertFiniteNumber(record.embedding_dim, "catalog_meta.json.embedding_dim");
+	assertPositiveInt(record.embedding_dim, "catalog_meta.json.embedding_dim");
 	return record as unknown as CatalogMeta;
 }
 
@@ -114,13 +140,36 @@ function asMatrix(
 ): Float32Array {
 	const expected = ntotal * dim * Float32Array.BYTES_PER_ELEMENT;
 	if (embeddings.byteLength !== expected) {
-		throw new Error(
+		throw new VectorIndexError(
 			`embeddings.f32 is ${embeddings.byteLength} bytes; expected ${expected} (${ntotal}x${dim})`,
 		);
 	}
 	// The reassembled bytes may not be 4-byte aligned; copy into a fresh buffer.
 	const aligned = embeddings.slice();
 	return new Float32Array(aligned.buffer, aligned.byteOffset, ntotal * dim);
+}
+
+/** The display/ranking-critical Product string fields validated before the cast. */
+const PRODUCT_STRING_FIELDS = ["title", "category", "brand"] as const;
+
+/**
+ * Field-by-field guard for one product row (mirrors rankingConfig.ts's style):
+ * the ranking/display-critical fields must be well-typed so a corrupt-but-signed
+ * product can't silently feed NaN into the scorer or blank text into the rail.
+ * `id` is validated by the caller (so it can narrow the map key).
+ */
+function assertProductFields(
+	record: Record<string, unknown>,
+	at: string,
+): void {
+	for (const field of PRODUCT_STRING_FIELDS) {
+		assertStringField(record, field, at);
+	}
+	if (!Array.isArray(record.tags)) {
+		throw new VectorIndexError(`${at}.tags must be an array`);
+	}
+	assertFiniteNumber(record.popularity_score, `${at}.popularity_score`);
+	assertFiniteOrNull(record.price, `${at}.price`);
 }
 
 function parseProducts(bytes: Uint8Array): ReadonlyMap<string, Product> {
@@ -138,6 +187,7 @@ function parseProducts(bytes: Uint8Array): ReadonlyMap<string, Product> {
 		if (typeof record.id !== "string") {
 			throw new VectorIndexError(`${at}.id must be a string`);
 		}
+		assertProductFields(record, at);
 		map.set(record.id, record as unknown as Product);
 	});
 	return map;

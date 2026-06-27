@@ -219,11 +219,14 @@ class ActiveUplink implements Uplink {
 	}
 
 	#load(): InteractionEvent[] {
-		const raw = this.#cfg.storage.getItem(STORAGE_KEY);
-		if (raw === null || raw === "") {
-			return [];
-		}
+		// getItem itself can THROW (Safari private mode / disabled storage), so it
+		// lives INSIDE the try — the uplink degrades to an in-memory queue rather
+		// than letting a storage failure escape into the click handler.
 		try {
+			const raw = this.#cfg.storage.getItem(STORAGE_KEY);
+			if (raw === null || raw === "") {
+				return [];
+			}
 			const parsed: unknown = JSON.parse(raw);
 			return Array.isArray(parsed) ? (parsed as InteractionEvent[]) : [];
 		} catch {
@@ -232,7 +235,14 @@ class ActiveUplink implements Uplink {
 	}
 
 	#persist(): void {
-		this.#cfg.storage.setItem(STORAGE_KEY, JSON.stringify(this.#queue));
+		// setItem can THROW (quota exceeded / private mode). Persistence is a
+		// best-effort durability bonus, never a correctness requirement — so a
+		// failure no-ops and the queue stays in memory; the app is never broken.
+		try {
+			this.#cfg.storage.setItem(STORAGE_KEY, JSON.stringify(this.#queue));
+		} catch {
+			// telemetry stays silent — never break the app
+		}
 	}
 }
 

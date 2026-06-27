@@ -165,21 +165,26 @@ backend pulls them from public GitHub automatically (see
 
 ### Architecture
 
+![EdgeReco architecture: a signed, content-addressed bundle is built and signed in your cloud and served through a CDN edge cache; each shopper's device downloads it once, verifies it (Ed25519 + SHA-256, fail-closed), then runs search, ranking, and recommendations locally with zero backend calls. An optional, off-by-default learning loop sends batched anonymous activity back to retrain and republish the bundle, which every device re-syncs.](docs/diagrams/architecture.svg)
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TB
   subgraph cloud["☁️ Your cloud — touched only to publish or retrain"]
     direction LR
-    cat["📦 Product catalog"] --> build["🔏 Build + sign<br/>index · embeddings · ranking"] --> origin["🗄️ Origin<br/>signed, content-addressed bundle"]
+    cat["📦 Product catalog"] --> build["🔏 Build + sign<br>index · embeddings · ranking"] --> origin["🗄️ Origin<br>signed, content-addressed bundle"]
   end
-  origin --> edge["🌐 CDN edge cache<br/>serves one small signed file"]
+  origin --> edge["🌐 CDN edge cache<br>serves one small signed file"]
   edge ==>|"one-time download"| sync
   subgraph device["📱💻🖥️ Shopper's own device — every search + click runs HERE"]
     direction LR
-    sync["⬇️ Sync + verify<br/>Ed25519 · SHA-256 · fail-closed"] --> opfs["💾 On-device store (OPFS)"] --> engine["🧠 On-device engine<br/>keyword + vector → fuse → personalize"] --> recs["✨ Results + recommendations<br/>instant · offline · 0 backend calls"]
+    sync["⬇️ Sync + verify<br>Ed25519 · SHA-256 · fail-closed"] --> opfs["💾 On-device store (OPFS)"] --> engine["🧠 On-device engine<br>keyword + vector → fuse → personalize"] --> recs["✨ Results + recommendations<br>instant · offline · 0 backend calls"]
   end
   subgraph learn["🔁 Optional learning loop — OFF by default"]
     direction LR
-    uplink["📨 Batched, anonymous activity"] --> retrain["🔧 Retrain ranking + co-occurrence<br/>re-sign the bundle"] --> republish["📤 Republish → every device re-syncs"]
+    uplink["📨 Batched, anonymous activity"] --> retrain["🔧 Retrain ranking + co-occurrence<br>re-sign the bundle"] --> republish["📤 Republish → every device re-syncs"]
   end
   recs -.->|"only if you turn it on"| uplink
   classDef cloudCls fill:#f0e8f8,stroke:#9472b0,color:#171717;
@@ -191,6 +196,8 @@ flowchart TB
   class sync,opfs,engine,recs deviceCls;
   class uplink,retrain,republish learnCls;
 ```
+
+</details>
 
 - **origin** — serves a *signed, content-addressed bundle*: a `latest` version
   pointer plus immutable `manifest/<hash>` and `chunk/<hash>` objects.

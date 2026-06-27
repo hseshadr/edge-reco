@@ -1,4 +1,10 @@
-from edgereco.catalog.models import CatalogFile, CatalogManifest, Product, SessionProfile
+from edgereco.catalog.models import (
+    CatalogFile,
+    CatalogManifest,
+    InteractionEvent,
+    Product,
+    SessionProfile,
+)
 
 
 def test_product_from_dict() -> None:
@@ -41,3 +47,12 @@ def test_session_profile_defaults() -> None:
     assert profile.category_affinity == {}
     assert profile.click_count == 0
     assert profile.recently_viewed == []
+
+
+def test_interaction_event_metadata_is_not_shared_between_instances() -> None:
+    # Each event must own its own metadata dict — mutating one never leaks into another.
+    first = InteractionEvent(event_type="click", product_id="p1", timestamp="t")
+    second = InteractionEvent(event_type="view", product_id="p2", timestamp="t")
+    first.metadata["k"] = "v"
+    assert second.metadata == {}
+    assert first.metadata is not second.metadata

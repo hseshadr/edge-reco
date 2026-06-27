@@ -237,7 +237,7 @@ def _build_audit(
     """Sync the bundle read-only and assemble the typed audit report."""
     from edgeproc.bundles.signing import Ed25519Verifier
 
-    from edgereco.api.deps import ServiceContainer, sync_and_materialize
+    from edgereco.api.deps import load_cooccurrence, load_ranking_config, sync_and_materialize
     from edgereco.catalog.loader import load_jsonl
     from edgereco.catalog.publish import CatalogMeta
     from edgereco.reco.audit import audit_inputs, build_audit_report
@@ -251,11 +251,9 @@ def _build_audit(
         products=load_jsonl(local / "products.jsonl"),
         logs=logs,
         alpha=alpha,
-        current_cooccurrence=ServiceContainer._load_cooccurrence(
-            local, meta_schema=meta.schema_version
-        ),
+        current_cooccurrence=load_cooccurrence(local, meta_schema=meta.schema_version),
     )
-    ranking_config = ServiceContainer._load_ranking_config(local, meta_schema=meta.schema_version)
+    ranking_config = load_ranking_config(local, meta_schema=meta.schema_version)
     return build_audit_report(
         logs=logs,
         before=inputs.before,

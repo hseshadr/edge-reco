@@ -45,6 +45,7 @@ export function RailStack({
 				return (
 					<RailRow
 						key={spec.strategy}
+						railId={spec.strategy}
 						label={spec.label}
 						results={results}
 						onPick={onPick}
