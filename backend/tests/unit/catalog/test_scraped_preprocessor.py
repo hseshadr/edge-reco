@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from typer.testing import CliRunner
 
 from edgereco.catalog.loader import load_jsonl
+from edgereco.catalog.models import Product
 from edgereco.catalog.preprocessor import (
     _first_image,
     _parse_price,
@@ -21,7 +21,7 @@ from edgereco.cli import app
 # fixtures: synthetic rows mirroring the real dirty schema
 # ---------------------------------------------------------------------------
 
-_CLEAN: dict[str, Any] = {
+_CLEAN: dict[str, str] = {
     "asin": "B0CLEAN",
     "title": "Wireless Headphones",
     "about_item": "Great sound. Long battery.",
@@ -38,20 +38,20 @@ _CLEAN: dict[str, Any] = {
     "product_url": "https://amazon.com/dp/B0CLEAN",
 }
 
-_FALLBACK_DESC: dict[str, Any] = {
+_FALLBACK_DESC: dict[str, str] = {
     **_CLEAN,
     "asin": "B0FALL",
     "about_item": "",
     "product_description": "Fallback description used.",
 }
 
-_BLANK_CRUMB: dict[str, Any] = {
+_BLANK_CRUMB: dict[str, str] = {
     **_CLEAN,
     "asin": "B0BLANK",
     "breadcrumbs": "",
 }
 
-_MALFORMED: dict[str, Any] = {
+_MALFORMED: dict[str, str] = {
     **_CLEAN,
     "asin": "B0BAD",
     "price_value": "",
@@ -64,7 +64,7 @@ _MALFORMED: dict[str, Any] = {
 _NORM = {"pop_min": 0.0, "pop_max": 30.0, "fresh_min": 0.0, "fresh_max": 50.0}
 
 
-def _product(row: dict[str, Any]) -> Any:
+def _product(row: dict[str, str]) -> Product:
     return scraped_row_to_product(row, **_NORM)
 
 
@@ -184,7 +184,7 @@ _HEADER = (
 )
 
 
-def _csv_row(r: dict[str, Any]) -> str:
+def _csv_row(r: dict[str, str]) -> str:
     keys = _HEADER.split(",")
     cells = []
     for k in keys:

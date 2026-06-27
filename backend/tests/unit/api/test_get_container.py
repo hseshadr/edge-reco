@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 from fastapi import Request
@@ -13,7 +12,9 @@ from edgereco.api.deps import get_container
 
 def _request_with_state_container(value: object) -> Request:
     app = SimpleNamespace(state=SimpleNamespace(container=value))
-    return cast(Request, SimpleNamespace(app=app))
+    # Request.app reads scope["app"]; get_container only touches request.app.state,
+    # so a minimal real Request beats casting a SimpleNamespace to Request.
+    return Request({"type": "http", "app": app})
 
 
 def test_get_container_rejects_non_container() -> None:

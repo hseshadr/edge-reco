@@ -10,10 +10,11 @@ name: Frontend CI
 # pins os/cpu-specific optional binaries (e.g. @rolldown/binding-darwin-arm64) as
 # required and fails on the Linux runner with EBADPLATFORM, whereas pnpm records
 # them as optional os/cpu deps and installs only the host's binding.
-# Playwright e2e now also runs in CI (the `e2e` job below): both the storefront
-# suite and the C1 sync + in-browser embed model-load smoke suite, each starting
-# its own Vite + static-catalog webServer. The HuggingFace MiniLM model download
-# is cached so the ~25MB weights are not re-fetched on every run.
+# Playwright e2e now also runs in CI (the `e2e` job below): the storefront suite,
+# the C1 sync + in-browser embed model-load smoke suite, and the offline-PWA proof
+# (production build + real service worker + real in-browser model), each starting
+# its own Vite + static-catalog webServer on its own ports. The HuggingFace MiniLM
+# model download is cached so the ~25MB weights are not re-fetched on every run.
 #
 # All run: steps use static commands only — no untrusted ${{ github.event.* }}
 # input is interpolated anywhere, so there is no workflow-injection surface.
@@ -52,8 +53,11 @@ jobs:
       - name: Typecheck (tsc) — package + app
         run: pnpm -r run typecheck
 
-      - name: Unit tests (vitest) — package + app
-        run: pnpm -r run test
+      # Runs the full unit suite WITH v8 coverage so the per-workspace thresholds
+      # (90% lines/statements/functions on the engine core logic; a measured floor
+      # on the app) are enforced in CI, not just configured. Subsumes `pnpm -r test`.
+      - name: Unit tests + coverage thresholds (vitest) — package + app
+        run: pnpm -r run test:coverage
 
       - name: Demo preflight regression (node:test) — edge bundle-match check
         run: pnpm -F frontend run test:preflight
@@ -116,6 +120,15 @@ jobs:
       - name: E2E — C1 sync + embed model-load smoke suite
         working-directory: frontend/app
         run: pnpm exec playwright test -c playwright.c1.config.ts
+
+      # The flagship offline proof: production build + the REAL generated service
+      # worker (precache + runtime caches) + the REAL in-browser ~25MB MiniLM model
+      # (same CDN download the C1 smoke suite already exercises in CI). The script
+      # runs its own `vite build` first; Playwright then previews the build on :5175
+      # and serves the signed bundle on :8921 (distinct from the suites above).
+      - name: E2E — offline-PWA proof (production build + real SW/model)
+        working-directory: frontend/app
+        run: pnpm run test:e2e:offline
 
       - name: Upload Playwright report + traces on failure
         if: ${{ failure() }}

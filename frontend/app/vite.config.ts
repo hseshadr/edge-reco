@@ -118,5 +118,34 @@ export default defineConfig({
 			"tests/e2e-offline/**",
 			"scripts/**",
 		],
+		coverage: {
+			// Off by default; enabled by `test:coverage` + the CI coverage gate.
+			// The storefront's React view layer (Storefront.tsx + presentational
+			// components) is proven by the Playwright e2e/offline suites, not jsdom
+			// units, so the floor is set to the measured unit-coverage level rather
+			// than the 90% core-logic standard the engine package enforces.
+			provider: "v8",
+			reporter: ["text", "json-summary"],
+			include: ["src/**/*.{ts,tsx}"],
+			exclude: [
+				"src/**/*.test.{ts,tsx}",
+				"src/test-setup.ts",
+				// Type-only modules.
+				"src/vite-env.d.ts",
+				"src/api/types.ts",
+				// SPA + e2e-harness entry points (driven by the Playwright suites).
+				"src/main.tsx",
+				"src/harness/**",
+			],
+			// Measured (excl. entry/type): lines 61.5 / statements 59.6 /
+			// functions 52.4 / branches 54.9. Floors sit ~5pts below so CI stays
+			// green; raising them is a follow-up as components gain unit specs.
+			thresholds: {
+				lines: 55,
+				statements: 53,
+				functions: 48,
+				branches: 50,
+			},
+		},
 	},
 });

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from edgereco.catalog.preprocessor import amazon_row_to_product
 
 
-def _row(price: object) -> dict[str, Any]:
+def _row(price: object) -> dict[str, object]:
     return {
         "asin": "X1",
         "title": "t",

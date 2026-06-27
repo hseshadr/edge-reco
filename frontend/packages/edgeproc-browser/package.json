@@ -14,7 +14,8 @@
 	"scripts": {
 		"lint": "biome check .",
 		"typecheck": "tsc -b",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
 		"@hpcc-js/wasm-zstd": "^1.13.0",
@@ -25,6 +26,7 @@
 		"@biomejs/biome": "^2.4.16",
 		"@types/node": "^24.13.1",
 		"@vitejs/plugin-react": "^6.0.2",
+		"@vitest/coverage-v8": "^4.1.9",
 		"jsdom": "^29.1.1",
 		"typescript": "~6.0.3",
 		"vite": "^8.0.16",

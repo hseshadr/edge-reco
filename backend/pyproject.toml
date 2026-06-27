@@ -73,6 +73,12 @@ python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+# Ban explicit `Any` in annotations and flag now-dead branches. `strict` alone does
+# not reject `dict[str, Any]`; these two close that gap so the type system can't be
+# silently defeated. ruff's ANN401 enforces the SAME ban across tests too (see below),
+# where mypy does not reach (`typecheck = mypy src`).
+disallow_any_explicit = true
+warn_unreachable = true
 packages = ["edgereco"]
 # Source roots for mypy to resolve first-party + non-editable sibling path
 # deps (edgeproc, shared_libs_python) WITHOUT installing them. Both siblings use
@@ -86,6 +92,35 @@ mypy_path = [
   "../.deps/edge-proc",
   "../.deps/shared-libs-python",
 ]
+
+# Pydantic v2 injects `__pydantic_extra__` / `__pydantic_private__: dict[str, Any]`
+# into EVERY model, so `disallow_any_explicit` fires on each BaseModel/BaseSettings
+# subclass — an unavoidable false positive in an all-Pydantic codebase, not author
+# `Any`. Exempt exactly the model-defining modules from THAT one check (there is no
+# author-written `Any` in them — verified). ruff's ANN401 still bans literal `Any` in
+# these same files, so a real `dict[str, Any]` field here is still rejected.
+[[tool.mypy.overrides]]
+module = [
+  "edgereco.api.models",
+  "edgereco.api.routes.events",
+  "edgereco.catalog.models",
+  "edgereco.catalog.publish",
+  "edgereco.config",
+  "edgereco.reco.audit",
+  "edgereco.reco.cooccurrence",
+  "edgereco.reco.ranking_config",
+  "edgereco.reco.retrain",
+  "edgereco.republish",
+]
+disallow_any_explicit = false
+
+# The substrate siblings are pinned external deps (GitHub tags), not edge-reco code:
+# the no-`Any` ban is ours to enforce on `edgereco.*`, not on vendored source we don't
+# own (and which is also all-Pydantic). Exempt them so `mypy src` still follows their
+# imports normally.
+[[tool.mypy.overrides]]
+module = ["edgeproc.*", "shared_libs_python.*"]
+disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
 module = ["faiss"]
@@ -102,7 +137,10 @@ src = ["src", "tests"]
 exclude = ["../.deps", "demo_server"]  # sibling checkouts only present in CI; demo_server is an optional example launcher
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF"]
+# ANN401 bans explicit `Any` in annotations repo-wide (src AND tests). mypy only
+# typechecks src, so ANN401 is the lightest way to extend the no-`Any` ban onto
+# test code without dragging in the rest of the ANN (missing-annotation) suite.
+select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF", "ANN401"]
 ignore = ["S101"]  # allow assert in tests
 
 [tool.coverage.run]

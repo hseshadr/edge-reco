@@ -169,6 +169,7 @@ function assertProductFields(
 		throw new VectorIndexError(`${at}.tags must be an array`);
 	}
 	assertFiniteNumber(record.popularity_score, `${at}.popularity_score`);
+	assertFiniteNumber(record.freshness_score, `${at}.freshness_score`);
 	assertFiniteOrNull(record.price, `${at}.price`);
 }
 
@@ -336,7 +337,7 @@ export async function loadVectorIndex(
 	const dim = meta.embedding_dim;
 	const ntotal = state.faiss_ids.length;
 	if (meta.embedding_count !== ntotal) {
-		throw new Error(
+		throw new VectorIndexError(
 			`catalog_meta embedding_count ${meta.embedding_count} != faiss_ids length ${ntotal}`,
 		);
 	}

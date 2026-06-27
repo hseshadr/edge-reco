@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -461,7 +461,7 @@ def preprocess(
 # ---------------------------------------------------------------------------
 
 
-def _scraped_score_bounds(rows: list[dict[str, Any]]) -> tuple[float, float, float, float]:
+def _scraped_score_bounds(rows: list[dict[str, str]]) -> tuple[float, float, float, float]:
     """Min/max of raw popularity and freshness across all rows."""
     from edgereco.catalog.preprocessor import (
         _parse_int,
@@ -497,7 +497,7 @@ def build_catalog(
     # inside quoted fields (e.g. `6' 1"`), an RFC4180 violation a strict chunked
     # parser rejects but csv.DictReader recovers from row-by-row.
     with input_csv.open(newline="", encoding="utf-8") as handle:
-        rows: list[dict[str, Any]] = [dict(r) for r in csv.DictReader(handle)]
+        rows: list[dict[str, str]] = [dict(r) for r in csv.DictReader(handle)]
     pop_min, pop_max, fresh_min, fresh_max = _scraped_score_bounds(rows)
 
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)

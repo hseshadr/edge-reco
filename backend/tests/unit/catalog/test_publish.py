@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from edgeproc.bundles.adapters import FilesystemAdapter
 from edgeproc.bundles.cas import FilesystemCacheStore
+from edgeproc.bundles.manifest import IndexManifest
 from edgeproc.bundles.signing import (
     Ed25519Verifier,
     SignatureError,
@@ -45,6 +46,13 @@ def _staging(tmp_path: Path) -> Path:
     return staging
 
 
+def _active_manifest(cache: FilesystemCacheStore) -> IndexManifest:
+    """Load the manifest for the store's freshly-promoted active pointer."""
+    pointer = cache.read_active()
+    assert pointer is not None  # sync_index promotes an active version or raises
+    return cache._load_manifest(pointer.manifest_hash)
+
+
 def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
     staging = _staging(tmp_path)
     origin = tmp_path / "origin"
@@ -71,7 +79,7 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
 
     assert materialize_file(cache, manifest, "products.jsonl") == _PRODUCTS.encode("utf-8")
     assert materialize_file(cache, manifest, "vector/index.faiss") == _FAISS_INDEX
@@ -120,7 +128,7 @@ def test_bundle_carries_signed_cooccurrence(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "cooccurrence.json")
     assert CooccurrenceMatrix.model_validate_json(raw) == cooc
 
@@ -152,7 +160,7 @@ def test_bundle_defaults_empty_cooccurrence_when_absent(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "cooccurrence.json")
     assert CooccurrenceMatrix.model_validate_json(raw) == CooccurrenceMatrix()
 
@@ -185,7 +193,7 @@ def test_bundle_carries_signed_ranking_config(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "ranking_config.json")
     assert RankingConfig.model_validate_json(raw) == DEFAULT_RANKING_CONFIG
 
@@ -221,7 +229,7 @@ def test_bundle_preserves_staged_ranking_config(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "ranking_config.json")
     restored = RankingConfig.model_validate_json(raw)
     assert restored == tuned
@@ -256,7 +264,7 @@ def test_catalog_meta_carries_current_schema_version(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     meta = CatalogMeta.model_validate_json(materialize_file(cache, manifest, "catalog_meta.json"))
     assert meta.schema_version == CURRENT_META_SCHEMA
 
@@ -326,7 +334,7 @@ def test_fresh_build_still_defaults_feature_files(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "ranking_config.json")
     assert RankingConfig.model_validate_json(raw) == DEFAULT_RANKING_CONFIG
 
@@ -357,7 +365,7 @@ def test_catalog_meta_content(tmp_path: Path) -> None:
         adapter=FilesystemAdapter(),
         verifier=Ed25519Verifier(public),
     )
-    manifest = cache._load_manifest(cache.read_active().manifest_hash)  # type: ignore[union-attr]
+    manifest = _active_manifest(cache)
     meta = json.loads(materialize_file(cache, manifest, "catalog_meta.json"))
 
     assert meta == {

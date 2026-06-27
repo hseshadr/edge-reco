@@ -56,6 +56,7 @@ function encoder(vectors: ReadonlyArray<ReadonlyArray<number>>): {
 				brand: "b",
 				tags: ["t"],
 				popularity_score: 0.5,
+				freshness_score: 0.3,
 				price: 9.99,
 			}),
 		)
@@ -285,6 +286,7 @@ describe("loadVectorIndex fail-closed validation", () => {
 				brand: "b",
 				tags: ["t"],
 				popularity_score: 0.5,
+				freshness_score: 0.5,
 				price: 1,
 			}),
 			JSON.stringify({ title: "no id", category: "c" }),
@@ -308,6 +310,7 @@ describe("loadVectorIndex fail-closed validation", () => {
 				brand: "b",
 				tags: ["t"],
 				popularity_score: 0.5,
+				freshness_score: 0.5,
 				price: 1,
 			}),
 			"{not json",
@@ -328,6 +331,7 @@ describe("loadVectorIndex fail-closed validation", () => {
 			brand: "b",
 			tags: ["t"],
 			popularity_score: 0.5,
+			freshness_score: 0.5,
 			price: 9.99,
 			...overrides,
 		};
@@ -340,6 +344,19 @@ describe("loadVectorIndex fail-closed validation", () => {
 	it("throws when popularity_score is not a finite number", async () => {
 		const files = withProductRow(product({ popularity_score: "high" }));
 		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when freshness_score is not a finite number", async () => {
+		// freshness_score is a live ranking input (0.10*fresh in reranker.ts); a
+		// corrupt-but-signed value would feed NaN straight into the rerank score.
+		const files = withProductRow(product({ freshness_score: "warm" }));
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("throws when a product is missing its freshness_score", async () => {
+		const { freshness_score: _omit, ...noFreshness } = product({});
+		const files = withProductRow(noFreshness);
+		await expect(loadVectorIndex(files)).rejects.toThrow(/freshness_score/);
 	});
 
 	it("throws when a product is missing its title", async () => {
@@ -395,6 +412,17 @@ describe("loadVectorIndex fail-closed validation", () => {
 	it("routes an embeddings byte-length mismatch through VectorIndexError", async () => {
 		// meta declares dim=2,count=2 -> 16 bytes expected; supply a short buffer.
 		const files = { ...validFiles(), embeddings: new Uint8Array(8) };
+		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
+	});
+
+	it("routes an embedding_count vs faiss_ids length mismatch through VectorIndexError", async () => {
+		// state.json carries 2 faiss_ids; declare a meta count of 3 so the
+		// malformed-bundle mismatch surfaces as the typed boundary error, not a
+		// bare Error a caller catching VectorIndexError would miss.
+		const files = {
+			...validFiles(),
+			meta: encode({ embedding_count: 3, embedding_dim: 2 }),
+		};
 		await expect(loadVectorIndex(files)).rejects.toThrow(VectorIndexError);
 	});
 });

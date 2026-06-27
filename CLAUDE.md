@@ -7,8 +7,13 @@ Python v1 shipped on `main`: full FastAPI runtime + signed-bundle sync + hybrid
 search + session-aware reranker, 90%+ coverage. The Nimbus demo is **backend-free**:
 the React SPA syncs the signed bundle into OPFS and runs the whole engine in the
 browser via the `@edgeproc/browser` workspace package (`frontend/packages/edgeproc-browser/`),
-parity-tested against the Python core. The FastAPI runtime remains available for
-the optional server-side API use case but is not in the default demo path. The
+parity-tested against the Python core. The storefront is an **installable,
+offline-capable PWA**: after one online sync it runs fully offline (a Workbox
+service worker via `vite-plugin-pwa` precaches the app shell + the ~25 MB
+embedding model; the signed bundle already lives in OPFS, untouched by the SW).
+Proof is a real Playwright e2e (`pnpm -F frontend test:e2e:offline`). The
+FastAPI runtime remains available for the optional server-side API use case but
+is not in the default demo path. The
 **flywheel is closed end-to-end**: clicks → in-tab uplink → mimicked-cloud
 collector → `edgereco retrain` (recompute popularity, re-sign, republish the
 bundle) → both tiers re-sync the new ranking. See `poe demo-flywheel` +
@@ -53,6 +58,27 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - **BDD**: Gherkin in `backend/features/`, steps in `backend/tests/bdd/` — never coupled
 - **Coverage target**: ≥90% lines
 - Solo dev — merge locally, no PRs required
+
+## Commands
+Copy-paste core loop (all verified against `backend/pyproject.toml` `[tool.poe.tasks]`, `frontend/app/package.json`, and the `Makefile`):
+```bash
+# Backend (run from backend/)
+poe gate             # CI mirror: fmt-check + lint + typecheck + complexity + test (≥90% cov)
+poe audit            # dependency CVE scan (pip-audit; runs in its own Security workflow)
+poe test             # pytest with coverage only
+
+# Frontend (run from repo root; -F frontend targets frontend/app)
+pnpm -F frontend lint              # biome check
+pnpm -F frontend typecheck         # tsc -b
+pnpm -F frontend test              # vitest run
+pnpm -F frontend build             # tsc -b && vite build
+pnpm -F frontend test:e2e:offline  # offline PWA proof (Playwright)
+
+# Turnkey demo (repo root; thin make wrappers over the poe tasks)
+make demo            # backend-free: signed-bundle edge + Vite SPA on free ports, opens browser
+make demo-flywheel   # demo + uplink half (clicks → mimicked-cloud collector)
+make demo-retrain    # cloud retrain: recompute popularity → re-sign → republish bundle
+```
 
 ## Quality entry points
 - Inline quality gate → `python-quality` skill

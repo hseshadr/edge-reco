@@ -17,6 +17,8 @@ from edgereco.reco.retrain import (
 
 def _event(product_id: str, event_type: str = "click") -> InteractionEvent:
     return InteractionEvent(
+        # event_type stays a plain str so callers can pass any kind; the model
+        # validates it against the EventType literal at runtime.
         event_type=event_type,  # type: ignore[arg-type]
         product_id=product_id,
         timestamp="2026-06-05T00:00:00Z",

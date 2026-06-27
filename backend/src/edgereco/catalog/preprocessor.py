@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 import math
 import re
-from typing import Any
+from collections.abc import Mapping
 
 from .models import Product
 
@@ -35,7 +35,7 @@ def parse_category_hierarchy(category_id: str) -> tuple[str, list[str]]:
 
 
 def amazon_row_to_product(
-    row: dict[str, Any],
+    row: Mapping[str, str | float | int],
     *,
     pop_min: float,
     pop_max: float,
@@ -126,14 +126,14 @@ def compute_scraped_popularity_raw(stars: float, count: int) -> float:
     return stars * math.log1p(count)
 
 
-def _description(row: dict[str, Any]) -> str:
+def _description(row: Mapping[str, str]) -> str:
     """Prefer about_item; fall back to product_description."""
     about = str(row.get("about_item") or "").strip()
     return about or str(row.get("product_description") or "").strip()
 
 
 def scraped_row_to_product(
-    row: dict[str, Any],
+    row: Mapping[str, str],
     *,
     pop_min: float,
     pop_max: float,

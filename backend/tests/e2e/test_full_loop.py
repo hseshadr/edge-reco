@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 
 import pytest
 from edgeproc.bundles.signing import Ed25519Verifier, generate_keypair
@@ -104,7 +103,7 @@ def test_full_discovery_loop(client: TestClient) -> None:
     assert len(rec_initial.json()["results"]) == 50
 
     # 5. Click 3 Electronics products via /events
-    electronics_clicks: list[dict[str, Any]] = [
+    electronics_clicks: list[dict[str, str | dict[str, str]]] = [
         {
             "event_type": "click",
             "product_id": pid,

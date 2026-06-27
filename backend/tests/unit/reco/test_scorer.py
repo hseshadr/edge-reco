@@ -18,6 +18,7 @@ def _product(**kwargs: object) -> Product:
         "freshness_score": 0.5,
     }
     defaults.update(kwargs)
+    # Product validates at runtime; mypy can't see field types through a **dict unpack.
     return Product(**defaults)  # type: ignore[arg-type]
 
 
