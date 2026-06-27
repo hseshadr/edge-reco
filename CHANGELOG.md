@@ -5,36 +5,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
-- **`/events` collector returns 401 (not 500) for a non-ASCII bearer token.** When
-  `EDGERECO_EVENTS_TOKEN` is set, a non-ASCII `Authorization: Bearer` value no longer
-  raises through `secrets.compare_digest`; the comparison is byte-based and still
-  rejects (no bypass).
-- **Uplink can no longer throw into the click handler.** `localStorage` reads/writes in
-  the telemetry uplink are now fully guarded, so a full/disabled store (quota, private
-  mode) degrades to in-memory instead of escaping the fire-and-forget path — upholding
-  the "uplink never blocks or breaks the app" invariant.
-- **Browser engine validates the whole product row.** `parseProducts` now type-checks
-  every ranking/display-critical field (numeric `popularity_score`/`price`, string
-  `title`/`category`/`brand`, array `tags`) before use, instead of casting after an
-  id-only check — a malformed-but-signed bundle fails closed rather than silently
-  corrupting ranking. Vector index/count must be positive integers; the byte-length
-  mismatch now raises the typed `VectorIndexError`.
-- **No duplicate cards in a rail.** Rails dedupe by normalized title at the render layer
-  (parity-safe), so the few duplicate-title catalog rows surface once.
-- **Stable, unique rail heading ids** derived from the rail key rather than the display
-  label (removes potential duplicate DOM ids / ambiguous `aria-labelledby`).
-- **Docs:** repaired broken relative links in `edgeproc-browser/README.md` and
-  `demo_server/README.md`; removed a stale `docs/superpowers/` reference from this file.
+## [0.10.1] — 2026-06-27
+
+A quality, security, and hardening release. No functional product changes — the signed
+catalog bundle is byte-identical to 0.10.0 — but the code-quality bar is now *enforced*
+rather than aspirational, a CVE is fixed at the root instead of suppressed, and several
+fail-closed / robustness gaps are closed.
+
+### Security
+- **Dropped the torch CVE-2025-3000 suppression in favor of the real fix.** Pinned
+  `torch >= 2.12.1` (the version that fixes the CVE) and removed `pip-audit
+  --ignore-vuln`; the dependency audit is now genuinely clean, with zero suppressions.
 
 ### Changed
+- **The no-explicit-`Any` ban is now enforced**, not just documented. Added ruff
+  `ANN401` (repo-wide) + mypy `disallow_any_explicit`, plus an AST guard test that
+  forbids `Any` in any annotation across `src` — closing the gap where a model-field
+  `dict[str, Any]` could evade both tools. Eliminated every existing explicit `Any`:
+  source annotations narrowed to precise `Mapping`/union types (annotation-only, so the
+  bundle is unchanged), and the pytest-bdd context replaced with typed `StepContext`
+  dataclasses.
 - **`/events` hardening:** wire models reject unknown fields (`extra="forbid"`),
   `session_id` is length-bounded, the unknown-product warning is aggregated per request,
-  and the auth settings are resolved once instead of per request. The fail-closed bundle
+  the auth settings are resolved once instead of per request, and the fail-closed bundle
   loaders are promoted to public functions in `api/deps.py`.
-- **README architecture diagram** now embeds a pre-rendered SVG (`docs/diagrams/architecture.svg`)
-  with the Mermaid source preserved in a collapsible block, so it renders even where
-  GitHub's `viewscreen` Mermaid iframe is blocked.
+- **Coverage is gated on both tiers.** Added `@vitest/coverage-v8` thresholds to both
+  frontend workspaces and raised the Nimbus app's view-layer line coverage from ~62% to
+  ~92% with real component tests; the offline-PWA Playwright proof now runs in CI.
+- **README architecture diagram** now embeds a pre-rendered SVG
+  (`docs/diagrams/architecture.svg`) with the Mermaid source preserved in a collapsible
+  block, so it renders even where GitHub's `viewscreen` Mermaid iframe is blocked.
+
+### Fixed
+- **`/events` returns 401 (not 500) for a non-ASCII bearer token** — the comparison is
+  byte-based and still rejects (no bypass).
+- **The telemetry uplink can no longer throw into the click handler.** `localStorage`
+  reads/writes are fully guarded, so a full/disabled store (quota, private mode) degrades
+  to in-memory instead of escaping the fire-and-forget path.
+- **The browser engine validates the whole product row** before use — numeric
+  `popularity_score`/`price`/`freshness_score`, string `title`/`category`/`brand`, array
+  `tags`, positive-integer index/count — and raises the typed `VectorIndexError` on every
+  malformed-bundle path, so a malformed-but-signed bundle fails closed instead of
+  silently corrupting ranking.
+- **No duplicate cards in a rail** (dedupe by normalized title at the render layer,
+  parity-safe) and **stable, unique rail heading ids** derived from the rail key.
+- Repaired broken relative links in `edgeproc-browser/README.md` and
+  `demo_server/README.md`; corrected a stale strategy-count code comment and removed a
+  stale `docs/superpowers/` reference.
+
+### Removed
+- Four orphaned diagram SVGs and their `.d2` sources (including the stale pre-pivot
+  `demo-architecture` diagram that contradicted the backend-free positioning).
 
 ## [0.10.0] — 2026-06-26
 
