@@ -131,7 +131,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
@@ -141,7 +141,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Cache HuggingFace model weights
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.cache/huggingface
           # Keyed on the model id so the ~25MB MiniLM weights survive across runs
