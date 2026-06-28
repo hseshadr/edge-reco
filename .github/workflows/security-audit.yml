@@ -29,7 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: astral-sh/setup-uv@v8.2.0
+        # Pin the concrete tag: the maintainers do not publish a floating `v8`
+        # major alias (only v8.x.y exist), so `@v8` fails to resolve.
         with:
           enable-cache: true
       - name: Pin Python

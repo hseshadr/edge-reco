@@ -1,0 +1,124 @@
+# Deploy https://edge-reco.com — Cloudflare Pages (static, backend-free PWA).
+#
+# AUTO-DEPLOY: runs automatically after the "CI" workflow passes on `main`
+# (and on manual workflow_dispatch). It stays INERT until these repository
+# secrets exist — when they are absent the auto-run SKIPS cleanly (no red X);
+# a manual run fails fast at the guard step. Secrets required:
+#
+#   CLOUDFLARE_API_TOKEN    Pages:Edit-scoped API token
+#   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account that owns the `edge-reco`
+#                           Pages project + the edge-reco.com zone
+#
+# A manual run without the secrets fails fast at the guard step with a clear
+# message — it cannot half-deploy. The auto-run skips instead of failing.
+# SPA-ONLY: a static `build:pages` artifact (signed catalog copied same-origin
+# into dist/bundle) — no R2, no bundle signing key in CI. See docs/DEPLOY.md.
+#
+# One-time prerequisites (outside this workflow, done by a human with wrangler):
+#   npx wrangler pages project create edge-reco --production-branch=main
+#   + attach the edge-reco.com custom domain (docs/DEPLOY.md)
+name: Deploy edge-reco.com
+
+on:
+  # Auto-deploy the commit that just passed CI on main.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never let two deploys interleave their uploads.
+concurrency:
+  group: deploy-edge-reco-com
+  cancel-in-progress: false
+
+jobs:
+  # Only auto-deploy when the triggering CI run succeeded on main. For a manual
+  # dispatch this gate is a pass-through (deploy runs regardless). When the
+  # deploy secrets are absent, configured=false makes the auto-run SKIP cleanly
+  # instead of red-X'ing every push to main.
+  preflight:
+    name: Gate auto-deploy
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Detect whether deploy secrets are configured
+        id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy secrets not configured — skipping auto-deploy. See .github/workflows/deploy.yml header."
+          fi
+
+  deploy:
+    name: Build + deploy to Cloudflare Pages
+    needs: preflight
+    # Auto-runs only when configured; a manual dispatch always proceeds (and
+    # then fails loudly at the guard step if any secret is missing).
+    if: >-
+      needs.preflight.outputs.configured == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard — refuse to run until the deploy secrets are configured
+        # Runs BEFORE checkout — run from the always-present workspace root.
+        working-directory: ${{ github.workspace }}
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=0
+          for v in CF_TOKEN CF_ACCOUNT; do
+            if [ -z "${!v}" ]; then
+              echo "::error::secret behind $v is not configured (see the header of .github/workflows/deploy.yml)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          # Deploy the exact commit that passed CI (auto-run); HEAD for manual.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      # Reads the pinned pnpm version from frontend/package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: frontend/.node-version # 22 — the Cloudflare Pages target
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install workspace
+        run: pnpm -C frontend install --frozen-lockfile
+
+      # The canonical Pages build: vite build with VITE_BASE=/ +
+      # VITE_BUNDLE_BASE_URL=bundle, then the committed signed catalog copied
+      # same-origin into dist/bundle (zero CORS, zero application backend).
+      # Output: frontend/app/dist.
+      - name: Build the static SPA (signed bundle copied same-origin)
+        run: pnpm -C frontend -F frontend run build:pages
+
+      - name: Deploy to Cloudflare Pages
+        # wrangler reads the API token + account id from the environment.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler@4.103.0 pages deploy frontend/app/dist --project-name=edge-reco --branch=main
