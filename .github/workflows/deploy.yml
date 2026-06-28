@@ -96,7 +96,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
