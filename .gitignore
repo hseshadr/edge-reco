@@ -56,3 +56,5 @@ origin/
 .superpowers/
 # Internal launch/publish notes — local scratch, never shipped in the public repo.
 .publish-drafts/
+# Graphify knowledge-graph output — disposable local analysis artifact.
+graphify-out/
