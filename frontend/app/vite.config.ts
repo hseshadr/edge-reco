@@ -13,10 +13,10 @@ const pwa = process.env.VITEST
 				registerType: "autoUpdate",
 				includeAssets: ["favicon.svg", "icons.svg"],
 				manifest: {
-					name: "Nimbus — the everything store",
-					short_name: "Nimbus",
+					name: "EdgeReco",
+					short_name: "EdgeReco",
 					description:
-						"A storefront that re-ranks toward your taste, live, on your device.",
+						"Search & recommendations that run on the shopper's device — one small signed file, then zero backend calls.",
 					theme_color: "#ff4d2e",
 					background_color: "#faf6ef",
 					display: "standalone",
