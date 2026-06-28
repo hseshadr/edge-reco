@@ -18,7 +18,7 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@hpcc-js/wasm-zstd": "^1.13.0",
+		"@hpcc-js/wasm-zstd": "^1.13.2",
 		"@huggingface/transformers": "^4.2.0",
 		"@noble/ed25519": "^3.1.0"
 	},
