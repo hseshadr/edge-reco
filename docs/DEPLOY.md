@@ -114,6 +114,44 @@ certificate automatically. CF rebuilds and redeploys on every push to `main`.
 > `VITE_BASE=/<repo>/` — the engine absolutizes the bundle + pinned-key URLs at
 > runtime (`src/api/bundleUrl.ts`, `document.baseURI`), so one build works at any base.
 
+### CI-driven deploy (GitHub Actions → Cloudflare Pages)
+
+The Git-connected Pages build above lets Cloudflare build on every push. As an
+alternative — or for a repo where you'd rather drive the deploy from CI — the
+`.github/workflows/deploy.yml` workflow runs the same `build:pages` artifact through
+`wrangler pages deploy` after the `CI` workflow goes green on `main` (and on manual
+`workflow_dispatch`).
+
+**It ships INERT.** Until the two repository secrets below exist, an auto-run **skips
+cleanly** (no red X on every push to `main`) and a manual dispatch **fails fast** at the
+guard step — it can never half-deploy.
+
+To go live:
+
+1. **Create the Pages project** (one-time, with a human running wrangler):
+
+   ```bash
+   npx wrangler pages project create edge-reco --production-branch=main
+   ```
+
+2. **Set the repository secrets** (Settings → Secrets and variables → Actions):
+
+   | Secret | Value |
+   |---|---|
+   | `CLOUDFLARE_API_TOKEN` | a Cloudflare API token scoped **Pages: Edit** |
+   | `CLOUDFLARE_ACCOUNT_ID` | the account that owns the `edge-reco` Pages project + the `edge-reco.com` zone |
+
+   No bundle-signing key is needed in CI: this is the static SPA shape (the signed
+   catalog is committed and copied same-origin by `build:pages`).
+
+3. **Attach the custom domain** in the Pages project → **Custom domains** → `edge-reco.com`.
+   Cloudflare provisions the apex DNS (CNAME-flattening) and TLS automatically.
+
+The build emits `frontend/app/dist`; `wrangler pages deploy frontend/app/dist
+--project-name=edge-reco --branch=main` uploads it. A `frontend/app/public/_redirects`
+(`/*  /index.html  200`) keeps any path serving the SPA shell — harmless today (the
+storefront has no client-side router) and future-proof if one is ever added.
+
 ## Shape 2 — Edge-origin API server
 
 The same engine, but the **FastAPI runtime** does the search server-side. The SPA (or any client) calls `/search`, `/recommend`, `/events`.

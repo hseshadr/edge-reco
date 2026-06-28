@@ -1,0 +1,21 @@
+# Keep dependencies current across every ecosystem this repo ships.
+#   - pip            : the Python core + demo server (backend/, uv-managed)
+#   - npm            : the pnpm storefront workspace (frontend/, pnpm-lock.yaml)
+#   - github-actions : the workflows under .github/workflows/
+# All weekly. Dependabot's "npm" ecosystem natively understands pnpm-lock.yaml.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
