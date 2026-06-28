@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The substrate libs (edge-proc, shared-libs-python) are pulled from public
       # GitHub via the git sources pinned in backend/pyproject.toml — exactly what
@@ -65,7 +65,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@v6
@@ -114,7 +114,7 @@ jobs:
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
       TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@v6
