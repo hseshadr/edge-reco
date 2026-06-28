@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
