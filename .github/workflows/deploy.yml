@@ -100,7 +100,7 @@ jobs:
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version-file: frontend/.node-version # 22 — the Cloudflare Pages target
           cache: pnpm
