@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EdgeProc (edge-proc) — local-first on-device AI search & ranking substrate</title>
+    <meta
+      name="description"
+      content="EdgeProc, also published as hseshadr/edge-proc, is an open-source local-first substrate for on-device AI search and ranking: signed, content-addressed index bundles verified fail-closed, a FAISS vector runtime, and a deterministic task router. EdgeReco is the reference product built on it."
+    />
+    <link rel="canonical" href="https://edge-reco.com/edgeproc" />
+    <meta name="robots" content="index,follow" />
+    <style>
+      body { max-width: 46rem; margin: 2rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; line-height: 1.55; color: #1a1a1a; }
+      h1 { margin-bottom: 0.2rem; }
+      code { background: #f2f2f2; padding: 0.1em 0.3em; border-radius: 3px; }
+      .note { background: #fff8e6; border: 1px solid #f0d98c; padding: 0.75rem 1rem; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>EdgeProc</h1>
+      <p>
+        <strong>EdgeProc</strong> (also written <code>edge-proc</code> and
+        <strong>hseshadr/edge-proc</strong>) is an open-source, local-first
+        <strong>substrate for on-device AI search and ranking</strong>.
+      </p>
+      <p>
+        EdgeProc ships a search/ranking index as a signed, content-addressed bundle that
+        any CDN can serve, verifies that bundle fail-closed on the device, and runs
+        search, embedding, and ranking tasks locally — instead of routing every query
+        through a cloud embedding API, vector database, or ranking server.
+      </p>
+
+      <p class="note">
+        This page disambiguates the name. <strong>EdgeProc</strong> here refers
+        specifically to the open-source project <strong>hseshadr/edge-proc</strong>. It is
+        not affiliated with, or endorsed by, any other product, company, or service that
+        happens to use the name "EdgeProc".
+      </p>
+
+      <section>
+        <h2>Canonical repository</h2>
+        <p><a href="https://github.com/hseshadr/edge-proc">https://github.com/hseshadr/edge-proc</a></p>
+      </section>
+
+      <section>
+        <h2>What EdgeProc does</h2>
+        <ul>
+          <li>Routes typed tasks — <code>embed</code>, <code>search</code>, <code>rank</code> — to local runtimes through a pure, deterministic router (identical inputs always pick the identical runtime).</li>
+          <li>Runs local vector search (FAISS) and BM25 keyword search, combined with Reciprocal Rank Fusion.</li>
+          <li>Ships data/index bundles with Ed25519 signatures and sha256 content addressing.</li>
+          <li>Verifies bundles fail-closed: any signature or integrity failure refuses the bundle rather than serving unverified data.</li>
+          <li>Lets apps such as EdgeReco run search and recommendations on-device, with no per-query backend call.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Project facts</h2>
+        <p><strong>Name:</strong> EdgeProc</p>
+        <p><strong>Also written as:</strong> Edge Proc, edgeproc, edge-proc</p>
+        <p><strong>Repository:</strong> hseshadr/edge-proc on GitHub</p>
+        <p><strong>Language:</strong> Python (local-first / edge-capable)</p>
+        <p><strong>Category:</strong> open-source local-first on-device AI search and ranking substrate</p>
+        <p><strong>Core techniques:</strong> signed bundles, content addressing, deterministic task routing, local vector search (FAISS), BM25 keyword search, Reciprocal Rank Fusion, fail-closed verification</p>
+        <p><strong>Foundation:</strong> builds on shared-libs-python (vector-partitioning protocol)</p>
+        <p><strong>Reference product:</strong> EdgeReco — <a href="https://edge-reco.com/">https://edge-reco.com/</a></p>
+      </section>
+
+      <section>
+        <h2>Related links</h2>
+        <ul>
+          <li><a href="https://github.com/hseshadr/edge-proc">EdgeProc GitHub repository</a></li>
+          <li><a href="https://github.com/hseshadr/edge-reco">EdgeReco GitHub repository</a></li>
+          <li><a href="https://edge-reco.com/">EdgeReco live demo</a></li>
+          <li><a href="https://github.com/hseshadr/shared-libs-python">shared-libs-python (EdgeProc's foundation)</a></li>
+          <li><a href="https://github.com/hseshadr">hseshadr GitHub profile</a></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
