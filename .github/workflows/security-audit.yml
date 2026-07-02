@@ -27,7 +27,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v8.2.0
         # Pin the concrete tag: the maintainers do not publish a floating `v8`

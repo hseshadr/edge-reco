@@ -90,7 +90,7 @@ jobs:
           exit "$missing"
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # Deploy the exact commit that passed CI (auto-run); HEAD for manual.
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
@@ -100,7 +100,7 @@ jobs:
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version-file: frontend/.node-version # 22 — the Cloudflare Pages target
           cache: pnpm
