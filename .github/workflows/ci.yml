@@ -20,13 +20,13 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The substrate libs (edge-proc, shared-libs-python) are pulled from public
       # GitHub via the git sources pinned in backend/pyproject.toml — exactly what
       # an external cloner gets. No private-repo token, no path patching: CI builds
       # the project the same way `git clone … && uv sync` does for anyone.
-      - uses: astral-sh/setup-uv@v8.2.0
+      - uses: astral-sh/setup-uv@v8.3.2
         # Pin the concrete tag: the maintainers do not publish a floating `v8`
         # major alias (only v8.x.y exist), so `@v8` fails to resolve.
         with:
@@ -65,14 +65,14 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24" # >= 22.12 required by Vite 8
           cache: pnpm
@@ -114,14 +114,14 @@ jobs:
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
       TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24" # >= 22.12 required by Vite 8
           cache: pnpm
@@ -131,7 +131,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
@@ -141,7 +141,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Cache HuggingFace model weights
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.cache/huggingface
           # Keyed on the model id so the ~25MB MiniLM weights survive across runs
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload Playwright report + traces on failure
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
