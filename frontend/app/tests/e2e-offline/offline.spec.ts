@@ -2,15 +2,16 @@ import { expect, test } from "@playwright/test";
 
 /**
  * THE airplane-mode proof. After one online sync the whole store works with the
- * network cut: the SW serves the shell + model, OPFS holds the bundle. Because
- * boot warms the embedder model before the Storefront mounts, a Storefront that
- * mounts OFFLINE is itself proof the model was served from cache.
+ * network cut: the SW serves the shell, transformers.js's own `transformers-cache`
+ * (CacheStorage) holds the self-hosted /models/ weights, OPFS holds the bundle.
+ * Because boot warms the embedder model before the Storefront mounts, a
+ * Storefront that mounts OFFLINE is itself proof the model was served from cache.
  *
  * Flow (robust against the SW-not-yet-controlling race): launch online so the SW
- * installs + caches the shell + model and OPFS gets the bundle; reload online so
- * the SW is guaranteed to CONTROL the page (the first model fetch is then surely
- * intercepted and cached); then cut the network, reload, and relaunch — a mount
- * with zero network is the proof.
+ * installs + caches the shell, transformers-cache gets the weights and OPFS gets
+ * the bundle; reload online so the SW is guaranteed to CONTROL the page (the
+ * offline shell reload then surely works); then cut the network, reload, and
+ * relaunch — a mount with zero network is the proof.
  */
 const PRODUCT_CARD = "main article.card button.card__overlay";
 const OFFLINE_BADGE = ".offline-badge";
@@ -32,14 +33,15 @@ test("storefront works fully offline after one online sync", async ({
 		console.log(`requestfailed: ${request.method()} ${request.url()}`);
 	});
 
-	// 1. Warm online: the SW installs + caches the shell and model; OPFS gets the bundle.
+	// 1. Warm online: the SW installs + caches the shell; the embedder populates
+	//    transformers-cache with the /models/ weights; OPFS gets the bundle.
 	await page.goto("/");
 	await page.evaluate(() => navigator.serviceWorker.ready);
 	await launch(page);
 
-	// 2. Reload online so the SW DEFINITELY controls the page/worker — the model
-	//    fetch on this launch is intercepted and persisted to the SW cache. This
-	//    removes the first-load "activated-but-not-yet-controlling" race.
+	// 2. Reload online so the SW DEFINITELY controls the page/worker — the shell
+	//    reload offline depends on it. This removes the first-load
+	//    "activated-but-not-yet-controlling" race.
 	await page.reload();
 	await page.evaluate(async () => {
 		await navigator.serviceWorker.ready;
@@ -59,7 +61,8 @@ test("storefront works fully offline after one online sync", async ({
 	// 3. Cut the network at the browser context.
 	await context.setOffline(true);
 
-	// 4. Reload. Shell ← SW precache, bundle ← OPFS, model ← SW cache. No network.
+	// 4. Reload. Shell ← SW precache, bundle ← OPFS, model ← transformers-cache.
+	//    No network.
 	await page.reload();
 	await launch(page); // mounts offline ⇒ model + bundle + shell all served without network
 	await expect(page.locator(OFFLINE_BADGE)).toBeVisible();

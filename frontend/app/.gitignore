@@ -27,3 +27,11 @@ playwright/.cache
 *.njsproj
 *.sln
 *.sw?
+
+# Self-hosted model weights — materialized by scripts/download-model.mjs (the
+# `prebuild` hook), sha256-pinned, never committed (no tracked binaries >1MB).
+public/models/
+
+# Self-hosted onnxruntime-web wasm runtime — staged from node_modules by
+# scripts/stage-ort-wasm.mjs (the `prebuild` hook); never committed.
+public/ort/

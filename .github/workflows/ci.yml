@@ -91,6 +91,21 @@ jobs:
       - name: Install workspace
         run: pnpm install --frozen-lockfile
 
+      # Self-hosted SPA model weights (house standard §8.1b), fetched BEFORE the
+      # gate: the app's `prebuild` hook (gate:quality ends in a build) resolves
+      # them from app/public/models/ instead of huggingface.co at runtime.
+      # Fixed-key cache so only the first run pays the download (§4 flake
+      # engineering); the script is sha256-pinned and idempotent, so on a cache
+      # hit it just verifies digests.
+      - name: Cache self-hosted model weights
+        uses: actions/cache@v5
+        with:
+          path: frontend/app/public/models
+          key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
+      - name: Fetch self-hosted model weights (idempotent, sha256-verified)
+        working-directory: frontend/app
+        run: node scripts/download-model.mjs
+
       # CI runs the gate command ITSELF (house standard §3/§4): `gate:quality` is
       # biome -> tsc -> vitest-with-coverage -> preflight -> build across both
       # workspace members, defined once in frontend/package.json. The full local
@@ -100,19 +115,17 @@ jobs:
         run: pnpm run gate:quality
 
   # Playwright e2e: the storefront suite, the C1 sync + in-browser embed model-load
-  # smoke suite, and the offline-PWA proof (production build + real service worker +
-  # real in-browser model), each starting its own Vite + static-catalog webServer on
-  # its own ports. The C1 suite loads the real ~25MB Xenova/all-MiniLM-L6-v2 weights
-  # from the HuggingFace CDN; HF_HOME and TRANSFORMERS_CACHE are pinned to a cached
-  # dir so the weights download once and are restored on subsequent runs.
+  # smoke suite (HF hosts BLOCKED — weights served same-origin from /models/), the
+  # offline-PWA proof, and the cold-CDN-blocked proof (production build + real
+  # service worker + real in-browser model, HF AND jsDelivr blocked), each starting
+  # its own Vite + static-catalog webServer on its own ports. The weights are
+  # SELF-HOSTED (house standard §8.1b): fetched once at build time by
+  # scripts/download-model.mjs under a fixed cache key, never from a CDN at runtime.
   e2e:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
-    env:
-      HF_HOME: ${{ github.workspace }}/.cache/huggingface
-      TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
     steps:
       - uses: actions/checkout@v5
 
@@ -140,13 +153,16 @@ jobs:
         working-directory: frontend/app
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Cache HuggingFace model weights
+      # Same self-hosted weights as the frontend job (fixed key, §4 flake
+      # engineering): the c1 + offline/cold suites serve them from /models/.
+      - name: Cache self-hosted model weights
         uses: actions/cache@v5
         with:
-          path: ${{ github.workspace }}/.cache/huggingface
-          # Keyed on the model id so the ~25MB MiniLM weights survive across runs
-          # and are only re-downloaded if the pinned model changes.
-          key: hf-model-${{ runner.os }}-Xenova-all-MiniLM-L6-v2
+          path: frontend/app/public/models
+          key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
+      - name: Fetch self-hosted model weights (idempotent, sha256-verified)
+        working-directory: frontend/app
+        run: node scripts/download-model.mjs
 
       # CI runs the gate command ITSELF (house standard §3/§4): `gate:e2e` is the
       # storefront suite -> the C1 sync + in-browser embed model-load smoke suite ->

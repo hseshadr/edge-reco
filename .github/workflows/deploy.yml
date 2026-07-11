@@ -109,6 +109,21 @@ jobs:
       - name: Install workspace
         run: pnpm -C frontend install --frozen-lockfile
 
+      # Self-hosted SPA model weights (house standard §8.1b), fetched BEFORE the
+      # build — same fixed-key cache as CI. The build's `prebuild` hook verifies
+      # them (sha256-pinned, fail-loud), and the built dist/ ships them under
+      # /models/ so the live site never touches a model CDN at runtime. Every
+      # file is under the Cloudflare Pages 25 MiB single-asset limit (the q8
+      # ONNX is ~22.97 MB; pinned by scripts/download-model.test.mjs).
+      - name: Cache self-hosted model weights
+        uses: actions/cache@v5
+        with:
+          path: frontend/app/public/models
+          key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
+      - name: Fetch self-hosted model weights (idempotent, sha256-verified)
+        working-directory: frontend/app
+        run: node scripts/download-model.mjs
+
       # The canonical Pages build: vite build with VITE_BASE=/ +
       # VITE_BUNDLE_BASE_URL=bundle, then the committed signed catalog copied
       # same-origin into dist/bundle (zero CORS, zero application backend).

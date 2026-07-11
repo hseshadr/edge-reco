@@ -13,12 +13,16 @@
 // in environments where it is unavailable (the parity numbers are reported on a
 // machine with network access).
 
-import { env } from "@huggingface/transformers";
 import { describe, expect, it } from "vitest";
 import parityFixture from "./__fixtures__/embedding_parity.json" with {
 	type: "json",
 };
-import { createEmbedder } from "./embedder";
+import {
+	configureTransformersEnv,
+	createEmbedder,
+	EMBEDDING_DTYPE,
+	pipelineOptions,
+} from "./embedder";
 
 interface ParityFixture {
 	readonly model: string;
@@ -78,18 +82,59 @@ describe.skipIf(SKIP)(
 	},
 );
 
-describe("embedder model cache ownership", () => {
-	// env.useBrowserCache defaults to IS_WEB_CACHE_AVAILABLE, which is true in a
-	// real browser. Simulate that by setting it to true before re-importing the
-	// module, then confirm embedder.ts drives it back to false at module load.
-	it("disables the transformers.js browser cache so the service worker owns it", async () => {
-		const { vi } = await import("vitest");
-		// Pretend we're in a browser environment where Cache API is available.
-		env.useBrowserCache = true;
-		// Re-importing embedder after resetting modules re-runs the module's
-		// top-level side effect (env.useBrowserCache = false).
-		vi.resetModules();
-		await import("./embedder");
-		expect(env.useBrowserCache).toBe(false);
+describe("transformers.js env — self-hosted model config (house standard §8.1b)", () => {
+	// The browser runtime must resolve model files from the SPA's own origin
+	// (/models/, populated by app/scripts/download-model.mjs) with transformers.js
+	// owning its offline copy in the `transformers-cache` CacheStorage cache —
+	// aml-filter's ORT-web hardening config — AND load the onnxruntime-web wasm
+	// runtime from the same-origin /ort/ mirror (staged by
+	// app/scripts/stage-ort-wasm.mjs) instead of jsDelivr.
+	it("browser runtime: self-hosted /models/ + /ort/ + transformers-cache enabled", () => {
+		const fake = {
+			useBrowserCache: false,
+			allowLocalModels: false,
+			localModelPath: "sentinel",
+		};
+		const fakeOrt: { wasmPaths?: string } = {};
+		configureTransformersEnv(fake, fakeOrt, false);
+		expect(fake.useBrowserCache).toBe(true);
+		expect(fake.allowLocalModels).toBe(true);
+		expect(fake.localModelPath).toBe("/models/");
+		expect(fakeOrt.wasmPaths).toBe("/ort/");
+	});
+
+	// In Node (this parity suite) the library's defaults stay untouched: the HF
+	// hub + filesystem cache serve the fp32 export the Python fixtures pin, and
+	// onnxruntime-node needs no wasm path.
+	it("node runtime: leaves the transformers.js env untouched", () => {
+		const fake = {
+			useBrowserCache: false,
+			allowLocalModels: false,
+			localModelPath: "sentinel",
+		};
+		const fakeOrt: { wasmPaths?: string } = {};
+		configureTransformersEnv(fake, fakeOrt, true);
+		expect(fake).toEqual({
+			useBrowserCache: false,
+			allowLocalModels: false,
+			localModelPath: "sentinel",
+		});
+		expect(fakeOrt.wasmPaths).toBeUndefined();
+	});
+});
+
+describe("pipeline options — explicit dtype pin (house standard §8.1b)", () => {
+	// The browser pins dtype q8 EXPLICITLY (the `model_quantized.onnx` export the
+	// download script self-hosts) instead of relying on the wasm device's implicit
+	// default — the pin is a contract, not a coincidence.
+	it("browser runtime pins dtype q8", () => {
+		expect(pipelineOptions(false)).toEqual({ dtype: EMBEDDING_DTYPE });
+		expect(EMBEDDING_DTYPE).toBe("q8");
+	});
+
+	// Node keeps the default (fp32) export: the embedding-parity fixture pins the
+	// Python sentence-transformers fp32 recipe, and q8-vs-fp32 drift would flunk it.
+	it("node runtime keeps the default dtype", () => {
+		expect(pipelineOptions(true)).toEqual({});
 	});
 });
