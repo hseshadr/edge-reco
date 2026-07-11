@@ -13,6 +13,7 @@
 		"test:coverage": "vitest run --coverage",
 		"test:preflight": "node --test scripts/*.test.mjs",
 		"test:e2e": "playwright test",
+		"test:e2e:c1": "playwright test -c playwright.c1.config.ts",
 		"test:e2e:offline": "VITE_BUNDLE_BASE_URL=http://localhost:8921/catalog pnpm run build && playwright test -c playwright.offline.config.ts",
 		"typecheck": "tsc -b",
 		"gen-icons": "node scripts/gen-icons.mjs",
