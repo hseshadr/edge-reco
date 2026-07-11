@@ -156,10 +156,9 @@ show_missing = true
 fmt-check = "ruff format --check ."
 lint = "ruff check ."
 typecheck = "mypy src"
-# Complexity gate: no function worse than Radon rank B, no module worse than B,
-# average A. Catches NEW over-complex code without churning the few cohesive
-# rank-B CLI handlers (legacy is a cleanup signal, not a release blocker).
-complexity = "xenon --max-absolute B --max-modules B --max-average A src"
+# Complexity gate: A/A/A per house standard §2 — every block, module, and the
+# average must hold Radon rank A.
+complexity = "xenon --max-absolute A --max-modules A --max-average A src"
 # Dependency vulnerability scan (network-dependent — hits the PyPI advisory DB).
 # Runs in its own "Security audit" workflow (.github/workflows/security-audit.yml),
 # which goes honestly RED on any finding, so the main CI gate stays meaningful for
