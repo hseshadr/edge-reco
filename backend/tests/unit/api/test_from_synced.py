@@ -19,6 +19,7 @@ from edgeproc.bundles.signing import Ed25519Verifier, SignatureError, generate_k
 from edgereco.api.deps import ServiceContainer, _materialize_bundle, _select_adapter
 from edgereco.catalog.models import CatalogManifest, Product
 from edgereco.catalog.publish import publish_bundle
+from edgereco.embeddings.encoder import ProductEncoder
 from edgereco.embeddings.index import VectorIndex
 from edgereco.reco.cooccurrence import CooccurrenceMatrix, Neighbor
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG
@@ -29,6 +30,23 @@ _PRODUCTS = [
     Product(id="P2", title="Running Shoes", category="Sports"),
     Product(id="P3", title="Cooking Pot", category="Home & Kitchen"),
 ]
+
+
+class _StubEncoder(ProductEncoder):
+    """Hermetic query encoder matching the synthetic ``_DIM`` index (no download).
+
+    These bundles ship a synthetic ``_DIM``-wide index, so the consumer's query
+    encoder must live in that same space — the real model would fail the
+    fail-closed dim check ``from_synced`` now enforces.
+    """
+
+    def __init__(self, model_name: str, dim: int = _DIM) -> None:
+        self.model_name = model_name
+        self._dim = dim
+
+    @property
+    def dim(self) -> int:
+        return self._dim
 
 
 def _build_origin(tmp_path: Path) -> tuple[Path, Ed25519Verifier]:
@@ -67,6 +85,7 @@ def test_from_synced_builds_container(tmp_path: Path) -> None:
         base_url=str(origin),
         cache_root=tmp_path / "cache",
         verifier=verifier,
+        encoder_factory=_StubEncoder,
     )
 
     assert len(container.catalog) == len(_PRODUCTS)
@@ -88,6 +107,7 @@ def test_from_synced_defaults_empty_cooccurrence(tmp_path: Path) -> None:
         base_url=str(origin),
         cache_root=tmp_path / "cache",
         verifier=verifier,
+        encoder_factory=_StubEncoder,
     )
 
     assert container.cooccurrence == CooccurrenceMatrix()
@@ -126,6 +146,7 @@ def test_from_synced_loads_cooccurrence_from_bundle(tmp_path: Path) -> None:
         base_url=str(origin),
         cache_root=tmp_path / "cache",
         verifier=Ed25519Verifier(public),
+        encoder_factory=_StubEncoder,
     )
     assert container.cooccurrence == cooc
 
@@ -137,6 +158,7 @@ def test_from_synced_loads_ranking_config_from_bundle(tmp_path: Path) -> None:
         base_url=str(origin),
         cache_root=tmp_path / "cache",
         verifier=verifier,
+        encoder_factory=_StubEncoder,
     )
 
     # The producer signs DEFAULT_RANKING_CONFIG into every bundle; the consumer
@@ -208,7 +230,10 @@ def test_from_synced_current_bundle_loads_signed_files(tmp_path: Path) -> None:
     so from_synced loads them without tripping the missing-file guard."""
     origin, verifier = _build_origin(tmp_path)
     container = ServiceContainer.from_synced(
-        base_url=str(origin), cache_root=tmp_path / "cache", verifier=verifier
+        base_url=str(origin),
+        cache_root=tmp_path / "cache",
+        verifier=verifier,
+        encoder_factory=_StubEncoder,
     )
     assert container.ranking_config == DEFAULT_RANKING_CONFIG
 

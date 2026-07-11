@@ -169,7 +169,15 @@ def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
         _COOCCURRENCE_NAME: (staging_dir / _COOCCURRENCE_NAME).read_bytes(),
     }
     for path in sorted((staging_dir / "vector").rglob("*")):
+        rel = path.relative_to(staging_dir).as_posix()
+        # Refuse symlinks BEFORE is_file() (which follows them): a symlinked entry
+        # would inline an arbitrary host file into the SIGNED bundle — arbitrary-file
+        # read. Fail closed rather than sign whatever the link points at.
+        if path.is_symlink():
+            raise ValueError(
+                f"refusing to bundle symlinked staging entry {rel!r}: a symlink "
+                "would inline an arbitrary file into the signed bundle"
+            )
         if path.is_file():
-            rel = path.relative_to(staging_dir).as_posix()
             files[rel] = path.read_bytes()
     return files

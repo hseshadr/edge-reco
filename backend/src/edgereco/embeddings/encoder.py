@@ -17,6 +17,11 @@ if TYPE_CHECKING:
 
     from edgereco.catalog.models import Product
 
+#: The embedding model reco defaults to when a bundle declares none of its own.
+#: Public so consumers can bind (and log) it as an EXPLICIT decision rather than a
+#: silent hardcoded fallback (see ``edgereco.api.deps._bind_encoder``).
+DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+
 
 def _product_text(product: Product) -> str:
     parts = [product.title]
@@ -32,7 +37,7 @@ def _product_text(product: Product) -> str:
 class ProductEncoder:
     """Reco adapter over EdgeProc's TextEncoder."""
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> None:
+    def __init__(self, model_name: str = DEFAULT_MODEL_NAME) -> None:
         self._encoder = TextEncoder(model_name)
 
     def encode(self, products: list[Product]) -> NDArray[np.float32]:

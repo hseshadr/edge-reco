@@ -205,6 +205,96 @@ describe("Storefront category + search", () => {
 	});
 });
 
+describe("Storefront stale-search race (latest-wins)", () => {
+	type SearchPayload = {
+		results: SearchResult[];
+		query: string;
+		total: number;
+	};
+
+	it("drops a slow older query that resolves after a newer one", async () => {
+		const resolvers = new Map<string, (r: SearchPayload) => void>();
+		mocks.search.mockImplementation(
+			(q: string) =>
+				new Promise<SearchPayload>((resolve) => {
+					resolvers.set(q, resolve);
+				}),
+		);
+
+		render(<Storefront />);
+		await screen.findByText("Grid Gadget");
+		const input = screen.getByLabelText("Search products");
+
+		// The soon-to-be-stale query settles and goes in flight (still pending).
+		await userEvent.type(input, "old");
+		await waitFor(() => expect(resolvers.has("old")).toBe(true));
+
+		// A newer query supersedes it before the older one resolves.
+		await userEvent.clear(input);
+		await userEvent.type(input, "new");
+		await waitFor(() => expect(resolvers.has("new")).toBe(true));
+
+		// The newer query resolves first and paints…
+		resolvers.get("new")?.({
+			results: [result("N1", "New Result")],
+			query: "new",
+			total: 1,
+		});
+		expect(await screen.findByText("New Result")).toBeInTheDocument();
+
+		// …then the stale older query resolves LATE — it must not overwrite results.
+		resolvers.get("old")?.({
+			results: [result("O1", "Old Result")],
+			query: "old",
+			total: 1,
+		});
+		await waitFor(() =>
+			expect(screen.queryByText("Old Result")).not.toBeInTheDocument(),
+		);
+		expect(screen.getByText("New Result")).toBeInTheDocument();
+	});
+
+	it("swallows a stale query that rejects after a newer one succeeds", async () => {
+		const controls = new Map<
+			string,
+			{ resolve: (r: SearchPayload) => void; reject: (e: Error) => void }
+		>();
+		mocks.search.mockImplementation(
+			(q: string) =>
+				new Promise<SearchPayload>((resolve, reject) => {
+					controls.set(q, { resolve, reject });
+				}),
+		);
+
+		render(<Storefront />);
+		await screen.findByText("Grid Gadget");
+		const input = screen.getByLabelText("Search products");
+
+		await userEvent.type(input, "old");
+		await waitFor(() => expect(controls.has("old")).toBe(true));
+		await userEvent.clear(input);
+		await userEvent.type(input, "new");
+		await waitFor(() => expect(controls.has("new")).toBe(true));
+
+		controls.get("new")?.resolve({
+			results: [result("N1", "New Result")],
+			query: "new",
+			total: 1,
+		});
+		expect(await screen.findByText("New Result")).toBeInTheDocument();
+
+		// The stale query fails LATE — a superseded failure is not the current view.
+		controls.get("old")?.reject(new Error("stale engine error"));
+		await waitFor(() =>
+			expect(screen.queryByText("stale engine error")).not.toBeInTheDocument(),
+		);
+		expect(
+			screen.queryByText("Couldn’t reach the engine"),
+		).not.toBeInTheDocument();
+		expect(screen.getByText("New Result")).toBeInTheDocument();
+	});
+});
+
 describe("Storefront session signals", () => {
 	it("increments the cart pill when a product is added to cart", async () => {
 		render(<Storefront />);

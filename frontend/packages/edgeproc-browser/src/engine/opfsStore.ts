@@ -77,7 +77,30 @@ export class OpfsCacheStore implements CacheStore {
 
 	public async getChunk(chunkHash: string): Promise<Uint8Array> {
 		const compressed = await this.readFile(this.#chunkDir, chunkHash);
-		return decompressAndVerify(chunkHash, compressed);
+		try {
+			return await decompressAndVerify(chunkHash, compressed);
+		} catch (err) {
+			// Self-heal: a stored object that fails its content-address check is
+			// corrupt (partial write / bit-rot). Evict it so `hasChunk` goes false
+			// and the next `syncIndex` re-fetches it — otherwise one bad chunk
+			// poisons every load forever. The read still fails closed (rethrow).
+			if (err instanceof IntegrityError) {
+				await this.evict(this.#chunkDir, chunkHash);
+			}
+			throw err;
+		}
+	}
+
+	/** Best-effort delete of a corrupt cache object; a concurrent eviction is fine. */
+	private async evict(
+		dir: FileSystemDirectoryHandle,
+		name: string,
+	): Promise<void> {
+		try {
+			await dir.removeEntry(name);
+		} catch {
+			// Already gone (removed by a racing read or never landed) — nothing to heal.
+		}
 	}
 
 	public async putManifest(manifestBytes: Uint8Array): Promise<string> {

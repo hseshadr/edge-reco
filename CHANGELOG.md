@@ -5,6 +5,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Deploy entrypoint invoked a nonexistent `edgereco sync` command**, so the
+  demo container crashed on boot. The entrypoint now boots `edgereco serve` in
+  signed-bundle mode (`EDGERECO_BUNDLE_BASE_URL` + `EDGERECO_VERIFY_KEY_PATH`,
+  baked into the image with the demo catalog's committed public verify key) —
+  `serve` self-syncs the content-addressed bundle fail-closed at startup. A new
+  deploy smoke test (`backend/tests/integration/test_deploy_entrypoint.py`)
+  executes every `edgereco <subcommand>` the entrypoint invokes against the
+  real CLI and rejects dead env knobs / missing COPY sources, so the deploy
+  scripts can no longer rot against the CLI.
+- **A crashed embedding Web Worker hung every in-flight request to the timeout
+  deadline** instead of failing fast. The engine client now rejects all pending
+  requests with a typed `WorkerCrashError` the moment the worker fires `error`
+  or `messageerror` (a reply that fails structured-clone), and latches so
+  requests issued after the crash reject immediately.
+- **The main-thread embedder client ignored `messageerror`**, so an embedder
+  reply that failed structured-clone deserialization left the embed hanging to
+  the deadline. It now wires `messageerror` for parity with the engine client
+  and rejects the pending embed fast.
+- **The browser query encoder was not bound to the catalog's declared embedding
+  model**, and stale materialized index files could survive a rebuild.
+  Publishing now binds the query encoder to the declared model and prunes stale
+  materialized files, so query- and document-time vectors can never drift apart.
+- **A stale search could overwrite newer results (latest-wins race).** A slow
+  older query that resolved after a newer one repainted the grid with outdated
+  results; the grid loader now guards every state write behind a monotonic
+  request id, so only the latest query paints (and owns the loading flag).
+- **One corrupt OPFS chunk poisoned every subsequent load forever.** A chunk
+  that failed its content-address check on read left `hasChunk` true, so the
+  sync loop never re-fetched it. The store now evicts the bad object on an
+  `IntegrityError` (the read still fails closed) so the next sync self-heals by
+  re-fetching it. Cache names, storage keys, and the OPFS bundle format are
+  untouched — eviction operates on the content-addressed chunk object.
+- **`publish` followed symlinks under the staging directory**, which would
+  inline an arbitrary host file into the *signed* bundle (arbitrary-file read).
+  It now refuses a symlinked staging entry before `is_file()` follows it and
+  fails closed.
+
 ### Changed
 - **Substrate legos bumped in dependency order (house standard §7):**
   `edge-proc` v0.1.1 → **v0.1.2** and `shared-libs-python` v0.1.2 → **v0.1.3**
