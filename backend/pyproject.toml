@@ -18,6 +18,10 @@ dependencies = [
   "numpy>=2.0",
   "structlog>=24.4",
   "edge-proc[localvec,bundles]",
+  # Direct dependency (not just transitive via edge-proc): edgereco imports
+  # shared_libs_python.vector_mgmt.core.types in embeddings/index.py, so the
+  # import is declared honestly here. Pinned via the [tool.uv.sources] git tag below.
+  "shared-libs-python",
   # Security floors on transitive deps (pulled via fastapi / edge-proc[bundles] /
   # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
   # where a fix exists. See `poe audit`.
@@ -47,8 +51,8 @@ package = true
 # are pulled from public GitHub, pinned to release tags. (uv applies these sources
 # from the root project for ALL deps by name, so shared-libs-python — a transitive
 # dep of edge-proc — must be sourced here too; neither lib is on PyPI.)
-edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", tag = "v0.1.1" }
-shared-libs-python = { git = "https://github.com/hseshadr/shared-libs-python.git", tag = "v0.1.2" }
+edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", tag = "v0.1.2" }
+shared-libs-python = { git = "https://github.com/hseshadr/shared-libs-python.git", tag = "v0.1.3" }
 
 # Co-developing the substrate locally? Clone the siblings next to this repo and
 # swap the two lines above for path sources (uncomment):

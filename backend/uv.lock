@@ -444,8 +444,8 @@ wheels = [
 
 [[package]]
 name = "edge-proc"
-version = "0.1.1"
-source = { git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.1#aa83358891fbb7e75b4fb5cc261a58de86b4a8d2" }
+version = "0.1.2"
+source = { git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.2#3dabffa61e8063e4781f8c9ae4bedc24656c130c" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -484,6 +484,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "rank-bm25" },
     { name = "sentence-transformers" },
+    { name = "shared-libs-python" },
     { name = "starlette" },
     { name = "structlog" },
     { name = "torch" },
@@ -506,7 +507,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=48.0.1" },
-    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.1" },
+    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.2" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
@@ -517,6 +518,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "rank-bm25", specifier = ">=0.2" },
     { name = "sentence-transformers", specifier = ">=5.5" },
+    { name = "shared-libs-python", git = "https://github.com/hseshadr/shared-libs-python.git?tag=v0.1.3" },
     { name = "starlette", specifier = ">=1.3.1" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "torch", specifier = ">=2.12.1" },
@@ -1900,8 +1902,8 @@ wheels = [
 
 [[package]]
 name = "shared-libs-python"
-version = "0.1.2"
-source = { git = "https://github.com/hseshadr/shared-libs-python.git?tag=v0.1.2#4f2d4aae6886341e13718011eb2ef93006329ad8" }
+version = "0.1.3"
+source = { git = "https://github.com/hseshadr/shared-libs-python.git?tag=v0.1.3#0ba9ba8c945b55073474322c353d838cf7b3dbba" }
 dependencies = [
     { name = "pydantic" },
 ]
