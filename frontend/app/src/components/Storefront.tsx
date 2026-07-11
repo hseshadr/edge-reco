@@ -14,7 +14,6 @@ import { record } from "../metrics/store";
 import { emitInteraction } from "../signals/emit";
 import { useDwellViews } from "../signals/useDwellViews";
 import { useDebounced } from "../useDebounced";
-import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { MetricsStrip } from "./MetricsStrip";
 import type { PdpRail } from "./ProductDetail";
@@ -367,8 +366,6 @@ export function Storefront() {
 			</main>
 
 			<SyncBadge />
-
-			<Footer />
 
 			<Toast message={toast} />
 		</>

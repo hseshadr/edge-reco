@@ -8,6 +8,7 @@ import {
 } from "react";
 import { bootstrap } from "./api/client";
 import { BootScreen } from "./components/BootScreen";
+import { Footer } from "./components/Footer";
 import { InstallButton } from "./components/InstallButton";
 import { Landing } from "./components/Landing";
 import { OfflineBadge } from "./components/OfflineBadge";
@@ -70,6 +71,7 @@ export function App() {
 	return (
 		<>
 			{screen}
+			<Footer />
 			<OfflineBadge />
 			<InstallButton />
 		</>

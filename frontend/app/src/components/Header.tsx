@@ -63,6 +63,17 @@ export function Header({
 					on-device personalization
 				</div>
 
+				<a
+					className="header-gh"
+					href="https://github.com/hseshadr/edge-reco"
+					target="_blank"
+					rel="noreferrer"
+					title="EdgeReco is open source — view hseshadr/edge-reco on GitHub"
+				>
+					Open source
+					<span aria-hidden="true"> ↗</span>
+				</a>
+
 				{cartCount > 0 && (
 					<span
 						className="cart-pill"

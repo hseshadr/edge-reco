@@ -190,6 +190,24 @@ input {
 	box-shadow: 0 0 0 4px var(--signal-soft);
 }
 
+/* Discreet "Open source ↗" link in the top bar — small, muted, tasteful: a
+   visible above-the-fold path to the EdgeReco GitHub repo for shoppers AND
+   crawlers, without competing with the wordmark or search. */
+.header-gh {
+	flex-shrink: 0;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--muted);
+	text-decoration: none;
+	white-space: nowrap;
+	transition: color 0.18s ease;
+}
+
+.header-gh:hover {
+	color: var(--ink);
+}
+
 /* category chips */
 .chips {
 	max-width: 1320px;
@@ -1331,6 +1349,16 @@ input {
 .nimbus-footer__line--muted {
 	color: var(--muted);
 	margin-bottom: 0;
+}
+
+/* Internal-link row: GitHub repos + the /edgeproc and /faq entity pages, so the
+   site's link graph is fully connected from every view (the SEO entity hub). */
+.nimbus-footer__links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	margin: 0 0 14px;
+	font-size: 13px;
 }
 
 .nimbus-footer__link {

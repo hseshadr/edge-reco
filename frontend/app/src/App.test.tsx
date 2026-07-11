@@ -29,6 +29,15 @@ describe("App launch gate", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("renders the global site footer (with the EdgeProc substrate link) on every view", () => {
+		render(<App />);
+		// The Landing is shown first; the persistent footer renders beneath it,
+		// so the open-source / entity links are reachable from every view.
+		expect(
+			screen.getByRole("link", { name: /EdgeProc substrate/i }),
+		).toHaveAttribute("href", "https://github.com/hseshadr/edge-proc");
+	});
+
 	it("shows the Landing first and does NOT boot the engine", () => {
 		render(<App />);
 		expect(

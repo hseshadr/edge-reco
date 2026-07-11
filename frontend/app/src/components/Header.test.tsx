@@ -73,6 +73,14 @@ describe("Header", () => {
 		expect(onSelectCategory).toHaveBeenCalledWith(null);
 	});
 
+	it("offers a discreet open-source link to the edge-reco GitHub repo", () => {
+		renderHeader();
+		expect(screen.getByRole("link", { name: /open source/i })).toHaveAttribute(
+			"href",
+			"https://github.com/hseshadr/edge-reco",
+		);
+	});
+
 	it("hides the cart pill at zero and shows the count when items are added", () => {
 		const { unmount } = render(
 			<Header
