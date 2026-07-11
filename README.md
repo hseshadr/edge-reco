@@ -64,12 +64,13 @@ search-and-recommend brain runs *inside your browser tab* — no server, no
 backend calls — after a one-time download. So the store works offline, costs
 nothing per search, and your clicks, hearts, and cart adds never leave your device.
 
-> _What "one-time download" fetches:_ the signed catalog bundle from the demo's
-> own origin, plus two third-party assets on first boot — the `all-MiniLM-L6-v2`
-> embedding model from the Hugging Face CDN and the transformers.js ONNX runtime
-> from `cdn.jsdelivr.net`. These are the only off-origin fetches; all are
-> HTTP-cached, so after the first load the engine runs locally and makes **zero
-> backend calls**.
+> _What "one-time download" fetches:_ the signed catalog bundle, the
+> `all-MiniLM-L6-v2` embedding model, and the ONNX runtime — **all from the
+> demo's own origin**. The model and runtime are mirrored in at build time
+> (sha256-pinned), so the running app touches no third-party CDN — a Playwright
+> e2e boots the store with every CDN blocked to prove it. Everything is cached,
+> so after the first load the engine runs locally and makes **zero backend
+> calls**.
 
 Open the store, search for "shirt", then click a couple of
 products. Every click reshapes the "Recommended for you" rail across five taste
@@ -238,12 +239,13 @@ one-line edit re-publishes one chunk; every consumer fetches one chunk and reuse
 the rest."*
 
 **One honest caveat:** the embedding model itself is *not* in the signed bundle
-today — it's pulled once from the Hugging Face CDN (and the transformers.js
-runtime from jsDelivr) and HTTP-cached, so a cold first visit reaches those two
-CDNs; every load after that is local, with zero backend calls. The bundle is just
-content-addressed bytes, though, so it *could* carry the model — or any other
-model artifact — and patch it the same way; self-hosting the model is a natural
-next step.
+today — it ships as plain same-origin static files instead: the build mirrors
+the model into `/models/` and the ONNX wasm runtime into `/ort/`, each file
+pinned to its sha256, so a cold first visit fetches everything from the app's
+own origin and **no third-party CDN** (a Playwright e2e boots the store with
+every CDN blocked to prove it). The bundle is just content-addressed bytes,
+though, so it *could* carry the model — signed and patched like the catalog;
+folding it into the bundle is a natural next step.
 
 ### Installable app — works offline after one sync
 
@@ -254,8 +256,9 @@ no browser chrome.
 
 More importantly: **after the first visit, it keeps working with no network.**
 A service worker (the browser's background cache manager, powered by Workbox via
-`vite-plugin-pwa`) precaches the app shell on first load and takes over the
-embedding model (~25 MB, served from the SW cache so it survives offline). The
+`vite-plugin-pwa`) precaches the app shell on first load; the embedding model
+(~23 MB, served same-origin from `/models/`) survives offline in transformers.js's
+own browser cache, and the ONNX runtime in the service worker's runtime cache. The
 signed catalog bundle is already in OPFS — the service worker deliberately never
 touches it, so the ed25519 + sha256 integrity guarantees are unchanged.
 

@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: astral-sh/setup-uv@v8.2.0
+      - uses: astral-sh/setup-uv@v8.3.2
         # Pin the concrete tag: the maintainers do not publish a floating `v8`
         # major alias (only v8.x.y exist), so `@v8` fails to resolve.
         with:
@@ -38,5 +38,35 @@ jobs:
         run: uv python install 3.13
       - name: Sync
         run: uv sync --group dev
+      # `poe audit` uses the portable invocation (house standard §4): export the
+      # lock to a requirements file, then `pip-audit -r … --disable-pip --no-deps`.
+      # pip-audit's default venv mode is fragile; the export path audits exactly
+      # what the lock pins, independent of the local environment.
       - name: Dependency audit (pip-audit; no suppressions — every finding fixed by a floor)
         run: uv run poe audit
+
+  # The frontend half of the audit (house standard §4): `pnpm audit` over the
+  # committed pnpm-lock.yaml. Same policy as pip-audit above — NO suppressions;
+  # every finding is fixed by a floor or a pinned override in
+  # frontend/pnpm-workspace.yaml (see the undici/protobufjs notes there).
+  audit-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      # Reads the pinned pnpm version from frontend/package.json "packageManager".
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24" # >= 22.12 required by Vite 8
+
+      # No install needed: `pnpm audit` reads pnpm-lock.yaml and queries the
+      # advisory DB directly.
+      - name: Dependency audit (pnpm audit; no suppressions)
+        run: pnpm audit

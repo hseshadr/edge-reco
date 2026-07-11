@@ -14,6 +14,21 @@ on:
 # input is interpolated anywhere, so there is no workflow-injection surface.
 
 jobs:
+  # Secret-leak scan over the FULL history (fetch-depth: 0), not just the diff —
+  # a credential committed five commits ago is exactly as leaked as one committed
+  # now. No repo .gitleaks.toml: nothing to allowlist, the default ruleset applies.
+  gitleaks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   quality:
     runs-on: ubuntu-latest
     defaults:
@@ -26,7 +41,7 @@ jobs:
       # GitHub via the git sources pinned in backend/pyproject.toml — exactly what
       # an external cloner gets. No private-repo token, no path patching: CI builds
       # the project the same way `git clone … && uv sync` does for anyone.
-      - uses: astral-sh/setup-uv@v8.2.0
+      - uses: astral-sh/setup-uv@v8.3.2
         # Pin the concrete tag: the maintainers do not publish a floating `v8`
         # major alias (only v8.x.y exist), so `@v8` fails to resolve.
         with:
@@ -37,16 +52,11 @@ jobs:
       # tags, so a fresh resolve is deterministic without a committed cross-repo lock.
       - name: Sync
         run: uv sync --group dev
-      - name: Ruff format
-        run: uv run ruff format --check .
-      - name: Ruff lint
-        run: uv run ruff check .
-      - name: Mypy
-        run: uv run mypy src
-      - name: Complexity (xenon)
-        run: uv run xenon --max-absolute B --max-modules B --max-average A src
-      - name: Tests with coverage
-        run: uv run pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90
+      # CI runs the gate command ITSELF (house standard §3/§4): `poe gate` is
+      # fmt-check -> lint -> typecheck -> complexity -> test-with-coverage, defined
+      # once in backend/pyproject.toml. One definition, zero CI/local drift.
+      - name: Gate (poe gate — the exact local command)
+        run: uv run poe gate
       # Dependency audit moved to its own workflow (security-audit.yml): it stays
       # red while an upstream CVE has no fix — with no suppressions (every finding is
       # fixed by a version floor in backend/pyproject.toml; CVE-2025-3000 in torch is
@@ -81,38 +91,41 @@ jobs:
       - name: Install workspace
         run: pnpm install --frozen-lockfile
 
-      - name: Lint (biome) — package + app
-        run: pnpm -r run lint
+      # Self-hosted SPA model weights (house standard §8.1b), fetched BEFORE the
+      # gate: the app's `prebuild` hook (gate:quality ends in a build) resolves
+      # them from app/public/models/ instead of huggingface.co at runtime.
+      # Fixed-key cache so only the first run pays the download (§4 flake
+      # engineering); the script is sha256-pinned and idempotent, so on a cache
+      # hit it just verifies digests.
+      - name: Cache self-hosted model weights
+        uses: actions/cache@v5
+        with:
+          path: frontend/app/public/models
+          key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
+      - name: Fetch self-hosted model weights (idempotent, sha256-verified)
+        working-directory: frontend/app
+        run: node scripts/download-model.mjs
 
-      - name: Typecheck (tsc) — package + app
-        run: pnpm -r run typecheck
-
-      # Runs the full unit suite WITH v8 coverage so the per-workspace thresholds
-      # (90% lines/statements/functions on the engine core logic; a measured floor
-      # on the app) are enforced in CI, not just configured. Subsumes `pnpm -r test`.
-      - name: Unit tests + coverage thresholds (vitest) — package + app
-        run: pnpm -r run test:coverage
-
-      - name: Demo preflight regression (node:test) — edge bundle-match check
-        run: pnpm -F frontend run test:preflight
-
-      - name: Build app (proves the workspace link resolves)
-        run: pnpm -F frontend run build
+      # CI runs the gate command ITSELF (house standard §3/§4): `gate:quality` is
+      # biome -> tsc -> vitest-with-coverage -> preflight -> build across both
+      # workspace members, defined once in frontend/package.json. The full local
+      # gate is `pnpm gate` = gate:quality + gate:e2e; the e2e half runs in the
+      # `e2e` job below (it needs Playwright browsers + the model cache).
+      - name: Gate — quality half (pnpm gate:quality — the exact local command)
+        run: pnpm run gate:quality
 
   # Playwright e2e: the storefront suite, the C1 sync + in-browser embed model-load
-  # smoke suite, and the offline-PWA proof (production build + real service worker +
-  # real in-browser model), each starting its own Vite + static-catalog webServer on
-  # its own ports. The C1 suite loads the real ~25MB Xenova/all-MiniLM-L6-v2 weights
-  # from the HuggingFace CDN; HF_HOME and TRANSFORMERS_CACHE are pinned to a cached
-  # dir so the weights download once and are restored on subsequent runs.
+  # smoke suite (HF hosts BLOCKED — weights served same-origin from /models/), the
+  # offline-PWA proof, and the cold-CDN-blocked proof (production build + real
+  # service worker + real in-browser model, HF AND jsDelivr blocked), each starting
+  # its own Vite + static-catalog webServer on its own ports. The weights are
+  # SELF-HOSTED (house standard §8.1b): fetched once at build time by
+  # scripts/download-model.mjs under a fixed cache key, never from a CDN at runtime.
   e2e:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
-    env:
-      HF_HOME: ${{ github.workspace }}/.cache/huggingface
-      TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
     steps:
       - uses: actions/checkout@v5
 
@@ -140,30 +153,24 @@ jobs:
         working-directory: frontend/app
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Cache HuggingFace model weights
+      # Same self-hosted weights as the frontend job (fixed key, §4 flake
+      # engineering): the c1 + offline/cold suites serve them from /models/.
+      - name: Cache self-hosted model weights
         uses: actions/cache@v5
         with:
-          path: ${{ github.workspace }}/.cache/huggingface
-          # Keyed on the model id so the ~25MB MiniLM weights survive across runs
-          # and are only re-downloaded if the pinned model changes.
-          key: hf-model-${{ runner.os }}-Xenova-all-MiniLM-L6-v2
-
-      - name: E2E — storefront suite (default config)
+          path: frontend/app/public/models
+          key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
+      - name: Fetch self-hosted model weights (idempotent, sha256-verified)
         working-directory: frontend/app
-        run: pnpm exec playwright test
+        run: node scripts/download-model.mjs
 
-      - name: E2E — C1 sync + embed model-load smoke suite
-        working-directory: frontend/app
-        run: pnpm exec playwright test -c playwright.c1.config.ts
-
-      # The flagship offline proof: production build + the REAL generated service
-      # worker (precache + runtime caches) + the REAL in-browser ~25MB MiniLM model
-      # (same CDN download the C1 smoke suite already exercises in CI). The script
-      # runs its own `vite build` first; Playwright then previews the build on :5175
-      # and serves the signed bundle on :8921 (distinct from the suites above).
-      - name: E2E — offline-PWA proof (production build + real SW/model)
-        working-directory: frontend/app
-        run: pnpm run test:e2e:offline
+      # CI runs the gate command ITSELF (house standard §3/§4): `gate:e2e` is the
+      # storefront suite -> the C1 sync + in-browser embed model-load smoke suite ->
+      # the offline-PWA proof (production build + REAL generated service worker +
+      # REAL in-browser MiniLM model), defined once in frontend/package.json —
+      # the exact e2e half of the local `pnpm gate`.
+      - name: Gate — e2e half (pnpm gate:e2e — the exact local command)
+        run: pnpm run gate:e2e
 
       - name: Upload Playwright report + traces on failure
         if: ${{ failure() }}

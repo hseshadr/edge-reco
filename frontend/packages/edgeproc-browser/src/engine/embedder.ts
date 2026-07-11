@@ -12,17 +12,89 @@
 
 import { env, pipeline } from "@huggingface/transformers";
 
-// The PWA service worker owns the model's offline cache (a CacheFirst route over
-// the HuggingFace host). Disable transformers.js's own Cache-API copy so there is
-// a single owner and we don't double-store ~25 MB. In Node (the parity test) this
-// is a no-op — the library uses a filesystem cache there, not the browser cache.
-env.useBrowserCache = false;
+/** The three transformers.js env knobs the self-hosting config owns. Structural,
+ * so tests can drive the decision with a fake instead of the real module env. */
+export interface TransformersEnvLike {
+	useBrowserCache: boolean;
+	allowLocalModels: boolean;
+	localModelPath: string;
+}
+
+/** The onnxruntime-web wasm env knob the self-hosting config owns
+ * (transformers.js exposes it as `env.backends.onnx.wasm`). */
+export interface OrtWasmEnvLike {
+	wasmPaths?: string;
+}
+
+/** True when running under Node (the parity tests) rather than a browser tab
+ * or Worker — the two runtimes want different model sources (see below). */
+export function isNodeRuntime(): boolean {
+	return typeof process !== "undefined" && process.versions?.node !== undefined;
+}
+
+/**
+ * Runtime model-source config (house standard §8.1b — aml-filter's ORT-web
+ * hardening config, verbatim).
+ *
+ * BROWSER: weights are SELF-HOSTED, not pulled from huggingface.co at runtime.
+ * The app's `prebuild` hook (app/scripts/download-model.mjs) mirrors this
+ * model's files into app/public/models/, so `allowLocalModels = true` +
+ * `localModelPath = "/models/"` resolve every file same-origin —
+ * `/models/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx` — and the
+ * cold-CDN-blocked e2e (app/tests/e2e-offline/cold-blocked.spec.ts) proves the
+ * runtime has no CDN dependency. `useBrowserCache = true`: transformers.js owns
+ * its offline copy in the `transformers-cache` CacheStorage cache (safe on the
+ * minified build only with vite `build.target: "es2022"` — see
+ * app/vite.config.ts for the downlevel-crash scar). `wasmPaths = "/ort/"`:
+ * onnxruntime-web dynamically imports its wasm loader module at runtime, and
+ * its default is the jsDelivr CDN — the cold-blocked e2e caught exactly that
+ * (`Failed to fetch … cdn.jsdelivr.net/npm/onnxruntime-web/....asyncify.mjs`),
+ * so the runtime pair is staged same-origin by app/scripts/stage-ort-wasm.mjs.
+ *
+ * NODE (the parity tests): everything stays at the library defaults — the HF
+ * hub + filesystem cache serve the fp32 export that the Python-golden
+ * embedding-parity fixture pins (and onnxruntime-node needs no wasm path).
+ * Build/test-time downloads are fine; it is the *runtime* CDN dependency the
+ * standard bans.
+ */
+export function configureTransformersEnv(
+	target: TransformersEnvLike,
+	ortWasm: OrtWasmEnvLike,
+	nodeRuntime: boolean,
+): void {
+	if (nodeRuntime) {
+		return;
+	}
+	target.useBrowserCache = true;
+	target.allowLocalModels = true;
+	target.localModelPath = "/models/";
+	ortWasm.wasmPaths = "/ort/";
+}
+
+/** The live onnxruntime-web wasm env, reached through transformers.js's loosely
+ * typed `env.backends`; a missing node yields an inert target (the cold-blocked
+ * e2e fails loudly if the real knob ever moves). */
+function ortWasmEnv(): OrtWasmEnvLike {
+	const backends = env.backends as { onnx?: { wasm?: OrtWasmEnvLike } };
+	return backends.onnx?.wasm ?? {};
+}
+
+configureTransformersEnv(env, ortWasmEnv(), isNodeRuntime());
 
 /** The sentence-transformers model id, mirrored as its Xenova ONNX export. */
 export const EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 
 /** all-MiniLM-L6-v2 produces 384-dimensional embeddings. */
 export const EMBEDDING_DIM = 384;
+
+/**
+ * The ONNX quantization the BROWSER pipeline loads — pinned EXPLICITLY to the
+ * `model_quantized.onnx` export the download script self-hosts, instead of
+ * relying on the wasm device's implicit q8 default (the pin is a contract, not
+ * a coincidence). Node deliberately keeps the default (fp32) export: the
+ * embedding-parity fixture pins the Python sentence-transformers fp32 recipe.
+ */
+export const EMBEDDING_DTYPE = "q8";
 
 /** Embeds a query string into a normalized 384-d vector. */
 export interface Embedder {
@@ -35,6 +107,11 @@ type ExtractFn = (
 	options: { readonly pooling: "mean"; readonly normalize: boolean },
 ) => Promise<{ readonly data: ArrayLike<number> }>;
 
+/** Pipeline construction options this module passes through. */
+export interface PipelineOptions {
+	readonly dtype?: string;
+}
+
 /** A narrowed view of transformers.js `pipeline`: building the feature-extraction
  * task yields a callable ExtractFn. The library's own overload union over every
  * task is too large for the compiler to represent (TS2590), so it is collapsed to
@@ -42,7 +119,14 @@ type ExtractFn = (
 type LoadFeatureExtraction = (
 	task: "feature-extraction",
 	model: string,
+	options?: PipelineOptions,
 ) => Promise<ExtractFn>;
+
+/** Browser: pin the shared {@link EMBEDDING_DTYPE} (q8). Node: default (fp32) —
+ * see the dtype rationale on {@link EMBEDDING_DTYPE}. */
+export function pipelineOptions(nodeRuntime: boolean): PipelineOptions {
+	return nodeRuntime ? {} : { dtype: EMBEDDING_DTYPE };
+}
 
 class PipelineEmbedder implements Embedder {
 	readonly #load: () => Promise<ExtractFn>;
@@ -72,7 +156,11 @@ class PipelineEmbedder implements Embedder {
 
 async function defaultExtractFn(): Promise<ExtractFn> {
 	const load = pipeline as unknown as LoadFeatureExtraction;
-	return load("feature-extraction", EMBEDDING_MODEL);
+	return load(
+		"feature-extraction",
+		EMBEDDING_MODEL,
+		pipelineOptions(isNodeRuntime()),
+	);
 }
 
 /**

@@ -20,7 +20,13 @@ ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 POE := $(shell command -v poe >/dev/null 2>&1 && echo poe || echo 'uv run --directory backend poe')
 
 .DEFAULT_GOAL := help
-.PHONY: help demo demo-flywheel demo-retrain
+.PHONY: help gate demo demo-flywheel demo-retrain
+
+# The one dual-stack gate (house standard §3): fans out to the backend `poe gate`
+# and the frontend `pnpm gate` — the same commands CI runs, in the same order.
+gate: ## Full dual-stack quality gate — backend `poe gate` + frontend `pnpm gate` (mirrors CI).
+	cd $(ROOT_DIR)/backend && uv run poe gate
+	cd $(ROOT_DIR)/frontend && pnpm run gate
 
 demo: ## Turnkey backend-free demo — edge + Vite SPA on free ports, opens your browser.
 	cd $(ROOT_DIR) && $(POE) demo

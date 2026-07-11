@@ -1,8 +1,47 @@
 /// <reference types="vitest/config" />
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { configDefaults } from "vitest/config";
+
+// DEV-ONLY: serve the staged onnxruntime-web runtime under /ort/ as raw files.
+// In production /ort/ is plain static output and its loader module dynamic-
+// imports cleanly, but the dev server routes .mjs requests through the module
+// pipeline and refuses to import files that live in public/ ("can only be
+// referenced via HTML tags"). Serving them raw here keeps dev === prod: the
+// embedder's `wasmPaths = "/ort/"` works on the dev server too, so even local
+// dev never touches the jsDelivr CDN (house standard §8.1b).
+function serveOrtRuntimeRawInDev(): Plugin {
+	const publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
+	const mime: Record<string, string> = {
+		".mjs": "text/javascript",
+		".wasm": "application/wasm",
+	};
+	return {
+		name: "edgereco:serve-ort-runtime-raw",
+		apply: "serve",
+		configureServer(server) {
+			server.middlewares.use((req, res, next) => {
+				const path = (req.url ?? "").split("?")[0];
+				const ext = Object.keys(mime).find((e) => path.endsWith(e));
+				if (!path.startsWith("/ort/") || ext === undefined) {
+					next();
+					return;
+				}
+				readFile(join(publicDir, path)).then(
+					(bytes) => {
+						res.setHeader("Content-Type", mime[ext]);
+						res.end(bytes);
+					},
+					() => next(),
+				);
+			});
+		},
+	};
+}
 
 // The PWA plugin is build-time only; keep it out of Vitest so unit specs are
 // byte-for-byte unaffected (registration lives in main.tsx, which tests never load).
@@ -40,7 +79,16 @@ const pwa = process.env.VITEST
 					// Worker fetches it same-origin on every boot and fails CLOSED if it 404s,
 					// so it MUST be precached or an offline reload can never start the engine.
 					globPatterns: ["**/*.{js,css,html,svg,png,woff2,wasm,key}"],
-					globIgnores: ["**/bundle/**"],
+					// Never precache the signed catalog bundle (large + mutable) NOR the
+					// self-hosted model weights under /models/ (~23 MB, needed only once
+					// the shopper launches the demo): transformers.js lazily fetches the
+					// weights same-origin and owns their offline copy in its own
+					// `transformers-cache` CacheStorage cache (env.useBrowserCache = true
+					// in @edgeproc/browser's embedder). Same for the staged /ort/ wasm
+					// runtime (~23 MB — offline-covered by the edgereco-wasm runtime
+					// route below). Precaching either would force a ~46 MB download on
+					// every visitor at SW install.
+					globIgnores: ["**/bundle/**", "**/models/**", "**/ort/**"],
 					// Same-origin ONNX/zstd WASM can exceed the 2 MB default — allow up to 32 MB.
 					maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
 					// SPA: serve index.html for navigations the precache can't match (offline reload).
@@ -68,9 +116,13 @@ const pwa = process.env.VITEST
 							},
 						},
 						{
-							// The embedding model — the SW owns its offline cache (transformers.js
-							// browser cache is disabled in Task 3). resolve/main URLs follow LFS
-							// redirects internally, so the huggingface.co request URL is the cache key.
+							// LEGACY FALLBACK — should never fire: model weights are now
+							// SELF-HOSTED under /models/ (house standard §8.1b) and the
+							// cold-CDN-blocked e2e proves the runtime never touches the HF
+							// host. The route (and its cache NAME) is kept so (a) a client
+							// still running an old app build keeps its offline model, and
+							// (b) if the local mirror ever regressed to the remote fallback,
+							// the model would still be cached rather than re-fetched forever.
 							urlPattern: ({ url }) =>
 								url.hostname.endsWith("huggingface.co") ||
 								url.hostname.endsWith("hf.co"),
@@ -85,8 +137,17 @@ const pwa = process.env.VITEST
 							},
 						},
 						{
-							// transformers.js may pull the ONNX runtime WASM from jsDelivr.
-							urlPattern: ({ url }) => url.hostname === "cdn.jsdelivr.net",
+							// The onnxruntime-web wasm runtime. NOW: served same-origin from
+							// the staged /ort/ mirror (house standard §8.1b — the loader
+							// module's default base is jsDelivr, and the cold-CDN-blocked
+							// e2e proves we never touch it); this route makes the pair
+							// offline-capable without precaching ~23 MB on every visitor.
+							// The jsDelivr half of the pattern is the legacy fallback for
+							// clients still running an old app build — same cache NAME as
+							// always, so their offline copy stays valid.
+							urlPattern: ({ url }) =>
+								url.hostname === "cdn.jsdelivr.net" ||
+								url.pathname.startsWith("/ort/"),
 							handler: "CacheFirst",
 							options: {
 								cacheName: "edgereco-wasm",
@@ -104,8 +165,19 @@ const pwa = process.env.VITEST
 
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [react(), ...pwa],
+	plugins: [react(), serveOrtRuntimeRawInDev(), ...pwa],
 	base: process.env.VITE_BASE ?? "/",
+	build: {
+		// esbuild's default build target ('modules' ≈ es2020) downlevels native
+		// private fields (#field) to WeakMap accessors, which transformers.js's
+		// minified worker mis-invokes when its CacheStorage path is enabled —
+		// the `Ke(...).call is not a function` crash aml-filter debugged. es2022
+		// keeps private fields native. Required now that the embedder runs with
+		// env.useBrowserCache = true; the cold-CDN-blocked e2e drives the MINIFIED
+		// build with the cache on and asserts a clean console, so a downlevel
+		// regression re-trips that spec.
+		target: "es2022",
+	},
 	server: { port: 5174, strictPort: true },
 	test: {
 		environment: "jsdom",
