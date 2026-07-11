@@ -14,6 +14,8 @@ strategy/seed contract, and the per-candidate similarity + co-occurrence scores 
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from edgereco.catalog.models import Product, SearchResult, SessionProfile
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
 from edgereco.reco.pool import freshness_pool, popularity_pool, select_candidate_pool
@@ -78,6 +80,16 @@ def _candidates(
     return select_candidate_pool(catalog, profile, limit, strategy.weights), {}, {}
 
 
+def _hydrate_scored(
+    pairs: Iterable[tuple[str, float]],
+    by_id: dict[str, Product],
+) -> tuple[list[SearchResult], _Scores]:
+    """Keep ``(product_id, score)`` pairs known to the catalog: results + id→score map."""
+    kept = [(pid, score) for pid, score in pairs if pid in by_id]
+    candidates = [SearchResult(product=by_id[pid], score=score) for pid, score in kept]
+    return candidates, dict(kept)
+
+
 def _vector_candidates(
     by_id: dict[str, Product],
     vector: VectorSearcher,
@@ -87,12 +99,7 @@ def _vector_candidates(
     """kNN-to-seed candidates plus a per-candidate cosine map (requires a seed)."""
     if seed is None:
         raise ValueError("vector_similarity strategy requires a seed product id")
-    hits = vector.nearest(seed, k=limit * 5)
-    similarity = {pid: score for pid, score in hits if pid in by_id}
-    candidates = [
-        SearchResult(product=by_id[pid], score=score) for pid, score in hits if pid in by_id
-    ]
-    return candidates, similarity
+    return _hydrate_scored(vector.nearest(seed, k=limit * 5), by_id)
 
 
 def _cooccurrence_candidates(
@@ -107,11 +114,7 @@ def _cooccurrence_candidates(
     neighbors = cooccurrence.neighbors.get(seed, [])
     if strategy.co_occurrence_top_k is not None:
         neighbors = neighbors[: strategy.co_occurrence_top_k]
-    cooc = {n.id: n.score for n in neighbors if n.id in by_id}
-    candidates = [
-        SearchResult(product=by_id[n.id], score=n.score) for n in neighbors if n.id in by_id
-    ]
-    return candidates, cooc
+    return _hydrate_scored(((n.id, n.score) for n in neighbors), by_id)
 
 
 def _rerank(
