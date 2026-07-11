@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Substrate legos bumped in dependency order (house standard §7):**
+  `edge-proc` v0.1.1 → **v0.1.2** and `shared-libs-python` v0.1.2 → **v0.1.3**
+  (edge-proc v0.1.2's metadata re-pins shared-libs v0.1.3, so both move
+  together — a single-tag bump fails closed on conflicting git URLs). Lock
+  lines verified moved; both upstream releases are gate/CI/docs-only.
+- **`shared-libs-python` declared as a direct `[project.dependencies]` entry**:
+  `edgereco.embeddings.index` imports `shared_libs_python.vector_mgmt` directly,
+  so the manifest now states the dependency honestly instead of relying on it
+  transitively via edge-proc (the `[tool.uv.sources]` entry already existed).
+
 ### Added
 - **SEO entity hub**: GitHub links in the header ("Open source") and the site
   footer (now rendered on every view, Landing included), entity-page
