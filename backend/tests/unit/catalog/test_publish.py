@@ -379,6 +379,37 @@ def test_catalog_meta_content(tmp_path: Path) -> None:
     }
 
 
+def test_publish_rejects_symlinked_staging_entry(tmp_path: Path) -> None:
+    """A symlink under the staging dir must be REFUSED, never followed: reading it
+    would inline an arbitrary host file into the SIGNED bundle (arbitrary-file read).
+    """
+    staging = _staging(tmp_path)
+    secret = tmp_path / "outside_secret.txt"
+    secret.write_text("ATTACKER-CONTROLLED SECRET", encoding="utf-8")
+    (staging / "vector" / "leak.faiss").symlink_to(secret)
+
+    origin = tmp_path / "origin"
+    private, _ = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_bundle(
+            staging_dir=staging,
+            origin_dir=origin,
+            private_key_path=key_path,
+            catalog_id="amazon-demo",
+            version="v1",
+            embedding_model="m",
+            embedding_dim=384,
+            embedding_count=1,
+            product_count=1,
+        )
+
+    # The secret bytes never made it into a signed origin (build never ran).
+    assert not origin.exists()
+
+
 def test_bundle_files_contract() -> None:
     assert BUNDLE_FILES == (
         "products.jsonl",
