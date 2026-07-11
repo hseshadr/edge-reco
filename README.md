@@ -258,9 +258,10 @@ More importantly: **after the first visit, it keeps working with no network.**
 A service worker (the browser's background cache manager, powered by Workbox via
 `vite-plugin-pwa`) precaches the app shell on first load; the embedding model
 (~23 MB, served same-origin from `/models/`) survives offline in transformers.js's
-own browser cache, and the ONNX runtime in the service worker's runtime cache. The
-signed catalog bundle is already in OPFS — the service worker deliberately never
-touches it, so the ed25519 + sha256 integrity guarantees are unchanged.
+own browser cache, and the ONNX runtime (~23 MB, also served same-origin from
+`/ort/`) survives in the service worker's runtime cache. The signed catalog bundle
+is already in OPFS — the service worker deliberately never touches it, so the
+ed25519 + sha256 integrity guarantees are unchanged.
 
 The one honest limitation: **external product images can't be cached**, so they
 fall back to placeholder tiles when offline. Everything else — hybrid search,
