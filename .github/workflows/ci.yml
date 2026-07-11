@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v3
@@ -35,7 +35,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The substrate libs (edge-proc, shared-libs-python) are pulled from public
       # GitHub via the git sources pinned in backend/pyproject.toml — exactly what
@@ -75,14 +75,14 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24" # >= 22.12 required by Vite 8
           cache: pnpm
@@ -98,7 +98,7 @@ jobs:
       # engineering); the script is sha256-pinned and idempotent, so on a cache
       # hit it just verifies digests.
       - name: Cache self-hosted model weights
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: frontend/app/public/models
           key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
@@ -127,14 +127,14 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24" # >= 22.12 required by Vite 8
           cache: pnpm
@@ -144,7 +144,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
@@ -156,7 +156,7 @@ jobs:
       # Same self-hosted weights as the frontend job (fixed key, §4 flake
       # engineering): the c1 + offline/cold suites serve them from /models/.
       - name: Cache self-hosted model weights
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: frontend/app/public/models
           key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload Playwright report + traces on failure
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
