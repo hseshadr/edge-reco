@@ -11,6 +11,7 @@ maintainer can trace every ranking change back to the events behind it.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
 
 from pydantic import BaseModel
 
@@ -140,15 +141,15 @@ def _movers(before: list[Product], after: list[Product], top: int) -> list[Popul
     return movers[:top]
 
 
+def _edges(matrix: CooccurrenceMatrix) -> Iterator[tuple[tuple[str, str], float]]:
+    """Yield ``((product_id, neighbour_id), score)`` for every neighbour edge."""
+    return (((pid, n.id), n.score) for pid, ns in matrix.neighbors.items() for n in ns)
+
+
 def _changed_edges(before: CooccurrenceMatrix, after: CooccurrenceMatrix) -> int:
     """Count co-occurrence neighbour edges that are new or rescored after retrain."""
-    prior = {(pid, n.id): n.score for pid, ns in before.neighbors.items() for n in ns}
-    changed = 0
-    for pid, neighbors in after.neighbors.items():
-        for neighbor in neighbors:
-            if prior.get((pid, neighbor.id)) != neighbor.score:
-                changed += 1
-    return changed
+    prior = dict(_edges(before))
+    return sum(1 for edge, score in _edges(after) if prior.get(edge) != score)
 
 
 def render_audit_table(report: AuditReport) -> str:

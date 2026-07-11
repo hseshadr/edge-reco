@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from edgereco.catalog.models import EventType, Product, SessionProfile
 
 RECENTLY_VIEWED_CAP = 50
@@ -18,31 +20,34 @@ def _bump(current: float, delta: float) -> float:
     return min(1.0, current + delta)
 
 
+def _bump_all(affinity: dict[str, float], keys: Iterable[str], delta: float) -> dict[str, float]:
+    """Copy ``affinity`` with every key in ``keys`` bumped by ``delta`` (capped at 1.0)."""
+    bumped = dict(affinity)
+    for key in keys:
+        bumped[key] = _bump(bumped.get(key, 0.0), delta)
+    return bumped
+
+
+def _recently_viewed(profile: SessionProfile, product_id: str) -> list[str]:
+    """``product_id`` moved to the front, deduplicated, capped at ``RECENTLY_VIEWED_CAP``."""
+    viewed = [product_id] + [pid for pid in profile.recently_viewed if pid != product_id]
+    return viewed[:RECENTLY_VIEWED_CAP]
+
+
 def apply_interaction(
     profile: SessionProfile,
     product: Product,
     event_type: EventType,
 ) -> SessionProfile:
     weights = INTERACTION_WEIGHTS[event_type]
-
-    cat_aff = dict(profile.category_affinity)
-    cat_aff[product.category] = _bump(cat_aff.get(product.category, 0.0), weights["category"])
-
-    tag_aff = dict(profile.tag_affinity)
-    for tag in product.tags:
-        tag_aff[tag] = _bump(tag_aff.get(tag, 0.0), weights["tag"])
-
-    brand_aff = dict(profile.brand_affinity)
-    if product.brand:
-        brand_aff[product.brand] = _bump(brand_aff.get(product.brand, 0.0), weights["brand"])
-
-    viewed = [product.id] + [pid for pid in profile.recently_viewed if pid != product.id]
-    viewed = viewed[:RECENTLY_VIEWED_CAP]
-
+    cat_aff = _bump_all(profile.category_affinity, [product.category], weights["category"])
+    tag_aff = _bump_all(profile.tag_affinity, product.tags, weights["tag"])
+    brand_keys = [product.brand] if product.brand else []
+    brand_aff = _bump_all(profile.brand_affinity, brand_keys, weights["brand"])
     return SessionProfile(
         category_affinity=cat_aff,
         tag_affinity=tag_aff,
         brand_affinity=brand_aff,
-        recently_viewed=viewed,
+        recently_viewed=_recently_viewed(profile, product.id),
         click_count=profile.click_count + (1 if event_type == "click" else 0),
     )
