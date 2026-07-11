@@ -96,9 +96,14 @@ fallback / 404 rule is needed.
 
 **The build also emits a service worker and a web app manifest**, making the storefront
 an installable, offline-capable PWA. The service worker (Workbox via `vite-plugin-pwa`,
-auto-update strategy) precaches the app shell and owns the embedding-model cache
-(~25 MB). The signed catalog bundle stays OPFS-owned — the service worker never caches
-it, so ed25519 + sha256 integrity is unchanged.
+auto-update strategy) precaches the app shell. The embedding model (~23 MB) and the
+ONNX wasm runtime are **self-hosted**: the build's `prebuild` hook mirrors them
+(sha256-pinned) into `/models/` and `/ort/`, so the deployed site makes zero
+third-party CDN fetches at runtime; offline, the model lives in transformers.js's
+own browser cache and the runtime in the SW's runtime cache. Every mirrored file is
+under Cloudflare Pages' 25 MiB single-asset limit (pinned by a preflight test). The
+signed catalog bundle stays OPFS-owned — the service worker never caches it, so
+ed25519 + sha256 integrity is unchanged.
 
 A `frontend/app/public/_headers` file instructs Cloudflare Pages to serve `sw.js` and
 `manifest.webmanifest` with `Cache-Control: max-age=0, must-revalidate`, so service

@@ -5,6 +5,52 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **SEO entity hub**: GitHub links in the header ("Open source") and the site
+  footer (now rendered on every view, Landing included), entity-page
+  cross-links (`/edgeproc`, `/faq`, `/github` each carry a `footer.entity-nav`),
+  and the homepage JSON-LD upgraded to an `@graph`
+  (SoftwareApplication + SoftwareSourceCode + Person with `sameAs` → GitHub).
+- **Cold-CDN-blocked e2e proof** (`tests/e2e-offline/cold-blocked.spec.ts`):
+  the minified production build boots, loads the real model, and serves a real
+  search with every HuggingFace host AND jsDelivr aborted — plus a provenance
+  assertion that every cached model URL is same-origin.
+- **One canonical gate per stack** (house standard §3): frontend root
+  `pnpm gate` (= `gate:quality` + `gate:e2e`) and a dual-stack root
+  `make gate`; CI jobs now run these exact commands instead of hand-copied
+  step lists.
+- **gitleaks CI job** (full-history, `fetch-depth: 0`) and a **`pnpm audit`
+  lane** in the weekly security-audit workflow.
+
+### Changed
+- **The in-browser embedder makes zero runtime CDN fetches (house standard
+  §8.1b).** The `all-MiniLM-L6-v2` weights are self-hosted under `/models/`
+  (mirrored at build time by `scripts/download-model.mjs` — sha256-pinned,
+  idempotent, fail-loud) with an explicit `dtype: "q8"` pin, and the
+  onnxruntime-web wasm runtime is self-hosted under `/ort/`
+  (`scripts/stage-ort-wasm.mjs`, staged from the lockfile-pinned node_modules
+  copy). The new cold-blocked e2e caught the runtime dynamically importing its
+  wasm loader from jsDelivr — a previously invisible CDN dependency; offline
+  only worked because the service worker had runtime-cached it. Every mirrored
+  file sits under Cloudflare Pages' 25 MiB single-asset limit, pinned by
+  preflight tests. Existing clients upgrade cleanly: cache names, storage keys,
+  and the OPFS bundle format are untouched (the old HF/jsDelivr runtime-cache
+  routes remain as legacy fallbacks).
+- transformers.js now owns the model's offline copy in its `transformers-cache`
+  (was: SW CacheFirst over the HuggingFace host), with the Vite build target
+  raised to `es2022` (the private-field downlevel crash guard).
+- Backend complexity gate tightened to **xenon A/A/A** — the seven rank-B
+  blocks (CLI `search`/`preprocess`, reco signals/audit/recommend candidates,
+  API search route) were refactored to rank A with behavior-preserving helper
+  extractions; 290 tests green at 99.75% coverage.
+- `poe audit` switched to the portable §4 invocation (`uv export --frozen` →
+  `pip-audit -r … --disable-pip --no-deps`): the audit now covers exactly what
+  the lock pins, not whatever happens to be installed.
+- CI e2e job's HuggingFace runtime-download cache replaced by a fixed-key
+  cache of the self-hosted weights, shared by the frontend, e2e, and deploy
+  jobs; the C1 embed suite dropped from minutes to seconds.
+- `astral-sh/setup-uv` full-pinned to v8.3.2 in both workflows.
+
 ## [0.10.1] — 2026-06-27
 
 A quality, security, and hardening release. No functional product changes — the signed

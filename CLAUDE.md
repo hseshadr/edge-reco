@@ -9,8 +9,10 @@ the React SPA syncs the signed bundle into OPFS and runs the whole engine in the
 browser via the `@edgeproc/browser` workspace package (`frontend/packages/edgeproc-browser/`),
 parity-tested against the Python core. The storefront is an **installable,
 offline-capable PWA**: after one online sync it runs fully offline (a Workbox
-service worker via `vite-plugin-pwa` precaches the app shell + the ~25 MB
-embedding model; the signed bundle already lives in OPFS, untouched by the SW).
+service worker via `vite-plugin-pwa` precaches the app shell; the ~23 MB
+embedding model is SELF-HOSTED under `/models/` and survives offline in
+transformers.js's own `transformers-cache`; the ONNX wasm runtime is self-hosted
+under `/ort/`; the signed bundle already lives in OPFS, untouched by the SW).
 Proof is a real Playwright e2e (`pnpm -F frontend test:e2e:offline`). The
 FastAPI runtime remains available for the optional server-side API use case but
 is not in the default demo path. The
@@ -51,6 +53,19 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 - **Zero backend calls after sync** — runtime is offline-capable
 - **Uplink optional & off the inference path** — the flywheel uplink (clicks → batched beacon → `/events`) is gated by `VITE_EVENTS_URL` (unset = disabled), fire-and-forget, and never blocks/breaks the app or gates the in-tab rail re-rank
 - **Retrain moves data — popularity *and* co-occurrence — never the scoring code** — the cloud retrain (`edgereco retrain`: `/events/export` → recompute `popularity_score`, sessionized event log → recompute `cooccurrence.json` → re-sign + republish) changes only data values, never the scoring weights or formula, so both tiers re-rank on sync with no code change. Reuses the prebuilt FAISS `vector/` verbatim. Republishes to a runtime origin (`.demo-origin`), leaving the committed seed bundle (`products.jsonl` + `vector/`) + browser parity fixtures byte-stable except the intentional new `cooccurrence.json` + schema-3 `ranking_config.json`. `edgereco audit` is the read-only counterpart: it explains what a retrain would change (event counts, top popularity movers, changed co-occurrence edges) and never touches the inference path
+- **Zero runtime CDN (house standard §8.1b)** — the embedding model (`/models/`, explicit `dtype: "q8"`) and the onnxruntime-web wasm runtime (`/ort/`) are self-hosted, mirrored at build time by `frontend/app/scripts/{download-model,stage-ort-wasm}.mjs` (sha256-pinned / lockfile-pinned, fail-loud, git-ignored). The cold-CDN-blocked e2e (`tests/e2e-offline/cold-blocked.spec.ts`) proves the shipped build never touches huggingface.co or jsDelivr. Never point the runtime back at a CDN; never let a single mirrored file exceed Cloudflare Pages' 25 MiB asset limit (pinned by preflight tests).
+- **Live-user storage covenant** — real shoppers hold client-side state: the OPFS bundle cache and the SW/CacheStorage caches. No storage-format, cache-name, or storage-key changes without an explicit upgrade path; precache config may change, cache NAMES may not.
+
+## House standard declarations
+- **§8 (WASM/edge-compute): applicable.** Pattern **(b)** followed — vendored/self-hosted ORT-WASM with explicit `dtype: "q8"`, `allowLocalModels` + `localModelPath = "/models/"`, `wasmPaths = "/ort/"`, download/stage build scripts, worker isolation, parity fixtures (`__fixtures__/*_parity.json`) pinning browser output to Python golden, and a cold-network-blocked e2e. Pattern **(c)**: the bundle cache uses raw OPFS files (content-addressed chunks — file storage, not structured queries), so sqlite-wasm is not needed; adopt it if structured browser queries ever appear.
+
+## Quality gates (non-negotiable — each rule carries the scar that made it)
+- **`make gate` green before any claim of done** (backend `poe gate` + frontend `pnpm gate`; CI runs these exact commands). *Scar: CI/local drift — `poe lint` once lacked `ruff format --check` and CI went red on a locally-green tree.*
+- **The full test pyramid runs, including all three Playwright configs** (`test:e2e`, `test:e2e:c1`, `test:e2e:offline`). *Scar: build-green ≠ runtime-green — the jsDelivr ORT loader dependency was invisible to every unit/typecheck lane and only the cold-blocked e2e caught it.*
+- **Live-validate user-facing changes on the production build** (preview + headless Chromium), not just the dev server. *Scar: the es2020 private-field downlevel crash (`Ke(...).call is not a function`) only manifests on the MINIFIED build — dev worked, prod crashed.*
+- **No suppressions in security audits** — every finding is fixed by a version floor or pinned override. *Scar: CVE-2025-3000/torch arrived against unchanged code; a suppression would have hidden the eventual real fix.*
+- **xenon A/A/A on `src`** — extract helpers instead of tolerating rank-B blocks. *Scar: "the few cohesive rank-B CLI handlers" grew from 2 to 7 while the gate was set to B.*
+- **Never commit generated artifacts or model weights** (`dist/`, `public/models/`, `public/ort/`, coverage). *Scar: §7 — no tracked binaries >1MB; the weights are 23 MB per copy.*
 
 ## Workflow
 - **Spec-first**: brainstorm → spec → plan → subagent implementation (see `superpowers:*` skills)
@@ -62,17 +77,18 @@ Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAP
 ## Commands
 Copy-paste core loop (all verified against `backend/pyproject.toml` `[tool.poe.tasks]`, `frontend/app/package.json`, and the `Makefile`):
 ```bash
+# THE gate (repo root) — dual-stack, mirrors CI exactly (house standard §3)
+make gate            # backend `poe gate` + frontend `pnpm gate`
+
 # Backend (run from backend/)
-poe gate             # CI mirror: fmt-check + lint + typecheck + complexity + test (≥90% cov)
-poe audit            # dependency CVE scan (pip-audit; runs in its own Security workflow)
+poe gate             # CI mirror: fmt-check + lint + typecheck + xenon A/A/A + test (≥90% cov)
+poe audit            # dependency CVE scan (portable pip-audit over the exported lock)
 poe test             # pytest with coverage only
 
-# Frontend (run from repo root; -F frontend targets frontend/app)
-pnpm -F frontend lint              # biome check
-pnpm -F frontend typecheck         # tsc -b
-pnpm -F frontend test              # vitest run
-pnpm -F frontend build             # tsc -b && vite build
-pnpm -F frontend test:e2e:offline  # offline PWA proof (Playwright)
+# Frontend (run from frontend/)
+pnpm gate            # gate:quality + gate:e2e — exactly what CI runs
+pnpm gate:quality    # biome + tsc + vitest(+coverage) + preflight + build, both workspace members
+pnpm gate:e2e        # Playwright: storefront + c1 (sync/embed) + offline/cold-blocked proofs
 
 # Turnkey demo (repo root; thin make wrappers over the poe tasks)
 make demo            # backend-free: signed-bundle edge + Vite SPA on free ports, opens browser
