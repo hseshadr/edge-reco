@@ -170,7 +170,16 @@ complexity = "xenon --max-absolute B --max-modules B --max-average A src"
 # corruption, is now FIXED by torch 2.12.1 (OSV last_affected 2.12.0). The earlier
 # `--ignore-vuln CVE-2025-3000` suppression has been DROPPED in favour of the real
 # fix — the `torch>=2.12.1` floor above. The audit runs clean with no ignore flags.
-audit = "pip-audit"
+#
+# Portable invocation (house standard §4): export the committed uv.lock to a
+# requirements file and audit THAT — pip-audit's default venv mode audits whatever
+# happens to be installed, which drifts from the lock. `--no-deps --disable-pip`
+# keeps pip-audit from resolving or installing anything itself.
+audit.shell = """
+uv export --frozen --all-extras --no-emit-project --no-hashes -o .audit-requirements.txt \
+  && pip-audit -r .audit-requirements.txt --disable-pip --no-deps \
+  && rm .audit-requirements.txt
+"""
 test = "pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90"
 fmt = "ruff format ."
 # `gate` mirrors CI's quality steps (format-check + lint + typecheck + complexity +
