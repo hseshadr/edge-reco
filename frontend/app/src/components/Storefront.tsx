@@ -118,6 +118,9 @@ export function Storefront() {
 	const [error, setError] = useState<string | null>(null);
 	const [toast, setToast] = useState<string | null>(null);
 	const toastTimer = useRef<number | undefined>(undefined);
+	// Monotonic id for grid loads: a slow older search must not clobber a newer
+	// one that already resolved (typing "de" then "desk" races two in-flight queries).
+	const gridRequest = useRef(0);
 
 	const refreshRails = useCallback(async () => {
 		setPersonalizing(true);
@@ -189,19 +192,22 @@ export function Storefront() {
 	}, []);
 
 	const loadGrid = useCallback(async () => {
+		const seq = gridRequest.current + 1;
+		gridRequest.current = seq;
 		setGridLoading(true);
 		setError(null);
 		try {
-			await loadGridInner(
-				debouncedQuery,
-				activeCategory,
-				setCategories,
-				setGrid,
-			);
+			const next = await loadGridInner(debouncedQuery, activeCategory);
+			// Latest-wins: drop a stale result whose newer query already landed.
+			if (seq !== gridRequest.current) return;
+			setCategories(next.categories);
+			setGrid(next.grid);
 		} catch (err) {
-			setError(errorMessage(err));
+			// A superseded query's failure is not the current view — swallow it.
+			if (seq === gridRequest.current) setError(errorMessage(err));
 		} finally {
-			setGridLoading(false);
+			// Only the latest request owns the loading flag.
+			if (seq === gridRequest.current) setGridLoading(false);
 		}
 	}, [debouncedQuery, activeCategory]);
 
@@ -384,35 +390,43 @@ function toggle(
 	return next;
 }
 
-/** Load the grid for the current query/category into the provided setters. */
+/** The categories + grid a query/category resolves to (computed, not yet applied). */
+interface GridResult {
+	categories: string[];
+	grid: GridView;
+}
+
+/**
+ * Compute the grid + category list for the current query/category. Pure of state
+ * writes so the caller can apply the result under a latest-wins guard — a stale
+ * older query that resolves late is dropped rather than clobbering newer results.
+ */
 async function loadGridInner(
 	debouncedQuery: string,
 	activeCategory: string | null,
-	setCategories: (c: string[]) => void,
-	setGrid: (g: GridView) => void,
-): Promise<void> {
+): Promise<GridResult> {
 	const trimmed = debouncedQuery.trim();
 	if (trimmed !== "") {
 		const res = await search(trimmed, { limit: GRID_LIMIT });
-		setCategories(deriveCategories(res.results.map((r) => r.product)));
-		setGrid({
-			products: res.results.map((r) => r.product),
-			kicker: "Search results",
-			title: `"${trimmed}"`,
-		});
-		return;
+		const products = res.results.map((r) => r.product);
+		return {
+			categories: deriveCategories(products),
+			grid: { products, kicker: "Search results", title: `"${trimmed}"` },
+		};
 	}
 	const res = await browse(
 		activeCategory === null
 			? { limit: GRID_LIMIT }
 			: { limit: GRID_LIMIT, category: activeCategory },
 	);
-	setCategories(res.categories);
-	setGrid({
-		products: res.products,
-		kicker: "Catalog",
-		title: activeCategory ?? "Browse",
-	});
+	return {
+		categories: res.categories,
+		grid: {
+			products: res.products,
+			kicker: "Catalog",
+			title: activeCategory ?? "Browse",
+		},
+	};
 }
 
 /** Stable, sorted category list from a product set (used for search views). */
