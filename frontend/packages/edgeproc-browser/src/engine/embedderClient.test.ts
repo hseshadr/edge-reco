@@ -47,6 +47,12 @@ class FakeEmbedderWorker implements WorkerLike {
 			listener({ message });
 		}
 	}
+
+	public emitMessageError(): void {
+		for (const listener of this.#listeners.get("messageerror") ?? []) {
+			listener({ data: null });
+		}
+	}
 }
 
 afterEach(() => {
@@ -61,6 +67,19 @@ describe("WorkerEmbedder worker-crash rejection (no hang)", () => {
 		const pending = embedder.embed("desk lamp");
 		const assertion = expect(pending).rejects.toBeInstanceOf(WorkerCrashError);
 		worker.emitError("model download failed");
+		await assertion;
+	});
+
+	it("rejects a pending embed with WorkerCrashError on 'messageerror'", async () => {
+		// A worker reply that fails structured-clone deserialization fires
+		// 'messageerror' and never delivers a usable message. Without a listener the
+		// embed would hang to the 300s deadline; parity with EngineClient rejects fast.
+		const worker = new FakeEmbedderWorker();
+		const embedder = createWorkerEmbedder(worker);
+
+		const pending = embedder.embed("desk lamp");
+		const assertion = expect(pending).rejects.toBeInstanceOf(WorkerCrashError);
+		worker.emitMessageError();
 		await assertion;
 	});
 

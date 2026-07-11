@@ -3,10 +3,11 @@
 // the model runs; the Worker keeps model load + inference off the UI thread.
 //
 // Failure semantics: an embedder Worker that crashes during model load (the
-// classic init failure) fires 'error' but never replies — so every in-flight
-// embed is rejected with a typed WorkerCrashError (and the client latches). A
-// silent Worker is bounded by a per-request deadline (WorkerTimeoutError),
-// generous by default because the first embed also downloads the ~25 MB model.
+// classic init failure) fires 'error'/'messageerror' but never replies — so
+// every in-flight embed is rejected with a typed WorkerCrashError (and the
+// client latches). A silent Worker is bounded by a per-request deadline
+// (WorkerTimeoutError), generous by default because the first embed also
+// downloads the ~25 MB model.
 
 import type { Embedder } from "./embedder";
 import type { EmbedRequest, EmbedResponse } from "./embedderWorker";
@@ -30,6 +31,7 @@ export interface WorkerLike {
 		type: "error",
 		listener: (event: { message: string }) => void,
 	): void;
+	addEventListener(type: "messageerror", listener: () => void): void;
 }
 
 /** Tuning knobs for the embedder client. */
@@ -65,6 +67,9 @@ class WorkerEmbedder implements Embedder {
 		});
 		this.#worker.addEventListener("error", (event) => {
 			this.#onCrash(event.message);
+		});
+		this.#worker.addEventListener("messageerror", () => {
+			this.#onCrash("an embedder reply was not deserializable (messageerror)");
 		});
 	}
 
