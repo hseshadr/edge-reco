@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
@@ -17,7 +19,7 @@ from fastapi import Depends, Header, Request
 from edgereco.api.sessions import SessionStore
 from edgereco.catalog.models import CatalogManifest, Product
 from edgereco.catalog.publish import CURRENT_META_SCHEMA, CatalogMeta
-from edgereco.embeddings.encoder import ProductEncoder
+from edgereco.embeddings.encoder import DEFAULT_MODEL_NAME, ProductEncoder
 from edgereco.embeddings.index import VectorIndex
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
@@ -25,8 +27,23 @@ from edgereco.search.keyword import KeywordSearcher
 from edgereco.search.vector import VectorSearcher
 from edgereco.telemetry.buffer import EventBuffer
 
+_log = logging.getLogger(__name__)
+
 _RANKING_CONFIG_NAME = "ranking_config.json"
 _COOCCURRENCE_NAME = "cooccurrence.json"
+
+#: Builds a query encoder for a given model name. Seam kept so tests bind a
+#: hermetic stub (no model download) and prod binds the real ``ProductEncoder``.
+EncoderFactory = Callable[[str], ProductEncoder]
+
+
+class EmbeddingModelMismatchError(RuntimeError):
+    """The bound encoder's vector space contradicts the bundle's declared dim.
+
+    A bundle ships a PREBUILT index computed with a specific model; a query
+    encoded by an encoder of a different dimensionality lands in the wrong space
+    and yields silently-wrong results. Raised (fail-closed) instead.
+    """
 
 
 def load_ranking_config(local: Path, *, meta_schema: int = 1) -> RankingConfig:
@@ -108,14 +125,24 @@ class ServiceContainer:
         )
 
     @classmethod
-    def from_dirs(cls, cache_dir: Path, index_dir: Path) -> ServiceContainer:
+    def from_dirs(
+        cls,
+        cache_dir: Path,
+        index_dir: Path,
+        *,
+        encoder_factory: EncoderFactory = ProductEncoder,
+    ) -> ServiceContainer:
         """Build a container from a synced cache dir and a pre-built index dir."""
         from edgereco.catalog.loader import load_jsonl
         from edgereco.catalog.manifest import parse_manifest
 
         catalog = load_jsonl(cache_dir / "products.jsonl")
         manifest = parse_manifest(cache_dir / "manifest.json")
-        encoder = ProductEncoder()
+        encoder = _bind_encoder(
+            declared_model=manifest.embedding_model,
+            declared_dim=manifest.embedding_dim,
+            factory=encoder_factory,
+        )
         vector_index = VectorIndex.load(index_dir / "vector")
         keyword = KeywordSearcher.build(catalog)
         vector = VectorSearcher(vector_index)
@@ -136,6 +163,7 @@ class ServiceContainer:
         base_url: str,
         cache_root: Path,
         verifier: Verifier,
+        encoder_factory: EncoderFactory = ProductEncoder,
     ) -> ServiceContainer:
         """Build a container from a signed, content-addressed bundle origin.
 
@@ -149,13 +177,18 @@ class ServiceContainer:
         local = sync_and_materialize(base_url=base_url, cache_root=cache_root, verifier=verifier)
         catalog = load_jsonl(local / "products.jsonl")
         meta = CatalogMeta.model_validate_json((local / "catalog_meta.json").read_bytes())
+        encoder = _bind_encoder(
+            declared_model=meta.embedding_model,
+            declared_dim=meta.embedding_dim,
+            factory=encoder_factory,
+        )
         vector = VectorSearcher(VectorIndex.load(local / "vector"))
         return cls(
             catalog=catalog,
             by_id={p.id: p for p in catalog},
             keyword=KeywordSearcher.build(catalog),
             vector=vector,
-            encoder=ProductEncoder(),
+            encoder=encoder,
             manifest=_manifest_from_meta(meta),
             ranking_config=load_ranking_config(local, meta_schema=meta.schema_version),
             cooccurrence=load_cooccurrence(local, meta_schema=meta.schema_version),
@@ -188,7 +221,13 @@ def _sync_and_load_manifest(
 
 
 def _materialize_bundle(store: FilesystemCacheStore, manifest: IndexManifest, dest: Path) -> Path:
-    """Reassemble every bundled file (vector/ subdir preserved) into ``dest``."""
+    """Reassemble every bundled file (vector/ subdir preserved) into ``dest``.
+
+    ``dest`` is a derived cache rebuilt from the CAS store on every sync: files a
+    previous version materialized but the active manifest no longer carries are
+    pruned first, so the on-disk tree always mirrors exactly the manifest's set.
+    """
+    _prune_stale_files(dest, wanted={entry.path for entry in manifest.files})
     for entry in manifest.files:
         out = dest / entry.path
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -196,11 +235,67 @@ def _materialize_bundle(store: FilesystemCacheStore, manifest: IndexManifest, de
     return dest
 
 
+def _prune_stale_files(dest: Path, *, wanted: set[str]) -> None:
+    """Delete files under ``dest`` absent from ``wanted``; sweep emptied dirs.
+
+    Only the materialized dir itself is touched — the edgeproc CAS store lives
+    ABOVE ``dest`` (its ``cache_root`` parent) and is never visited here.
+    """
+    if not dest.is_dir():
+        return
+    for path in sorted(dest.rglob("*"), reverse=True):
+        _prune_path(path, dest=dest, wanted=wanted)
+
+
+def _prune_path(path: Path, *, dest: Path, wanted: set[str]) -> None:
+    """Unlink a file the active manifest no longer wants; rmdir an emptied dir."""
+    if path.is_file() and path.relative_to(dest).as_posix() not in wanted:
+        path.unlink()
+    elif path.is_dir() and next(path.iterdir(), None) is None:
+        path.rmdir()
+
+
 def _select_adapter(base_url: str) -> FetchAdapter:
     """HTTP adapter for an http(s) origin, filesystem adapter for a local path."""
     if base_url.startswith(("http://", "https://")):
         return HttpAdapter()
     return FilesystemAdapter()
+
+
+def _bind_encoder(
+    *, declared_model: str, declared_dim: int, factory: EncoderFactory
+) -> ProductEncoder:
+    """Build the query encoder in the bundle's DECLARED embedding space.
+
+    The bundle's prebuilt index was computed with ``declared_model``; the query
+    encoder must match it, so it is built FROM the declared model (never a silent
+    hardcoded default) and fails closed if its dimensionality contradicts the
+    declared ``embedding_dim``.
+    """
+    model = declared_model or _default_model_logged()
+    encoder = factory(model)
+    if encoder.dim != declared_dim:
+        _log.error(
+            "encoder %r has dim=%d but bundle declares embedding_dim=%d — refusing "
+            "to encode queries in the wrong embedding space",
+            model,
+            encoder.dim,
+            declared_dim,
+        )
+        raise EmbeddingModelMismatchError(
+            f"encoder dim={encoder.dim} contradicts declared embedding_dim={declared_dim}"
+        )
+    return encoder
+
+
+def _default_model_logged() -> str:
+    """Return the default model, logging that binding it was an EXPLICIT choice."""
+    _log.warning(
+        "bundle declares no embedding model — binding default %r as an explicit "
+        "decision (legacy metadata), not an accidental fallback",
+        DEFAULT_MODEL_NAME,
+    )
+    return DEFAULT_MODEL_NAME
 
 
 def _manifest_from_meta(meta: CatalogMeta) -> CatalogManifest:
