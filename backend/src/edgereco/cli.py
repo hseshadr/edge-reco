@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 
 if TYPE_CHECKING:
+    import polars as pl
+
+    from edgereco.api.deps import ServiceContainer
+    from edgereco.catalog.models import SearchResult
     from edgereco.reco.audit import AuditReport
     from edgereco.reco.cooccurrence import Session, SessionLog
     from edgereco.republish import RetrainResult
@@ -314,6 +318,35 @@ def serve(  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
+def _fused_search_results(container: ServiceContainer, query: str, k: int) -> list[SearchResult]:
+    """Hybrid keyword + vector hits fused with RRF, hydrated against the catalog."""
+    from edgereco.catalog.models import SearchResult
+    from edgereco.search.hybrid import reciprocal_rank_fusion
+
+    keyword_hits = container.keyword.search(query, k=k)
+    query_vec = container.encoder.encode_query(query)
+    vector_hits = container.vector.search(query_vec, k=k)
+    results: list[SearchResult] = []
+    for pid, score in reciprocal_rank_fusion(keyword_hits, vector_hits):
+        product = container.by_id.get(pid)
+        if product is not None:
+            results.append(SearchResult(product=product, score=score))
+    return results
+
+
+def _print_search_results(results: list[SearchResult], output_json: bool) -> None:
+    """Print results as JSON or an aligned plain-text table."""
+    if output_json:
+        typer.echo(json.dumps([r.model_dump() for r in results]))
+        return
+    typer.echo(f"{'ID':<12} {'Score':>7}  {'Category':<18}  Title")
+    typer.echo("-" * 72)
+    for r in results:
+        typer.echo(
+            f"{r.product.id:<12} {r.score:>7.4f}  {r.product.category:<18}  {r.product.title}"
+        )
+
+
 @app.command()
 def search(
     query: Annotated[str, typer.Argument(help="Search query")],
@@ -325,40 +358,15 @@ def search(
 ) -> None:
     """Search the catalog and print results."""
     from edgereco.api.deps import ServiceContainer
-    from edgereco.catalog.models import SearchResult, SessionProfile
+    from edgereco.catalog.models import SessionProfile
     from edgereco.reco.reranker import rerank
-    from edgereco.search.hybrid import reciprocal_rank_fusion
 
     container = ServiceContainer.from_dirs(cache_dir, index_dir)
-
-    k = max(limit * 3, 30)
-    keyword_hits = container.keyword.search(query, k=k)
-    query_vec = container.encoder.encode_query(query)
-    vector_hits = container.vector.search(query_vec, k=k)
-    fused = reciprocal_rank_fusion(keyword_hits, vector_hits)
-
-    results: list[SearchResult] = []
-    for pid, score in fused:
-        product = container.by_id.get(pid)
-        if product is not None:
-            results.append(SearchResult(product=product, score=score))
-
+    results = _fused_search_results(container, query, k=max(limit * 3, 30))
     results = rerank(results, SessionProfile())
-
     if category:
         results = [r for r in results if r.product.category == category]
-
-    results = results[:limit]
-
-    if output_json:
-        typer.echo(json.dumps([r.model_dump() for r in results]))
-    else:
-        typer.echo(f"{'ID':<12} {'Score':>7}  {'Category':<18}  Title")
-        typer.echo("-" * 72)
-        for r in results:
-            typer.echo(
-                f"{r.product.id:<12} {r.score:>7.4f}  {r.product.category:<18}  {r.product.title}"
-            )
+    _print_search_results(results[:limit], output_json)
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +394,61 @@ def _scalar_as_float(value: object, default: float) -> float:
     return float(value)
 
 
+def _top_category(raw_category: object) -> str:
+    """First segment of a ``>``-separated category path."""
+    parts = str(raw_category).split(">")
+    return parts[0].strip() if parts else ""
+
+
+def _write_products_jsonl(
+    df: pl.DataFrame,
+    out_path: Path,
+    target_categories: set[str],
+    limit: int,
+    *,
+    pop_min: float,
+    pop_max: float,
+    fresh_min: float,
+    fresh_max: float,
+) -> int:
+    """Write rows in ``target_categories`` as JSONL products, capped at ``limit``."""
+    from edgereco.catalog.preprocessor import amazon_row_to_product
+
+    count = 0
+    with out_path.open("w", encoding="utf-8") as f:
+        for row in df.iter_rows(named=True):
+            if _top_category(row.get("category_id", "")) not in target_categories:
+                continue
+            product = amazon_row_to_product(
+                row, pop_min=pop_min, pop_max=pop_max, fresh_min=fresh_min, fresh_max=fresh_max
+            )
+            f.write(product.model_dump_json() + "\n")
+            count += 1
+            if count >= limit:
+                break
+    return count
+
+
+def _write_manifest(output_dir: Path, out_path: Path, count: int) -> None:
+    """Emit ``manifest.json`` describing the freshly written ``products.jsonl``."""
+    import hashlib
+
+    from edgereco.catalog.models import CatalogFile, CatalogManifest
+
+    checksum = "sha256:" + hashlib.sha256(out_path.read_bytes()).hexdigest()
+    catalog_file = CatalogFile(
+        path="products.jsonl", file_type="products", checksum=checksum, rows=count
+    )
+    manifest = CatalogManifest(
+        catalog_id="amazon-demo",
+        version="2026-04-24T00:00:00Z",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dim=384,
+        files=[catalog_file],
+    )
+    (output_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+
+
 @app.command()
 def preprocess(
     input_path: Annotated[Path, typer.Argument(help="Path to Amazon CSV")],
@@ -400,12 +463,7 @@ def preprocess(
     ] = None,
 ) -> None:
     """Convert Amazon CSV to EdgeReco JSONL + manifest."""
-    import hashlib
-
     import polars as pl
-
-    from edgereco.catalog.models import CatalogFile, CatalogManifest
-    from edgereco.catalog.preprocessor import amazon_row_to_product
 
     target_categories = set(category) if category else set(DEFAULT_PREPROCESS_CATEGORIES)
 
@@ -414,45 +472,20 @@ def preprocess(
 
     pop_expr = pl.col("stars").cast(pl.Float64) * (pl.col("reviews").cast(pl.Float64) + 1).log()
     df = df.with_columns([pop_expr.alias("pop_raw")])
-    pop_min = _scalar_as_float(df["pop_raw"].min(), 0.0)
-    pop_max = _scalar_as_float(df["pop_raw"].max(), 1.0)
-    fresh_min = _scalar_as_float(df["boughtInLastMonth"].min(), 0.0)
-    fresh_max = _scalar_as_float(df["boughtInLastMonth"].max(), 1.0)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "products.jsonl"
-
-    count = 0
-    with out_path.open("w", encoding="utf-8") as f:
-        for row in df.iter_rows(named=True):
-            cat_parts = str(row.get("category_id", "")).split(">")
-            top_cat = cat_parts[0].strip() if cat_parts else ""
-            if top_cat not in target_categories:
-                continue
-            product = amazon_row_to_product(
-                row,
-                pop_min=pop_min,
-                pop_max=pop_max,
-                fresh_min=fresh_min,
-                fresh_max=fresh_max,
-            )
-            f.write(product.model_dump_json() + "\n")
-            count += 1
-            if count >= limit:
-                break
-
-    checksum = "sha256:" + hashlib.sha256(out_path.read_bytes()).hexdigest()
-    catalog_file = CatalogFile(
-        path="products.jsonl", file_type="products", checksum=checksum, rows=count
+    count = _write_products_jsonl(
+        df,
+        out_path,
+        target_categories,
+        limit,
+        pop_min=_scalar_as_float(df["pop_raw"].min(), 0.0),
+        pop_max=_scalar_as_float(df["pop_raw"].max(), 1.0),
+        fresh_min=_scalar_as_float(df["boughtInLastMonth"].min(), 0.0),
+        fresh_max=_scalar_as_float(df["boughtInLastMonth"].max(), 1.0),
     )
-    manifest = CatalogManifest(
-        catalog_id="amazon-demo",
-        version="2026-04-24T00:00:00Z",
-        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-        embedding_dim=384,
-        files=[catalog_file],
-    )
-    (output_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    _write_manifest(output_dir, out_path, count)
     typer.echo(f"Wrote {count} products to {out_path}")
 
 
