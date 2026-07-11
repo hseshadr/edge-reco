@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Deploy entrypoint invoked a nonexistent `edgereco sync` command**, so the
+  demo container crashed on boot. The entrypoint now boots `edgereco serve` in
+  signed-bundle mode (`EDGERECO_BUNDLE_BASE_URL` + `EDGERECO_VERIFY_KEY_PATH`,
+  baked into the image with the demo catalog's committed public verify key) —
+  `serve` self-syncs the content-addressed bundle fail-closed at startup. A new
+  deploy smoke test (`backend/tests/integration/test_deploy_entrypoint.py`)
+  executes every `edgereco <subcommand>` the entrypoint invokes against the
+  real CLI and rejects dead env knobs / missing COPY sources, so the deploy
+  scripts can no longer rot against the CLI.
+
 ### Changed
 - **Substrate legos bumped in dependency order (house standard §7):**
   `edge-proc` v0.1.1 → **v0.1.2** and `shared-libs-python` v0.1.2 → **v0.1.3**
