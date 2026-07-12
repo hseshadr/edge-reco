@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InteractionEvent } from "../api/types";
-import { createUplink, type Uplink, type UplinkConfig } from "./uplink";
+import {
+	createUplink,
+	getUplink,
+	type Uplink,
+	type UplinkConfig,
+} from "./uplink";
 
 // A click event factory — the only event the demo emits today, but the buffer
 // is event-shape-agnostic.
@@ -81,6 +86,25 @@ function harness(overrides: Partial<UplinkConfig> = {}): Harness {
 
 beforeEach(() => {
 	vi.restoreAllMocks();
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
+});
+
+describe("getUplink", () => {
+	it("keeps optional telemetry disabled when session setup fails", () => {
+		vi.stubEnv("VITE_EVENTS_URL", URL);
+		vi.stubGlobal("crypto", undefined);
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: vi.fn(),
+		});
+
+		expect(() => getUplink()).not.toThrow();
+		expect(getUplink().enabled).toBe(false);
+	});
 });
 
 describe("createUplink", () => {

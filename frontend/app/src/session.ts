@@ -1,18 +1,21 @@
 const SESSION_KEY = "nimbus_session_id";
 
 /**
- * Generates a UUID-ish id. `crypto.randomUUID` only exists in secure contexts
- * (https or localhost); when the demo is served over plain http on a non-localhost
- * host (LAN / Docker edge), it is undefined, so fall back to a random string.
+ * Generates a UUID-ish id. `crypto.randomUUID` only exists in secure contexts;
+ * `crypto.getRandomValues` keeps the plain-http LAN / Docker fallback secure.
  */
 function generateSessionId(): string {
-	if (
-		typeof crypto !== "undefined" &&
-		typeof crypto.randomUUID === "function"
-	) {
+	if (typeof crypto === "undefined") {
+		throw new Error("Web Crypto is required to generate a session id");
+	}
+	if (typeof crypto.randomUUID === "function") {
 		return crypto.randomUUID();
 	}
-	return `nimbus-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+	const bytes = crypto.getRandomValues(new Uint8Array(16));
+	const random = Array.from(bytes, (byte) =>
+		byte.toString(16).padStart(2, "0"),
+	).join("");
+	return `nimbus-${random}`;
 }
 
 /**

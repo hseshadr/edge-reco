@@ -23,6 +23,14 @@ describe("classifyResource", () => {
 			).toBe("other"); // ssl-images-amazon.com does NOT end with media-amazon.com
 		});
 
+		it("does not classify a lookalike hostname as an image", () => {
+			expect(
+				classifyResource("https://evilmedia-amazon.com/collect", {
+					edgeOrigin: EDGE_ORIGIN,
+				}),
+			).toBe("other");
+		});
+
 		it("classifies image before edge when host happens to be media-amazon.com (ordering)", () => {
 			// image rule fires first even if edgeOrigin were somehow set to media-amazon.com origin
 			expect(
