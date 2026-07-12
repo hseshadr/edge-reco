@@ -2,20 +2,18 @@
 #   1. A global baseline of security headers (the /* block).
 #   2. Freshness for the service worker + manifest so updates propagate fast.
 
-# Baseline security headers for every response (defense-in-depth).
-# All NON-resource-restricting: none of these can break the same-origin
-# ONNX/WASM/worker pipeline or the catalog's product images. A full resource
-# CSP (script-src / img-src / connect-src / worker-src) is deliberately NOT set
-# here — it needs live verification against onnxruntime-web (needs
-# wasm-unsafe-eval), the module workers, and external image hosts before it can
-# be enforced without breaking the app. `frame-ancestors 'self'` (below) is the
-# one CSP directive that is safe to ship now: it restricts framing only, never
-# resource loading.
+# Baseline security headers for every response. The CSP allows the app's known
+# runtime edges: local module workers and ONNX WASM, Amazon catalog images, and
+# Google Fonts. Inline executable scripts stay blocked; the two JSON-LD blocks
+# are pinned by hash. Cloudflare Pages adds wildcard CORS to static responses by
+# default, but this deployment is same-origin, so detach it here.
 /*
+  ! Access-Control-Allow-Origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
-  Content-Security-Policy: frame-ancestors 'self'
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-ST9qnRidkbMTVXZFRJaR0oO2gFOyXRSKcN4rb/4d9yM=' 'sha256-ICu6RKCjCK7Myvbr4Mi9jOiGsH2qBIXyfYYQDNwdOfw='; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: https://m.media-amazon.com https://images-na.ssl-images-amazon.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; manifest-src 'self'; upgrade-insecure-requests
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()
 
