@@ -13,6 +13,12 @@ on:
 # All run: steps use static commands only — no untrusted ${{ github.event.* }}
 # input is interpolated anywhere, so there is no workflow-injection surface.
 
+# Least privilege for the whole workflow: every job only reads the checkout and
+# runs the gate — none write repo contents, releases, or PR comments. Jobs may
+# still narrow further (the gitleaks job restates contents: read explicitly).
+permissions:
+  contents: read
+
 jobs:
   # Secret-leak scan over the FULL history (fetch-depth: 0), not just the diff —
   # a credential committed five commits ago is exactly as leaked as one committed

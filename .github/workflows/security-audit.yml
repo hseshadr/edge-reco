@@ -20,6 +20,10 @@ on:
     - cron: "0 9 * * 1" # weekly, Monday 09:00 UTC — advisories move without commits
   workflow_dispatch:
 
+# Least privilege: both jobs only checkout + run a dependency audit — no writes.
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest
