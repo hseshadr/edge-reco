@@ -1,0 +1,234 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
+
+const APP_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
+const DIST_DIR = process.env.PRODUCTION_ARTIFACT_DIR
+	? resolve(APP_DIR, process.env.PRODUCTION_ARTIFACT_DIR)
+	: undefined;
+
+const ROUTES = [
+	{ path: "/", file: "index.html" },
+	{ path: "/edgeproc", file: "edgeproc.html" },
+	{ path: "/github", file: "github.html" },
+	{ path: "/faq", file: "faq.html" },
+];
+
+const SOCIAL_ROUTES = ROUTES.filter(({ path }) => path !== "/");
+const AI_CRAWLERS = [
+	"GPTBot",
+	"OAI-SearchBot",
+	"ChatGPT-User",
+	"ClaudeBot",
+	"Claude-Web",
+	"anthropic-ai",
+	"PerplexityBot",
+	"Google-Extended",
+	"CCBot",
+	"Bytespider",
+];
+
+function artifactPath(file) {
+	if (DIST_DIR !== undefined) {
+		return join(DIST_DIR, file);
+	}
+	return file === "index.html"
+		? join(APP_DIR, file)
+		: join(APP_DIR, "public", file);
+}
+
+async function artifact(file) {
+	return readFile(artifactPath(file), "utf8");
+}
+
+async function htmlDocument(file) {
+	return new JSDOM(await artifact(file)).window.document;
+}
+
+function content(document, selector) {
+	const value = document
+		.querySelector(selector)
+		?.getAttribute("content")
+		?.trim();
+	assert.ok(value, `missing content for ${selector}`);
+	return value;
+}
+
+function wordCount(document) {
+	const body = document.body.cloneNode(true);
+	for (const element of body.querySelectorAll("script, style")) {
+		element.remove();
+	}
+	return body.textContent.trim().split(/\s+/u).filter(Boolean).length;
+}
+
+function crawlText(document) {
+	return document.body.textContent.replace(/\s+/gu, " ").trim();
+}
+
+function cspHash(script) {
+	const digest = createHash("sha256")
+		.update(script.textContent ?? "")
+		.digest("base64");
+	return `'sha256-${digest}'`;
+}
+
+test("root exposes substantive crawlable product content", async () => {
+	const document = await htmlDocument("index.html");
+	const text = crawlText(document);
+	assert.ok(
+		wordCount(document) >= 150,
+		"root HTML must expose at least 150 crawlable words before JavaScript runs",
+	);
+	assert.match(text, /signed catalog bundle/i);
+	assert.match(text, /BM25/i);
+	assert.match(text, /Reciprocal Rank Fusion/i);
+});
+
+test("root and EdgeProc snippets stay within search-result limits", async () => {
+	for (const file of ["index.html", "edgeproc.html"]) {
+		const document = await htmlDocument(file);
+		const title = document.querySelector("title")?.textContent.trim() ?? "";
+		const description = content(document, 'meta[name="description"]');
+		assert.ok(
+			title.length >= 30 && title.length <= 60,
+			`${file} title is ${title.length} chars`,
+		);
+		assert.ok(
+			description.length >= 120 && description.length <= 160,
+			`${file} description is ${description.length} chars`,
+		);
+	}
+});
+
+test("every supporting route has complete Open Graph and Twitter metadata", async () => {
+	for (const { path, file } of SOCIAL_ROUTES) {
+		const document = await htmlDocument(file);
+		const canonical = document
+			.querySelector('link[rel="canonical"]')
+			?.getAttribute("href");
+		assert.equal(canonical, `https://edge-reco.com${path}`);
+
+		for (const property of [
+			"og:type",
+			"og:site_name",
+			"og:title",
+			"og:description",
+			"og:url",
+			"og:image",
+			"og:image:width",
+			"og:image:height",
+			"og:image:alt",
+		]) {
+			content(document, `meta[property="${property}"]`);
+		}
+
+		for (const name of [
+			"twitter:card",
+			"twitter:title",
+			"twitter:description",
+			"twitter:image",
+			"twitter:image:alt",
+		]) {
+			content(document, `meta[name="${name}"]`);
+		}
+		assert.equal(content(document, 'meta[property="og:url"]'), canonical);
+		assert.equal(
+			content(document, 'meta[name="twitter:card"]'),
+			"summary_large_image",
+		);
+	}
+});
+
+test("sitemap lists every canonical route with an ISO lastmod date", async () => {
+	const document = new JSDOM(await artifact("sitemap.xml"), {
+		contentType: "text/xml",
+	}).window.document;
+	const entries = [...document.querySelectorAll("url")].map((entry) => ({
+		loc: entry.querySelector("loc")?.textContent,
+		lastmod: entry.querySelector("lastmod")?.textContent,
+	}));
+	assert.deepEqual(
+		entries.map(({ loc }) => loc),
+		ROUTES.map(({ path }) => `https://edge-reco.com${path}`),
+	);
+	for (const { lastmod } of entries) {
+		assert.match(lastmod ?? "", /^\d{4}-\d{2}-\d{2}$/u);
+		assert.ok(!Number.isNaN(Date.parse(lastmod ?? "")));
+	}
+});
+
+test("unknown routes use a noindex 404 instead of the SPA shell", async () => {
+	const document = await htmlDocument("404.html");
+	assert.match(content(document, 'meta[name="robots"]'), /noindex/i);
+	assert.match(
+		document.querySelector("title")?.textContent ?? "",
+		/not found/i,
+	);
+	assert.ok(document.querySelector('a[href="/"]'));
+
+	const redirects = await artifact("_redirects");
+	assert.doesNotMatch(redirects, /\/index\.html\s+200/u);
+	assert.doesNotMatch(redirects, /^\/\*\s+/mu);
+});
+
+test("delivery headers enforce transport and a resource-aware CSP", async () => {
+	const headers = await artifact("_headers");
+	assert.match(
+		headers,
+		/Strict-Transport-Security:\s*max-age=(?:31536000|\d{9,})/iu,
+	);
+	assert.match(headers, /^\s*! Access-Control-Allow-Origin\s*$/mu);
+
+	const csp = headers
+		.split("\n")
+		.find((line) => line.trim().startsWith("Content-Security-Policy:"));
+	assert.ok(csp, "missing Content-Security-Policy header");
+	for (const directive of [
+		"default-src 'self'",
+		"base-uri 'self'",
+		"object-src 'none'",
+		"frame-ancestors 'self'",
+		"form-action 'self'",
+		"script-src 'self' 'wasm-unsafe-eval'",
+		"worker-src 'self' blob:",
+		"connect-src 'self'",
+	]) {
+		assert.ok(csp.includes(directive), `CSP missing ${directive}`);
+	}
+	assert.ok(!csp.includes("script-src *"));
+	assert.ok(!csp.includes("'unsafe-eval'"));
+
+	for (const { file } of ROUTES) {
+		const document = await htmlDocument(file);
+		for (const script of document.querySelectorAll("script:not([src])")) {
+			assert.ok(
+				csp.includes(cspHash(script)),
+				`${file} inline script is not CSP-hashed`,
+			);
+		}
+	}
+});
+
+test("robots.txt and llms.txt keep AI crawlers and canonical sources accessible", async () => {
+	const robots = await artifact("robots.txt");
+	for (const crawler of AI_CRAWLERS) {
+		assert.match(robots, new RegExp(`User-agent: ${crawler}\\s+Allow: /`, "u"));
+	}
+	assert.match(robots, /Sitemap: https:\/\/edge-reco\.com\/sitemap\.xml/u);
+
+	const llms = await artifact("llms.txt");
+	for (const url of [
+		"https://edge-reco.com/",
+		"https://edge-reco.com/edgeproc",
+		"https://edge-reco.com/faq",
+		"https://github.com/hseshadr/edge-reco",
+		"https://github.com/hseshadr/edge-proc",
+	]) {
+		assert.ok(llms.includes(url), `llms.txt missing ${url}`);
+	}
+});

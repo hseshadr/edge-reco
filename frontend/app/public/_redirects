@@ -6,5 +6,5 @@
 # (Static assets are served before this file, so the entity pages resolve
 # without any rule here.)
 
-# SPA fallback — keep LAST. Any route without a static file renders the app shell.
-/*    /index.html   200
+# The demo is the root document and does not use client-side URL routes. Leave
+# unknown paths unmatched so Cloudflare Pages returns 404.html with status 404.

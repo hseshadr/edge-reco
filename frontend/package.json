@@ -10,7 +10,7 @@
 	},
 	"scripts": {
 		"gate": "pnpm run gate:quality && pnpm run gate:e2e",
-		"gate:quality": "pnpm -r run lint && pnpm -r run typecheck && pnpm -r run test:coverage && pnpm -F frontend run test:preflight && pnpm -F frontend run build",
+		"gate:quality": "pnpm -r run lint && pnpm -r run typecheck && pnpm -r run test:coverage && pnpm -F frontend run test:preflight && pnpm -F frontend run build && pnpm -F frontend run test:artifacts",
 		"gate:e2e": "pnpm -F frontend run test:e2e && pnpm -F frontend run test:e2e:c1 && pnpm -F frontend run test:e2e:offline"
 	},
 	"devDependencies": {

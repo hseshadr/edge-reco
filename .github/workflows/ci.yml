@@ -113,8 +113,9 @@ jobs:
         run: node scripts/download-model.mjs
 
       # CI runs the gate command ITSELF (house standard §3/§4): `gate:quality` is
-      # biome -> tsc -> vitest-with-coverage -> preflight -> build across both
-      # workspace members, defined once in frontend/package.json. The full local
+      # biome -> tsc -> vitest-with-coverage -> preflight -> build -> production
+      # artifact checks across both workspace members, defined once in
+      # frontend/package.json. The full local
       # gate is `pnpm gate` = gate:quality + gate:e2e; the e2e half runs in the
       # `e2e` job below (it needs Playwright browsers + the model cache).
       - name: Gate — quality half (pnpm gate:quality — the exact local command)
