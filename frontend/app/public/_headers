@@ -1,3 +1,24 @@
+# Cloudflare Pages headers. Two concerns:
+#   1. A global baseline of security headers (the /* block).
+#   2. Freshness for the service worker + manifest so updates propagate fast.
+
+# Baseline security headers for every response (defense-in-depth).
+# All NON-resource-restricting: none of these can break the same-origin
+# ONNX/WASM/worker pipeline or the catalog's product images. A full resource
+# CSP (script-src / img-src / connect-src / worker-src) is deliberately NOT set
+# here — it needs live verification against onnxruntime-web (needs
+# wasm-unsafe-eval), the module workers, and external image hosts before it can
+# be enforced without breaking the app. `frame-ancestors 'self'` (below) is the
+# one CSP directive that is safe to ship now: it restricts framing only, never
+# resource loading.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()
+
 # Keep the service worker and manifest fresh so updates propagate immediately.
 /sw.js
   Cache-Control: public, max-age=0, must-revalidate
