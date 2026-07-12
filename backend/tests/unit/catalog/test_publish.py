@@ -444,6 +444,42 @@ def test_publish_rejects_symlinked_top_level_entry(tmp_path: Path) -> None:
     assert not origin.exists()
 
 
+def test_publish_refuses_symlinked_meta_write_target(tmp_path: Path) -> None:
+    """A symlink pre-planted at the ``catalog_meta.json`` WRITE path must be REFUSED,
+    never followed: the producer ALWAYS (re)writes ``catalog_meta.json``, and a plain
+    ``write_text`` follows a symlink there and clobbers whatever it targets — an
+    arbitrary host-file WRITE-through. Fail closed before the target is touched.
+    """
+    staging = _staging(tmp_path)  # products.jsonl + vector/, no catalog_meta.json yet
+    secret = tmp_path / "outside_secret.txt"
+    original = "ATTACKER-VICTIM FILE — MUST NOT BE OVERWRITTEN"
+    secret.write_text(original, encoding="utf-8")
+    (staging / "catalog_meta.json").symlink_to(secret)  # hostile symlink at write path
+
+    origin = tmp_path / "origin"
+    private, _ = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_bundle(
+            staging_dir=staging,
+            origin_dir=origin,
+            private_key_path=key_path,
+            catalog_id="amazon-demo",
+            version="v1",
+            embedding_model="m",
+            embedding_dim=384,
+            embedding_count=1,
+            product_count=1,
+        )
+
+    # The producer's write was refused: the victim target keeps its original bytes.
+    assert secret.read_text(encoding="utf-8") == original
+    # And no signed origin was built.
+    assert not origin.exists()
+
+
 def test_bundle_files_contract() -> None:
     assert BUNDLE_FILES == (
         "products.jsonl",

@@ -25,6 +25,8 @@ edge-proc stays generic (opaque files only); this module owns the domain shape.
 
 from __future__ import annotations
 
+import errno
+import os
 from pathlib import Path
 from typing import Final
 
@@ -103,7 +105,7 @@ def publish_bundle(
         product_count=product_count,
         schema_version=CURRENT_META_SCHEMA,
     )
-    (staging_dir / _META_NAME).write_text(meta.model_dump_json(), encoding="utf-8")
+    _write_json_no_follow(staging_dir / _META_NAME, meta.model_dump_json())
     _ensure_ranking_config(staging_dir, require_present=require_feature_files)
     _ensure_cooccurrence(staging_dir, require_present=require_feature_files)
     files = _read_bundle_files(staging_dir)
@@ -137,7 +139,7 @@ def _ensure_ranking_config(staging_dir: Path, *, require_present: bool = False) 
             f"{ranking_path} missing from a current-schema bundle; refusing to "
             "silently republish with legacy default weights"
         )
-    ranking_path.write_text(DEFAULT_RANKING_CONFIG.model_dump_json(), encoding="utf-8")
+    _write_json_no_follow(ranking_path, DEFAULT_RANKING_CONFIG.model_dump_json())
 
 
 def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) -> None:
@@ -157,7 +159,33 @@ def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) ->
             f"{cooc_path} missing from a current-schema bundle; refusing to "
             "silently republish with an empty co-occurrence matrix"
         )
-    cooc_path.write_text(CooccurrenceMatrix().model_dump_json(), encoding="utf-8")
+    _write_json_no_follow(cooc_path, CooccurrenceMatrix().model_dump_json())
+
+
+def _write_json_no_follow(path: Path, payload: str) -> None:
+    """Write ``payload`` to ``path`` refusing to follow a symlink at the final component.
+
+    The producer unconditionally (re)writes its staging JSON — ``catalog_meta.json``
+    every publish, plus ``ranking_config.json`` / ``cooccurrence.json`` when defaulting.
+    Plain ``Path.write_text`` FOLLOWS a pre-planted symlink at that path and would clobber
+    whatever it targets: an arbitrary host-file WRITE-through (the mirror of the read-side
+    guard below). ``O_NOFOLLOW`` makes ``os.open`` fail with ``ELOOP`` on a symlink, so the
+    write can never be redirected; fail closed with a clear ``ValueError``. A real file at
+    the same path is created/truncated exactly as ``write_text`` would — only a symlink is
+    refused. Portable: a platform without the flag yields ``0`` (a no-op bit).
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o644)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ValueError(
+                f"refusing to write staging file {path.name!r} through a symlink: a "
+                "planted symlink would redirect the producer's write to an arbitrary file"
+            ) from exc
+        raise
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(payload)
 
 
 def _refuse_symlink(path: Path, staging_dir: Path) -> None:
