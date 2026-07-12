@@ -160,24 +160,36 @@ def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) ->
     cooc_path.write_text(CooccurrenceMatrix().model_dump_json(), encoding="utf-8")
 
 
-def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
-    """Read every bundle file into ``{relpath: bytes}`` (vector/ recursed)."""
-    files: dict[str, bytes] = {
-        "products.jsonl": (staging_dir / "products.jsonl").read_bytes(),
-        _META_NAME: (staging_dir / _META_NAME).read_bytes(),
-        _RANKING_NAME: (staging_dir / _RANKING_NAME).read_bytes(),
-        _COOCCURRENCE_NAME: (staging_dir / _COOCCURRENCE_NAME).read_bytes(),
-    }
-    for path in sorted((staging_dir / "vector").rglob("*")):
+def _refuse_symlink(path: Path, staging_dir: Path) -> None:
+    """Fail closed if ``path`` is a symlink, BEFORE anything follows it.
+
+    A symlinked staging entry — a fixed-name top-level file or one nested under
+    ``vector/`` — would let ``read_bytes()``/``is_file()`` follow the link and inline
+    an arbitrary host file into the SIGNED, world-readable bundle (arbitrary-file
+    read). Refuse it rather than sign whatever the link points at.
+    """
+    if path.is_symlink():
         rel = path.relative_to(staging_dir).as_posix()
-        # Refuse symlinks BEFORE is_file() (which follows them): a symlinked entry
-        # would inline an arbitrary host file into the SIGNED bundle — arbitrary-file
-        # read. Fail closed rather than sign whatever the link points at.
-        if path.is_symlink():
-            raise ValueError(
-                f"refusing to bundle symlinked staging entry {rel!r}: a symlink "
-                "would inline an arbitrary file into the signed bundle"
-            )
+        raise ValueError(
+            f"refusing to bundle symlinked staging entry {rel!r}: a symlink "
+            "would inline an arbitrary file into the signed bundle"
+        )
+
+
+def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
+    """Read every bundle file into ``{relpath: bytes}`` (vector/ recursed).
+
+    Every entry — the fixed top-level files AND each file under ``vector/`` — is
+    checked with ``is_symlink()`` before it is read, so a planted symlink can never
+    inline an arbitrary host file into the signed bundle.
+    """
+    files: dict[str, bytes] = {}
+    for name in ("products.jsonl", _META_NAME, _RANKING_NAME, _COOCCURRENCE_NAME):
+        path = staging_dir / name
+        _refuse_symlink(path, staging_dir)
+        files[name] = path.read_bytes()
+    for path in sorted((staging_dir / "vector").rglob("*")):
+        _refuse_symlink(path, staging_dir)
         if path.is_file():
-            files[rel] = path.read_bytes()
+            files[path.relative_to(staging_dir).as_posix()] = path.read_bytes()
     return files

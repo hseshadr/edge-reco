@@ -410,6 +410,40 @@ def test_publish_rejects_symlinked_staging_entry(tmp_path: Path) -> None:
     assert not origin.exists()
 
 
+def test_publish_rejects_symlinked_top_level_entry(tmp_path: Path) -> None:
+    """A symlinked TOP-LEVEL entry (e.g. ``products.jsonl``) must be REFUSED too, not
+    only entries under ``vector/``: ``read_bytes()`` on a fixed-name staged file follows
+    the link and inlines an arbitrary host file into the SIGNED bundle (arbitrary read).
+    """
+    staging = _staging(tmp_path)
+    secret = tmp_path / "outside_secret.txt"
+    secret.write_text("ATTACKER-CONTROLLED SECRET", encoding="utf-8")
+    products = staging / "products.jsonl"
+    products.unlink()  # drop the real staged catalog...
+    products.symlink_to(secret)  # ...and point its name at a host file outside the tree
+
+    origin = tmp_path / "origin"
+    private, _ = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_bundle(
+            staging_dir=staging,
+            origin_dir=origin,
+            private_key_path=key_path,
+            catalog_id="amazon-demo",
+            version="v1",
+            embedding_model="m",
+            embedding_dim=384,
+            embedding_count=1,
+            product_count=1,
+        )
+
+    # The secret bytes never made it into a signed origin (build never ran).
+    assert not origin.exists()
+
+
 def test_bundle_files_contract() -> None:
     assert BUNDLE_FILES == (
         "products.jsonl",
