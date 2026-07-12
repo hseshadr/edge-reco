@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-07-12
+
 ### Fixed
 - **Deploy entrypoint invoked a nonexistent `edgereco sync` command**, so the
   demo container crashed on boot. The entrypoint now boots `edgereco serve` in
