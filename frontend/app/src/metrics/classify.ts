@@ -32,7 +32,10 @@ export function classifyResource(
 	}
 
 	// 1. Product images from Amazon's media CDN — not a backend call.
-	if (parsed.host.endsWith("media-amazon.com")) {
+	if (
+		parsed.hostname === "media-amazon.com" ||
+		parsed.hostname.endsWith(".media-amazon.com")
+	) {
 		return "image";
 	}
 

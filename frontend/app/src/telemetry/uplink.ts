@@ -296,9 +296,16 @@ export function getUplink(): Uplink {
 		singleton = disabledUplink();
 		return singleton;
 	}
+	let sessionId: string;
+	try {
+		sessionId = getSessionId();
+	} catch {
+		singleton = disabledUplink();
+		return singleton;
+	}
 	const built = createUplink({
 		url,
-		sessionId: getSessionId(),
+		sessionId,
 		storage: window.localStorage,
 		transport: realTransport,
 		beacon: realBeacon,
