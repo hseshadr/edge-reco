@@ -1,7 +1,9 @@
 import { registerSW } from "virtual:pwa-register";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import { App } from "./App.tsx";
+import i18n from "./i18n";
 import "./index.css";
 
 // Auto-update: a new shell is fetched in the background and taken over on the next
@@ -13,6 +15,8 @@ const rootElement = document.getElementById("root");
 if (rootElement === null) throw new Error("Root element #root not found");
 createRoot(rootElement).render(
 	<StrictMode>
-		<App />
+		<I18nextProvider i18n={i18n}>
+			<App />
+		</I18nextProvider>
 	</StrictMode>,
 );

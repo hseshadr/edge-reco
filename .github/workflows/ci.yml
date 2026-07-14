@@ -121,6 +121,47 @@ jobs:
       - name: Gate — quality half (pnpm gate:quality — the exact local command)
         run: pnpm run gate:quality
 
+      # i18n completeness gate (ported from AlmaMesh's scripts/verify-i18n.mjs):
+      # a REAL headless-Chromium drive of the production bundle gate:quality just
+      # built (app/dist), proving the offline bundled catalogs + mounted
+      # I18nextProvider render translated screens — not raw keys — with
+      # <html lang>=en and a clean console. The parity + component unit specs run
+      # inside gate:quality above; THIS proves the strings actually reach the page.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+      - name: Install Playwright Chromium + system deps
+        working-directory: frontend/app
+        run: pnpm exec playwright install --with-deps chromium
+      - name: i18n live-drive (verify-i18n against the built preview)
+        working-directory: frontend/app
+        run: |
+          set -euo pipefail
+          # Serve the already-built dist and poll until it accepts connections,
+          # then drive the i18n gate against it. The preview is torn down by the
+          # trap on step exit.
+          pnpm exec vite preview --port 4173 --strictPort &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null "http://localhost:4173"; then
+              echo "preview server is up (attempt $i)"
+              break
+            fi
+            if ! kill -0 "$preview_pid" 2>/dev/null; then
+              echo "preview server exited prematurely" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null "http://localhost:4173" || {
+            echo "preview server never became ready" >&2
+            exit 1
+          }
+          node scripts/verify-i18n.mjs http://localhost:4173
+
   # Playwright e2e: the storefront suite, the C1 sync + in-browser embed model-load
   # smoke suite (HF hosts BLOCKED — weights served same-origin from /models/), the
   # offline-PWA proof, and the cold-CDN-blocked proof (production build + real

@@ -1,5 +1,7 @@
+import { useTranslation } from "react-i18next";
 import {
-	LANDING_FOOTNOTE,
+	BUNDLE_SIZE,
+	CATALOG_PRODUCTS,
 	LANDING_METRICS,
 	type RepresentativeMetric,
 } from "../metrics/landing-figures";
@@ -8,48 +10,20 @@ interface LandingProps {
 	onLaunch: () => void;
 }
 
-interface Why {
-	title: string;
-	body: string;
-}
+/** The five "why" value cards, in display order. Copy lives in the landing ns. */
+const WHY_KEYS = [
+	"private",
+	"offline",
+	"instant",
+	"cheap",
+	"learning",
+] as const;
 
-interface Step {
-	n: string;
-	label: string;
-}
-
-const WHYS: readonly Why[] = [
-	{
-		title: "Private",
-		body: "By default, what your shoppers do stays on their own device. The optional learning loop is off until you switch it on.",
-	},
-	{
-		title: "Offline",
-		body: "Once the one-time download finishes, the store keeps working even if the network drops.",
-	},
-	{
-		title: "Instant",
-		body: "No trip to a server — answers come back on the shopper's own device in a blink.",
-	},
-	{
-		title: "Cheap to run",
-		body: "No per-search cloud bill. You hand out one small file, and each shopper's device does the work.",
-	},
-	{
-		title: "Always learning",
-		body: "Switch on an optional loop — off by default — and your store learns from anonymous, grouped activity to send everyone sharper picks. The shopping itself still runs entirely on each device.",
-	},
-];
-
-const STEPS: readonly Step[] = [
-	{ n: "1", label: "sync signed bundle" },
-	{ n: "2", label: "verify (Ed25519 + SHA-256, fail-closed)" },
-	{ n: "3", label: "persist to OPFS" },
-	{ n: "4", label: "load prebuilt index + embedder" },
-	{ n: "5", label: "hybrid search + rerank, in-tab" },
-];
+/** The five boot pipeline steps shown under "How it works", in display order. */
+const STEP_KEYS = ["sync", "verify", "persist", "load", "search"] as const;
 
 function MetricTile({ metric }: { metric: RepresentativeMetric }) {
+	const { t } = useTranslation("landing");
 	const toneClass = metric.tone ? ` metric-tile__num--${metric.tone}` : "";
 	return (
 		<div className="metric-tile">
@@ -59,8 +33,12 @@ function MetricTile({ metric }: { metric: RepresentativeMetric }) {
 					<span className="metric-tile__unit">{metric.unit}</span>
 				) : null}
 			</div>
-			<div className="metric-tile__label">{metric.label}</div>
-			<div className="metric-tile__sub">{metric.sub}</div>
+			<div className="metric-tile__label">
+				{t(`metrics.${metric.id}.label`)}
+			</div>
+			<div className="metric-tile__sub">
+				{t(`metrics.${metric.id}.sub`, { ...metric.vars })}
+			</div>
 		</div>
 	);
 }
@@ -73,38 +51,24 @@ function MetricTile({ metric }: { metric: RepresentativeMetric }) {
  * "JS heap (Chromium)", "illustrative" — keep the numbers truthful.
  */
 export function Landing({ onLaunch }: LandingProps) {
+	const { t } = useTranslation("landing");
 	return (
 		<main className="landing">
 			<div className="landing__wrap">
 				<header className="landing__hero">
-					<div className="landing__eyebrow">
-						search & recommendations that run on the shopper's device
-					</div>
+					<div className="landing__eyebrow">{t("eyebrow")}</div>
 					<div className="wordmark">
 						<span className="wordmark__name">EdgeReco</span>
 					</div>
 
 					<h1 className="section-head__title landing__title">
-						Your store gets busier. Your recommendation bill <em>shouldn't</em>.
+						{t("hero.titleLead")} <em>{t("hero.titleAccent")}</em>
+						{t("hero.titleTrail")}
 					</h1>
 
-					<p className="landing__kicker">
-						More shoppers, more power — not more cost.
-					</p>
+					<p className="landing__kicker">{t("hero.kicker")}</p>
 
-					<p className="landing__lede">
-						Today, every search and click runs through paid cloud services, and
-						your company pays the bill for each one — for every shopper — then
-						rents enough computing power to survive Black Friday all year.
-						EdgeReco flips that: your store sends each shopper's browser one
-						small file — your products plus the logic that ranks them — just
-						once. After that, search, ranking, and "you might also like" run
-						right on their device, with nothing sent back to a server. So every
-						shopper brings their own device — a phone, a laptop, an in-store
-						kiosk. The more popular you get, the more capacity you have, your
-						cost stays flat, and there's no server in the middle to slow down or
-						crash.
-					</p>
+					<p className="landing__lede">{t("hero.lede")}</p>
 
 					<div className="landing__cta">
 						<button
@@ -112,7 +76,7 @@ export function Landing({ onLaunch }: LandingProps) {
 							className="landing__btn landing__btn--primary"
 							onClick={onLaunch}
 						>
-							▶ Launch the live demo
+							{t("cta.launch")}
 						</button>
 						<a
 							className="landing__btn landing__btn--ghost"
@@ -120,49 +84,51 @@ export function Landing({ onLaunch }: LandingProps) {
 							target="_blank"
 							rel="noreferrer"
 						>
-							View source on GitHub
+							{t("cta.source")}
 						</a>
 					</div>
 					<p className="landing__demo-note">
-						What you're about to open is Nimbus — our example storefront, built
-						on 720 real products to show the engine running in a real shop.
+						{t("demoNote", { products: CATALOG_PRODUCTS })}
 					</p>
-					<p className="landing__footnote">{LANDING_FOOTNOTE}</p>
+					<p className="landing__footnote">
+						{t("footnote", { bundle: BUNDLE_SIZE })}
+					</p>
 				</header>
 
-				<section className="landing__band" aria-label="Performance">
+				<section className="landing__band" aria-label={t("band.ariaLabel")}>
 					<div className="landing__band-head">
 						<div className="section-head__title landing__band-title">
-							Why it's <em>fast</em> — and what it costs
+							{t("band.titleLead")} <em>{t("band.titleAccent")}</em>{" "}
+							{t("band.titleTrail")}
 						</div>
-						<div className="landing__band-live">representative figures</div>
+						<div className="landing__band-live">{t("band.live")}</div>
 					</div>
 					<div className="landing__tiles">
 						{LANDING_METRICS.map((metric) => (
-							<MetricTile key={metric.label} metric={metric} />
+							<MetricTile key={metric.id} metric={metric} />
 						))}
 					</div>
 				</section>
 
-				<section className="landing__why" aria-label="Why">
-					{WHYS.map((why) => (
-						<article key={why.title} className="landing__why-card">
-							<div className="landing__why-key">{why.title}</div>
-							<div className="landing__why-desc">{why.body}</div>
+				<section className="landing__why" aria-label={t("whys.ariaLabel")}>
+					{WHY_KEYS.map((key) => (
+						<article key={key} className="landing__why-card">
+							<div className="landing__why-key">{t(`whys.${key}.title`)}</div>
+							<div className="landing__why-desc">{t(`whys.${key}.body`)}</div>
 						</article>
 					))}
 				</section>
 
-				<section className="landing__how" aria-label="How it works">
-					<div className="landing__how-title">How it works</div>
+				<section className="landing__how" aria-label={t("how.ariaLabel")}>
+					<div className="landing__how-title">{t("how.title")}</div>
 					<ol className="landing__steps">
-						{STEPS.map((step, i) => (
-							<li key={step.n} className="landing__step-item">
+						{STEP_KEYS.map((key, i) => (
+							<li key={key} className="landing__step-item">
 								<span className="landing__step">
-									<b>{step.n}</b>
-									{step.label}
+									<b>{i + 1}</b>
+									{t(`how.steps.${key}`)}
 								</span>
-								{i < STEPS.length - 1 ? (
+								{i < STEP_KEYS.length - 1 ? (
 									<span className="landing__arrow" aria-hidden="true">
 										→
 									</span>

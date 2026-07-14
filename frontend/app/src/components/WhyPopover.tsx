@@ -1,20 +1,22 @@
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import type { ScoreComponents } from "../api/types";
 
 type BarTone = "signal" | "abyss";
 
 interface SignalRow {
 	key: keyof ScoreComponents;
-	label: string;
+	/** Key into `storefront:why.signals.<labelKey>`. */
+	labelKey: string;
 	tone: BarTone;
 }
 
 const SIGNAL_ROWS: SignalRow[] = [
-	{ key: "popularity", label: "Popularity", tone: "abyss" },
-	{ key: "category_match", label: "Category match", tone: "signal" },
-	{ key: "tag_match", label: "Tag match", tone: "signal" },
-	{ key: "brand_match", label: "Brand match", tone: "signal" },
-	{ key: "freshness", label: "Freshness", tone: "abyss" },
+	{ key: "popularity", labelKey: "popularity", tone: "abyss" },
+	{ key: "category_match", labelKey: "categoryMatch", tone: "signal" },
+	{ key: "tag_match", labelKey: "tagMatch", tone: "signal" },
+	{ key: "brand_match", labelKey: "brandMatch", tone: "signal" },
+	{ key: "freshness", labelKey: "freshness", tone: "abyss" },
 ];
 
 /** Clamps a raw component score to a 0..1 bar width as a CSS percentage. */
@@ -28,6 +30,7 @@ interface WhyPopoverProps {
 }
 
 export function WhyPopover({ open, components }: WhyPopoverProps) {
+	const { t } = useTranslation("storefront");
 	return (
 		<AnimatePresence initial={false}>
 			{open && (
@@ -39,12 +42,14 @@ export function WhyPopover({ open, components }: WhyPopoverProps) {
 					transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
 				>
 					<div className="why__inner">
-						<div className="why__head">Why this ranks here</div>
+						<div className="why__head">{t("why.head")}</div>
 
 						{SIGNAL_ROWS.map((row) => (
 							<div className="why__row" key={row.key}>
 								<div className="why__label">
-									<span className="why__label-name">{row.label}</span>
+									<span className="why__label-name">
+										{t(`why.signals.${row.labelKey}`)}
+									</span>
 									<span className="why__label-val">
 										{components[row.key].toFixed(2)}
 									</span>
@@ -62,7 +67,9 @@ export function WhyPopover({ open, components }: WhyPopoverProps) {
 
 						<div className="why__row why__row--penalty">
 							<div className="why__label">
-								<span className="why__label-name">Repetition penalty</span>
+								<span className="why__label-name">
+									{t("why.signals.repetitionPenalty")}
+								</span>
 								<span className="why__label-val">
 									{components.repetition_penalty.toFixed(2)}
 								</span>

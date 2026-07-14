@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMetrics } from "../metrics/store";
 
 /**
@@ -14,6 +15,7 @@ import { useMetrics } from "../metrics/store";
  * Reads the metrics store via useMetrics(); renders nothing it cannot measure.
  */
 export function MetricsStrip() {
+	const { t } = useTranslation("storefront");
 	const m = useMetrics();
 	const latencyMs = m.recommendMs ?? m.searchMs;
 
@@ -21,15 +23,25 @@ export function MetricsStrip() {
 		<div
 			className="metrics-strip"
 			role="status"
-			aria-label="Live engine metrics"
+			aria-label={t("metrics.ariaLabel")}
 		>
-			<MetricTile label="latency" value={msLabel(latencyMs)} />
-			<MetricTile label="backend calls" value={String(m.backendCalls)} steady />
-			<MetricTile label="cold start" value={secondsLabel(m.coldStartMs)} />
+			<MetricTile label={t("metrics.latency")} value={msLabel(latencyMs)} />
+			<MetricTile
+				label={t("metrics.backendCalls")}
+				value={String(m.backendCalls)}
+				steady
+			/>
+			<MetricTile
+				label={t("metrics.coldStart")}
+				value={secondsLabel(m.coldStartMs)}
+			/>
 			{m.heapMb !== null && (
-				<MetricTile label="JS heap" value={`${m.heapMb} MB`} />
+				<MetricTile label={t("metrics.heap")} value={`${m.heapMb} MB`} />
 			)}
-			<MetricTile label="catalog" value={countLabel(m.productCount)} />
+			<MetricTile
+				label={t("metrics.catalog")}
+				value={countLabel(m.productCount)}
+			/>
 		</div>
 	);
 }
