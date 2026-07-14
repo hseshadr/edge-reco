@@ -93,6 +93,7 @@ describe("transformers.js env — self-hosted model config (house standard §8.1
 		const fake = {
 			useBrowserCache: false,
 			allowLocalModels: false,
+			allowRemoteModels: true,
 			localModelPath: "sentinel",
 		};
 		const fakeOrt: { wasmPaths?: string } = {};
@@ -103,13 +104,31 @@ describe("transformers.js env — self-hosted model config (house standard §8.1
 		expect(fakeOrt.wasmPaths).toBe("/ort/");
 	});
 
+	// transformers.js defaults `allowRemoteModels` to true, so a missing/renamed
+	// local weight would silently fall back to an UNPINNED model on the HF CDN
+	// instead of the exact self-hosted export. The browser config pins it off —
+	// a broken /models/ mirror now throws (fail closed). Belt-and-suspenders on
+	// top of the cold-blocked e2e, which proves boot succeeds with CDNs aborted.
+	it("browser runtime: disables remote model fallback so a missing local weight fails closed", () => {
+		const fake = {
+			useBrowserCache: false,
+			allowLocalModels: false,
+			allowRemoteModels: true,
+			localModelPath: "sentinel",
+		};
+		configureTransformersEnv(fake, {}, false);
+		expect(fake.allowRemoteModels).toBe(false);
+	});
+
 	// In Node (this parity suite) the library's defaults stay untouched: the HF
-	// hub + filesystem cache serve the fp32 export the Python fixtures pin, and
+	// hub + filesystem cache serve the fp32 export the Python fixtures pin
+	// (allowRemoteModels stays true — test-time downloads are fine), and
 	// onnxruntime-node needs no wasm path.
 	it("node runtime: leaves the transformers.js env untouched", () => {
 		const fake = {
 			useBrowserCache: false,
 			allowLocalModels: false,
+			allowRemoteModels: true,
 			localModelPath: "sentinel",
 		};
 		const fakeOrt: { wasmPaths?: string } = {};
@@ -117,6 +136,7 @@ describe("transformers.js env — self-hosted model config (house standard §8.1
 		expect(fake).toEqual({
 			useBrowserCache: false,
 			allowLocalModels: false,
+			allowRemoteModels: true,
 			localModelPath: "sentinel",
 		});
 		expect(fakeOrt.wasmPaths).toBeUndefined();

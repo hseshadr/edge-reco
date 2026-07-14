@@ -12,11 +12,12 @@
 
 import { env, pipeline } from "@huggingface/transformers";
 
-/** The three transformers.js env knobs the self-hosting config owns. Structural,
+/** The transformers.js env knobs the self-hosting config owns. Structural,
  * so tests can drive the decision with a fake instead of the real module env. */
 export interface TransformersEnvLike {
 	useBrowserCache: boolean;
 	allowLocalModels: boolean;
+	allowRemoteModels: boolean;
 	localModelPath: string;
 }
 
@@ -42,7 +43,11 @@ export function isNodeRuntime(): boolean {
  * `localModelPath = "/models/"` resolve every file same-origin —
  * `/models/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx` — and the
  * cold-CDN-blocked e2e (app/tests/e2e-offline/cold-blocked.spec.ts) proves the
- * runtime has no CDN dependency. `useBrowserCache = true`: transformers.js owns
+ * runtime has no CDN dependency. `allowRemoteModels = false`: transformers.js
+ * defaults it to true, so a missing/renamed local weight would silently fall
+ * back to an UNPINNED model on the HF CDN — off, a broken /models/ mirror
+ * throws instead (fail closed; belt-and-suspenders on top of the cold-blocked
+ * e2e). `useBrowserCache = true`: transformers.js owns
  * its offline copy in the `transformers-cache` CacheStorage cache (safe on the
  * minified build only with vite `build.target: "es2022"` — see
  * app/vite.config.ts for the downlevel-crash scar). `wasmPaths = "/ort/"`:
@@ -67,6 +72,7 @@ export function configureTransformersEnv(
 	}
 	target.useBrowserCache = true;
 	target.allowLocalModels = true;
+	target.allowRemoteModels = false;
 	target.localModelPath = "/models/";
 	ortWasm.wasmPaths = "/ort/";
 }
