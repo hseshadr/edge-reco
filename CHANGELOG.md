@@ -5,6 +5,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- **Additive HTTP security headers + CI least-privilege permissions** (#32):
+  a `/*` block of non-resource-restricting headers (`X-Content-Type-Options:
+  nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `X-Frame-Options: SAMEORIGIN` + `Content-Security-Policy: frame-ancestors
+  'self'`, `Cross-Origin-Opener-Policy: same-origin`, a deny-by-default
+  `Permissions-Policy`) that cannot break the same-origin ONNX/WASM/worker
+  pipeline, and top-level `permissions: contents: read` on the CI and
+  security-audit workflows (deploy already had it).
+- **CodeQL URL and randomness alerts resolved** (#33): the product-image host
+  check now matches `media-amazon.com` exactly or as a proper subdomain
+  (was a spoofable `endsWith` substring test), and the session-id fallback
+  uses `crypto.getRandomValues` instead of `Math.random` — telemetry disables
+  itself rather than minting a weak id when Web Crypto is unavailable.
+- **The in-browser embedder now fails closed on a missing local model
+  weight**: `env.allowRemoteModels = false` (transformers.js defaults it to
+  true), so a missing/renamed file under the self-hosted `/models/` mirror
+  throws instead of silently falling back to an unpinned model on the
+  Hugging Face CDN. Belt-and-suspenders on top of the cold-CDN-blocked e2e;
+  the Node parity path (test-time HF fetch) is untouched.
+
+### Changed
+- **Production SEO, crawlability, and static delivery hardened** (#34): more
+  crawlable root HTML with tighter search snippets, route-specific Open
+  Graph/Twitter metadata for `/edgeproc`, `/github`, and `/faq`, sitemap
+  `lastmod` values, a real noindex `404.html` replacing the SPA catch-all for
+  unknown routes, HSTS + a resource-aware CSP with hashed JSON-LD, wildcard
+  CORS removed from same-origin static responses, and built-artifact
+  regression tests (`scripts/production-artifacts.test.mjs`) wired into the
+  frontend gate. Recommendation and search logic unchanged.
+- **A manual `Deploy edge-reco.com` dispatch without Cloudflare secrets now
+  skips cleanly (green no-op)** instead of failing at the guard step —
+  mirroring the auto path's preflight. Production deploys run via local
+  wrangler, so the workflow is expected to no-op until
+  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` are configured; the
+  fail-loud guard step remains as defense in depth.
+
 ## [0.11.0] — 2026-07-12
 
 ### Fixed
