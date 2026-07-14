@@ -1,4 +1,5 @@
 import { AnimatePresence } from "motion/react";
+import { useTranslation } from "react-i18next";
 import type { Product, SearchResult } from "../api/types";
 import { RailCard } from "./RailCard";
 
@@ -58,6 +59,7 @@ export function RailRow({
 	personalizing = false,
 	signalCount,
 }: RailRowProps) {
+	const { t } = useTranslation("storefront");
 	const headingId = `rail-${slug(railId)}`;
 	const cards = dedupeByTitle(results);
 
@@ -75,14 +77,14 @@ export function RailRow({
 									personalizing ? " rail__pulse--on" : ""
 								}`}
 							/>
-							{personalizing ? "personalizing…" : tagline}
+							{personalizing ? t("rail.personalizing") : tagline}
 						</div>
 					)}
 				</div>
 				{signalCount !== undefined && (
 					<span
 						className="clicks-badge"
-						title={`${signalCount} signals captured this session`}
+						title={t("rail.signals", { n: signalCount })}
 					>
 						{signalCount}
 					</span>
@@ -98,7 +100,7 @@ export function RailRow({
 				// biome-ignore lint/a11y/noNoninteractiveTabindex: a keyboard-scrollable region needs a tab stop
 				tabIndex={0}
 				className="rail__track"
-				aria-label={`${label}, scrollable`}
+				aria-label={t("rail.scrollable", { label })}
 			>
 				<ul className="rail__track-list">
 					<AnimatePresence initial={false}>

@@ -23,7 +23,7 @@ repo already vendors `@edgeproc/browser` at `packages/edgeproc-browser/`.
 edge-reco adopts `@edgeproc/errors` for the one user-facing failure the demo can
 actually hit: the one-time signed-bundle catalog sync (download / integrity /
 device-unsupported / timeout / network). The bundle-sync classification seam in
-`app/src/api/syncErrors.ts` (`classifyBundleError`) routes through this library's
+`app/src/api/syncErrors.ts` (`bundleErrorRegistry`) routes through this library's
 registry instead of an ad-hoc `if`-chain. The mapping is
 **behaviour-identical** — the same raw failure still produces the same coded
 error and the same existing `errors.*` i18n string. See

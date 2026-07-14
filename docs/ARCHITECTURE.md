@@ -128,6 +128,8 @@ A React + Vite SPA over `@edgeproc/browser`. The app boots through an intro land
 
 The SPA pins the verify public key (`public/public.key`) at build time — it never trusts the origin for the key.
 
+Two cross-cutting layers run under the UI: an **i18n layer** (`i18next` + `react-i18next`, initialized in `src/i18n.ts` with bundled offline English catalogs under `src/locales/`, so every user-facing string resolves through `t()`), and a **canonical-errors layer** (the vendored `@edgeproc/errors` at `frontend/packages/edgeproc-errors/`, wired via `src/api/syncErrors.ts` to classify bundle-sync failures into stable codes).
+
 ## Where edge-proc fits in
 
 edge-proc is the **signed-bundle delivery substrate**. EdgeReco depends on it for two things:

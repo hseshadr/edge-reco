@@ -1,8 +1,10 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { useInstallPrompt } from "../pwa/useInstallPrompt";
 
 /** A small, dismissible "Install app" pill shown only when the browser offers it. */
 export function InstallButton(): JSX.Element | null {
+	const { t } = useTranslation("storefront");
 	const { canInstall, promptInstall } = useInstallPrompt();
 	if (!canInstall) {
 		return null;
@@ -15,7 +17,7 @@ export function InstallButton(): JSX.Element | null {
 				void promptInstall();
 			}}
 		>
-			Install app
+			{t("install.cta")}
 		</button>
 	);
 }

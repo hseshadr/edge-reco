@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { Product } from "../api/types";
 import { ProductCard } from "./ProductCard";
 
@@ -36,6 +37,7 @@ export function ProductGrid({
 	favoritedIds,
 	registerDwell,
 }: ProductGridProps) {
+	const { t } = useTranslation("storefront");
 	return (
 		<section aria-label={title}>
 			<div className="section-head">
@@ -45,7 +47,7 @@ export function ProductGrid({
 				</div>
 				{!loading && (
 					<span className="section-head__count">
-						{products.length} item{products.length === 1 ? "" : "s"}
+						{t("grid.count", { count: products.length })}
 					</span>
 				)}
 			</div>
@@ -57,9 +59,7 @@ export function ProductGrid({
 					))}
 				</div>
 			) : products.length === 0 ? (
-				<p className="empty">
-					Nothing here yet. Try another search or category.
-				</p>
+				<p className="empty">{t("grid.empty")}</p>
 			) : (
 				<div className="grid">
 					{products.map((product, index) => (

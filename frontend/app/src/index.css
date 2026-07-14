@@ -469,6 +469,23 @@ input {
 	white-space: nowrap;
 }
 
+/* Search-results cue: a labelled banner pinned at the top of the shop the
+   moment a query is active, so a search reads as an obvious change of state
+   rather than a silent 4th section below the rails. */
+.results-cue {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 18px;
+	border-radius: 12px;
+	background: var(--signal-soft);
+	border: 1px solid var(--line);
+	border-left: 3px solid var(--signal);
+	color: var(--ink);
+	font-size: 15px;
+	font-weight: 600;
+}
+
 /* =========================================================================
    PRODUCT GRID + CARD
    ========================================================================= */

@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Product, ScoreComponents } from "../api/types";
 import { formatPrice } from "../format";
 import { ProductImage } from "./ProductImage";
@@ -20,6 +21,7 @@ export function RailCard({
 	components,
 	onPick,
 }: RailCardProps) {
+	const { t } = useTranslation("storefront");
 	const [showWhy, setShowWhy] = useState(false);
 
 	return (
@@ -58,7 +60,7 @@ export function RailCard({
 						onClick={() => setShowWhy((v) => !v)}
 						aria-expanded={showWhy}
 					>
-						{showWhy ? "hide" : "why?"}
+						{showWhy ? t("rail.hide") : t("rail.why")}
 					</button>
 					<WhyPopover open={showWhy} components={components} />
 				</>

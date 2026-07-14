@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { Product, SearchResult } from "../api/types";
 import { formatPrice } from "../format";
 import { ProductImage } from "./ProductImage";
@@ -30,12 +31,13 @@ export function ProductDetail({
 	onBack,
 	onPick,
 }: ProductDetailProps) {
+	const { t } = useTranslation("storefront");
 	const visibleRails = rails.filter((rail) => rail.results.length > 0);
 
 	return (
 		<div className="pdp">
 			<button type="button" className="pdp__back" onClick={onBack}>
-				&larr; Back to browse
+				{t("pdp.back")}
 			</button>
 
 			<article className="pdp__hero" aria-label={product.title}>
@@ -65,7 +67,7 @@ export function ProductDetail({
 						label={rail.label}
 						results={rail.results}
 						onPick={onPick}
-						tagline="in-tab ranking"
+						tagline={t("rail.taglineDefault")}
 					/>
 				))}
 			</div>

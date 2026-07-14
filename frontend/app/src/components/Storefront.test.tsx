@@ -203,6 +203,27 @@ describe("Storefront category + search", () => {
 			expect(mocks.search).toHaveBeenCalledWith("lamp", { limit: 24 }),
 		);
 	});
+
+	it("surfaces search results above the rails with a labelled cue", async () => {
+		render(<Storefront />);
+		// Browse view first: the rail sits above the grid before any query.
+		await screen.findByText("Grid Gadget");
+		await userEvent.type(screen.getByLabelText("Search products"), "lamp");
+
+		// The matched product renders, surfaced beneath a labelled "Results for …"
+		// cue that echoes the query.
+		const hit = await screen.findByText("Lamp Deluxe");
+		const cue = screen.getByText("Results for “lamp”");
+		const rail = screen.getByRole("heading", { name: "Recommended for you" });
+		expect(
+			cue.compareDocumentPosition(hit) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			hit.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		// Entering search pulled the freshly-surfaced results into view.
+		expect(window.scrollTo).toHaveBeenCalled();
+	});
 });
 
 describe("Storefront stale-search race (latest-wins)", () => {

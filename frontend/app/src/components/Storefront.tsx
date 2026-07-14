@@ -1,4 +1,6 @@
+import type { TFunction } from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { resolveBundleBaseUrl } from "../api/bundleUrl";
 import {
 	browse,
@@ -40,10 +42,6 @@ interface GridView {
 
 /** Home shows the grid + stacked rails; product shows the PDP for one item. */
 type View = { kind: "browse" } | { kind: "product"; product: Product };
-
-function errorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : "Unexpected error";
-}
 
 /**
  * Empty results for a rail spec the engine returned nothing for (degrade). An
@@ -88,16 +86,17 @@ async function safeResults(
  * product's vector rails.
  */
 export function Storefront() {
+	const { t } = useTranslation("storefront");
 	const [query, setQuery] = useState("");
 	const debouncedQuery = useDebounced(query, 300);
 	const [activeCategory, setActiveCategory] = useState<string | null>(null);
 	const [categories, setCategories] = useState<string[]>([]);
 
-	const [grid, setGrid] = useState<GridView>({
+	const [grid, setGrid] = useState<GridView>(() => ({
 		products: [],
-		kicker: "Catalog",
-		title: "Browse",
-	});
+		kicker: t("grid.kickerCatalog"),
+		title: t("grid.titleBrowse"),
+	}));
 	const [gridLoading, setGridLoading] = useState(true);
 
 	const [view, setView] = useState<View>({ kind: "browse" });
@@ -122,6 +121,14 @@ export function Storefront() {
 	// one that already resolved (typing "de" then "desk" races two in-flight queries).
 	const gridRequest = useRef(0);
 
+	// The engine's own message verbatim when present, else the translated
+	// "Unexpected error" fallback — the on-screen copy the error banner renders.
+	const toErrorMessage = useCallback(
+		(err: unknown): string =>
+			err instanceof Error ? err.message : t("banner.unexpectedError"),
+		[t],
+	);
+
 	const refreshRails = useCallback(async () => {
 		setPersonalizing(true);
 		try {
@@ -130,11 +137,11 @@ export function Storefront() {
 				await Promise.all(specs.map((s) => loadRail(s.strategy, s.label))),
 			);
 		} catch (err) {
-			setError(errorMessage(err));
+			setError(toErrorMessage(err));
 		} finally {
 			setPersonalizing(false);
 		}
-	}, []);
+	}, [toErrorMessage]);
 
 	const loadPdpRails = useCallback(async (product: Product) => {
 		const map = strategyMap.current;
@@ -197,19 +204,19 @@ export function Storefront() {
 		setGridLoading(true);
 		setError(null);
 		try {
-			const next = await loadGridInner(debouncedQuery, activeCategory);
+			const next = await loadGridInner(debouncedQuery, activeCategory, t);
 			// Latest-wins: drop a stale result whose newer query already landed.
 			if (seq !== gridRequest.current) return;
 			setCategories(next.categories);
 			setGrid(next.grid);
 		} catch (err) {
 			// A superseded query's failure is not the current view — swallow it.
-			if (seq === gridRequest.current) setError(errorMessage(err));
+			if (seq === gridRequest.current) setError(toErrorMessage(err));
 		} finally {
 			// Only the latest request owns the loading flag.
 			if (seq === gridRequest.current) setGridLoading(false);
 		}
-	}, [debouncedQuery, activeCategory]);
+	}, [debouncedQuery, activeCategory, t, toErrorMessage]);
 
 	useEffect(() => {
 		void loadGrid();
@@ -253,11 +260,11 @@ export function Storefront() {
 				await refreshRails();
 				return true;
 			} catch (err) {
-				setError(errorMessage(err));
+				setError(toErrorMessage(err));
 				return false;
 			}
 		},
-		[refreshRails, flashToast],
+		[refreshRails, flashToast, toErrorMessage],
 	);
 
 	// A pick records the click (so For You keeps learning + last_viewed is set)
@@ -310,6 +317,43 @@ export function Storefront() {
 		setView({ kind: "browse" });
 	}, []);
 
+	// When a search query is active, surface its results at the TOP of the shop —
+	// a labelled "Results for …" cue plus the grid, pinned right under the search
+	// box — with the personalized rails sliding below. Without this a query paints
+	// a 4th section beneath three unchanged rails and reads as if nothing happened.
+	const searchedQuery = debouncedQuery.trim();
+	const isSearching = searchedQuery !== "";
+	const wasSearchingRef = useRef(false);
+	useEffect(() => {
+		if (isSearching && !wasSearchingRef.current) {
+			// Entering search from browse: pull the freshly-surfaced results up.
+			window.scrollTo({ top: 0, behavior: "smooth" });
+		}
+		wasSearchingRef.current = isSearching;
+	}, [isSearching]);
+
+	const railStack = (
+		<RailStack
+			rails={rails}
+			onPick={onPick}
+			personalizing={personalizing}
+			signalCount={sessionSignals}
+		/>
+	);
+	const productGrid = (
+		<ProductGrid
+			products={grid.products}
+			kicker={grid.kicker}
+			title={grid.title}
+			loading={gridLoading}
+			onPick={onPick}
+			onFavorite={onFavorite}
+			onAddToCart={onAddToCart}
+			favoritedIds={favoritedIds}
+			registerDwell={registerDwell}
+		/>
+	);
+
 	return (
 		<>
 			<Header
@@ -326,7 +370,7 @@ export function Storefront() {
 			<main className="shop">
 				{error !== null && (
 					<div className="banner banner--error" role="alert">
-						<div className="banner__title">Couldn’t reach the engine</div>
+						<div className="banner__title">{t("banner.title")}</div>
 						<div>{error}</div>
 						<button
 							type="button"
@@ -336,7 +380,7 @@ export function Storefront() {
 								void refreshRails();
 							}}
 						>
-							Retry
+							{t("banner.retry")}
 						</button>
 					</div>
 				)}
@@ -348,25 +392,18 @@ export function Storefront() {
 						onBack={onBack}
 						onPick={onPick}
 					/>
+				) : isSearching ? (
+					<>
+						<div className="results-cue" role="status" aria-live="polite">
+							{t("grid.resultsFor", { query: searchedQuery })}
+						</div>
+						{productGrid}
+						{railStack}
+					</>
 				) : (
 					<>
-						<RailStack
-							rails={rails}
-							onPick={onPick}
-							personalizing={personalizing}
-							signalCount={sessionSignals}
-						/>
-						<ProductGrid
-							products={grid.products}
-							kicker={grid.kicker}
-							title={grid.title}
-							loading={gridLoading}
-							onPick={onPick}
-							onFavorite={onFavorite}
-							onAddToCart={onAddToCart}
-							favoritedIds={favoritedIds}
-							registerDwell={registerDwell}
-						/>
+						{railStack}
+						{productGrid}
 					</>
 				)}
 			</main>
@@ -404,6 +441,7 @@ interface GridResult {
 async function loadGridInner(
 	debouncedQuery: string,
 	activeCategory: string | null,
+	t: TFunction,
 ): Promise<GridResult> {
 	const trimmed = debouncedQuery.trim();
 	if (trimmed !== "") {
@@ -411,7 +449,11 @@ async function loadGridInner(
 		const products = res.results.map((r) => r.product);
 		return {
 			categories: deriveCategories(products),
-			grid: { products, kicker: "Search results", title: `"${trimmed}"` },
+			grid: {
+				products,
+				kicker: t("grid.kickerSearch"),
+				title: `"${trimmed}"`,
+			},
 		};
 	}
 	const res = await browse(
@@ -423,8 +465,8 @@ async function loadGridInner(
 		categories: res.categories,
 		grid: {
 			products: res.products,
-			kicker: "Catalog",
-			title: activeCategory ?? "Browse",
+			kicker: t("grid.kickerCatalog"),
+			title: activeCategory ?? t("grid.titleBrowse"),
 		},
 	};
 }
