@@ -2,15 +2,17 @@
 #
 # AUTO-DEPLOY: runs automatically after the "CI" workflow passes on `main`
 # (and on manual workflow_dispatch). It stays INERT until these repository
-# secrets exist — when they are absent the auto-run SKIPS cleanly (no red X);
-# a manual run fails fast at the guard step. Secrets required:
+# secrets exist — when they are absent BOTH the auto-run and a manual run
+# SKIP cleanly (green no-op, no red X). Secrets required:
 #
 #   CLOUDFLARE_API_TOKEN    Pages:Edit-scoped API token
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account that owns the `edge-reco`
 #                           Pages project + the edge-reco.com zone
 #
-# A manual run without the secrets fails fast at the guard step with a clear
-# message — it cannot half-deploy. The auto-run skips instead of failing.
+# Production deploys run via local wrangler (docs/DEPLOY.md), so until the
+# secrets are added this workflow is EXPECTED to no-op — never to fail. It
+# cannot half-deploy: the deploy job only runs when the preflight secrets
+# check passes, with a fail-loud guard step kept as defense in depth.
 # SPA-ONLY: a static `build:pages` artifact (signed catalog copied same-origin
 # into dist/bundle) — no R2, no bundle signing key in CI. See docs/DEPLOY.md.
 #
@@ -36,12 +38,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Only auto-deploy when the triggering CI run succeeded on main. For a manual
-  # dispatch this gate is a pass-through (deploy runs regardless). When the
-  # deploy secrets are absent, configured=false makes the auto-run SKIP cleanly
-  # instead of red-X'ing every push to main.
+  # Gate every deploy. Trigger gate: the CI run that fired this must have
+  # succeeded on main (a manual dispatch passes through). Secrets gate: when
+  # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are absent, configured=false
+  # makes BOTH the auto-run and a manual dispatch SKIP cleanly (green no-op)
+  # instead of red-X'ing the run.
   preflight:
-    name: Gate auto-deploy
+    name: Gate deploy
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -60,20 +63,21 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Deploy secrets not configured — skipping auto-deploy. See .github/workflows/deploy.yml header."
+            echo "::notice::Deploy secrets not configured — skipping deploy (clean no-op). See .github/workflows/deploy.yml header."
           fi
 
   deploy:
     name: Build + deploy to Cloudflare Pages
     needs: preflight
-    # Auto-runs only when configured; a manual dispatch always proceeds (and
-    # then fails loudly at the guard step if any secret is missing).
-    if: >-
-      needs.preflight.outputs.configured == 'true' ||
-      github.event_name == 'workflow_dispatch'
+    # Runs ONLY when the secrets are configured — auto-run and manual dispatch
+    # alike skip cleanly otherwise (mirroring the auto path's preflight; a
+    # manual dispatch used to punch through and red-X at the guard step).
+    if: needs.preflight.outputs.configured == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Guard — refuse to run until the deploy secrets are configured
+        # Unreachable while preflight gates this job — kept as defense in depth
+        # should the `if` condition ever drift.
         # Runs BEFORE checkout — run from the always-present workspace root.
         working-directory: ${{ github.workspace }}
         env:
