@@ -24,6 +24,7 @@
 	},
 	"dependencies": {
 		"@edgeproc/browser": "workspace:*",
+		"@edgeproc/errors": "workspace:*",
 		"@hpcc-js/wasm-zstd": "^1.13.4",
 		"@huggingface/transformers": "^4.2.0",
 		"@noble/ed25519": "^3.1.0",

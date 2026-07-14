@@ -7,6 +7,7 @@ import {
 	useState,
 } from "react";
 import { bootstrap } from "./api/client";
+import { bootErrorMessage } from "./api/syncErrors";
 import { BootScreen } from "./components/BootScreen";
 import { Footer } from "./components/Footer";
 import { InstallButton } from "./components/InstallButton";
@@ -14,10 +15,6 @@ import { Landing } from "./components/Landing";
 import { OfflineBadge } from "./components/OfflineBadge";
 import { Storefront } from "./components/Storefront";
 import { record } from "./metrics/store";
-
-function errorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : "Unexpected error";
-}
 
 /**
  * App is the launch gate. It first shows the Landing intro and starts NOTHING —
@@ -53,7 +50,7 @@ export function App() {
 				record({ coldStartMs: performance.now() - t0 });
 				setReady(true);
 			})
-			.catch((err: unknown) => setError(errorMessage(err)));
+			.catch((err: unknown) => setError(bootErrorMessage(err)));
 	}, [launched, attempt]);
 
 	const onRetry = useCallback(() => setAttempt((n) => n + 1), []);
