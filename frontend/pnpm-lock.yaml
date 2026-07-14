@@ -21,6 +21,9 @@ importers:
       '@edgeproc/browser':
         specifier: workspace:*
         version: link:../packages/edgeproc-browser
+      '@edgeproc/errors':
+        specifier: workspace:*
+        version: link:../packages/edgeproc-errors
       '@hpcc-js/wasm-zstd':
         specifier: ^1.13.4
         version: 1.13.4
@@ -131,6 +134,24 @@ importers:
       vite:
         specifier: ^8.1.4
         version: 8.1.4(@types/node@26.1.1)(terser@5.49.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1)(terser@5.49.0))
+
+  packages/edgeproc-errors:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.3
+        version: 2.5.3
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: ~7.0.2
+        version: 7.0.2
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1)(terser@5.49.0))

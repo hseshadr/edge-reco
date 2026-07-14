@@ -1,0 +1,24 @@
+{
+  "name": "@edgeproc/errors",
+  "private": true,
+  "version": "0.1.0-dev",
+  "license": "MIT",
+  "type": "module",
+  "description": "Canonical error glue: register a per-app catalog, classify raw failures into stable codes, describe via your own i18next, serialize to RFC 9457 Problem Details. Zero runtime deps. Vendored from the edgeproc/errors repo (the portfolio canonical-errors standard).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.3",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "~7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
