@@ -19,16 +19,19 @@
 		"test:e2e:offline": "VITE_BUNDLE_BASE_URL=http://localhost:8921/catalog pnpm run build && playwright test -c playwright.offline.config.ts",
 		"typecheck": "tsc -b",
 		"gen-icons": "node scripts/gen-icons.mjs",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"verify:i18n": "node scripts/verify-i18n.mjs"
 	},
 	"dependencies": {
 		"@edgeproc/browser": "workspace:*",
 		"@hpcc-js/wasm-zstd": "^1.13.4",
 		"@huggingface/transformers": "^4.2.0",
 		"@noble/ed25519": "^3.1.0",
+		"i18next": "^26.3.1",
 		"motion": "^12.42.2",
 		"react": "^19.2.7",
-		"react-dom": "^19.2.7"
+		"react-dom": "^19.2.7",
+		"react-i18next": "^17.0.8"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.3",

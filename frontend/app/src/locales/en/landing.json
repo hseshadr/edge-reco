@@ -1,0 +1,83 @@
+{
+	"eyebrow": "search & recommendations that run on the shopper's device",
+	"hero": {
+		"titleLead": "Your store gets busier. Your recommendation bill",
+		"titleAccent": "shouldn't",
+		"titleTrail": ".",
+		"kicker": "More shoppers, more power — not more cost.",
+		"lede": "Today, every search and click runs through paid cloud services, and your company pays the bill for each one — for every shopper — then rents enough computing power to survive Black Friday all year. EdgeReco flips that: your store sends each shopper's browser one small file — your products plus the logic that ranks them — just once. After that, search, ranking, and \"you might also like\" run right on their device, with nothing sent back to a server. So every shopper brings their own device — a phone, a laptop, an in-store kiosk. The more popular you get, the more capacity you have, your cost stays flat, and there's no server in the middle to slow down or crash."
+	},
+	"cta": {
+		"launch": "▶ Launch the live demo",
+		"source": "View source on GitHub"
+	},
+	"demoNote": "What you're about to open is Nimbus — our example storefront, built on {{products}} real products to show the engine running in a real shop.",
+	"band": {
+		"ariaLabel": "Performance",
+		"titleLead": "Why it's",
+		"titleAccent": "fast",
+		"titleTrail": "— and what it costs",
+		"live": "representative figures"
+	},
+	"metrics": {
+		"latency": {
+			"label": "per recommendation",
+			"sub": "in-tab, no network hop"
+		},
+		"backendCalls": {
+			"label": "backend calls after sync",
+			"sub": "search · recommend · rerank — all local"
+		},
+		"coldStart": {
+			"label": "cold start to first results",
+			"sub": "verify + load {{products}} products"
+		},
+		"heap": {
+			"label": "JS heap (Chromium)",
+			"sub": "whole engine, in the tab"
+		},
+		"cost": {
+			"label": "inference / 1k recs",
+			"sub": "illustrative · only CDN bandwidth"
+		},
+		"catalog": {
+			"label": "real products, in-tab",
+			"sub": "{{categories}} categories · {{bundle}} bundle"
+		}
+	},
+	"footnote": "First load fetches a ~{{bundle}} signed bundle + a one-time embedding model, then everything is cached and offline.",
+	"whys": {
+		"ariaLabel": "Why",
+		"private": {
+			"title": "Private",
+			"body": "By default, what your shoppers do stays on their own device. The optional learning loop is off until you switch it on."
+		},
+		"offline": {
+			"title": "Offline",
+			"body": "Once the one-time download finishes, the store keeps working even if the network drops."
+		},
+		"instant": {
+			"title": "Instant",
+			"body": "No trip to a server — answers come back on the shopper's own device in a blink."
+		},
+		"cheap": {
+			"title": "Cheap to run",
+			"body": "No per-search cloud bill. You hand out one small file, and each shopper's device does the work."
+		},
+		"learning": {
+			"title": "Always learning",
+			"body": "Switch on an optional loop — off by default — and your store learns from anonymous, grouped activity to send everyone sharper picks. The shopping itself still runs entirely on each device."
+		}
+	},
+	"how": {
+		"ariaLabel": "How it works",
+		"title": "How it works",
+		"steps": {
+			"sync": "sync signed bundle",
+			"verify": "verify (Ed25519 + SHA-256, fail-closed)",
+			"persist": "persist to OPFS",
+			"load": "load prebuilt index + embedder",
+			"search": "hybrid search + rerank, in-tab"
+		}
+	}
+}

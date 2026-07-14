@@ -1,14 +1,10 @@
 import type { BootStage } from "@edgeproc/browser";
+import { useTranslation } from "react-i18next";
 
 interface BootScreenProps {
 	stage: BootStage | null;
 	error: string | null;
 	onRetry: () => void;
-}
-
-interface StepView {
-	readonly label: string;
-	readonly detail: string;
 }
 
 const ORDER: ReadonlyArray<BootStage["kind"]> = [
@@ -18,17 +14,8 @@ const ORDER: ReadonlyArray<BootStage["kind"]> = [
 	"ready",
 ];
 
-const STEPS: ReadonlyArray<StepView> = [
-	{
-		label: "Syncing the signed catalog bundle",
-		detail: "ed25519 + sha256, into OPFS",
-	},
-	{ label: "Reassembling the index", detail: "products, embeddings, vectors" },
-	{
-		label: "Loading the embedding model",
-		detail: "all-MiniLM-L6-v2 in a Worker (~25 MB, cached)",
-	},
-];
+/** The three visible boot steps, in order. Copy lives in `errors:boot.steps`. */
+const STEP_KEYS = ["syncing", "reassembling", "loading"] as const;
 
 /** Map a live stage to the index of the currently-active step (0-based). */
 function activeStep(stage: BootStage | null): number {
@@ -50,6 +37,7 @@ function activeStep(stage: BootStage | null): number {
  * near-instant offline.
  */
 export function BootScreen({ stage, error, onRetry }: BootScreenProps) {
+	const { t } = useTranslation("errors");
 	const current = activeStep(stage);
 	return (
 		<div className="boot" role="status" aria-live="polite">
@@ -58,17 +46,14 @@ export function BootScreen({ stage, error, onRetry }: BootScreenProps) {
 					<span className="wordmark__name">
 						Nimbus<span className="wordmark__dot">.</span>
 					</span>
-					<span className="wordmark__tag">on-device, in your browser</span>
+					<span className="wordmark__tag">{t("boot.tagline")}</span>
 				</div>
 
 				{error === null ? (
 					<>
-						<p className="boot__lede">
-							Booting the engine in your tab — no backend, no server-side
-							search.
-						</p>
+						<p className="boot__lede">{t("boot.lede")}</p>
 						<ol className="boot__steps">
-							{STEPS.map((step, index) => {
+							{STEP_KEYS.map((key, index) => {
 								const state =
 									index < current
 										? "boot__step--done"
@@ -76,11 +61,15 @@ export function BootScreen({ stage, error, onRetry }: BootScreenProps) {
 											? "boot__step--active"
 											: "boot__step--pending";
 								return (
-									<li key={step.label} className={`boot__step ${state}`}>
+									<li key={key} className={`boot__step ${state}`}>
 										<span className="boot__dot" aria-hidden="true" />
 										<span className="boot__step-text">
-											<span className="boot__step-label">{step.label}</span>
-											<span className="boot__step-detail">{step.detail}</span>
+											<span className="boot__step-label">
+												{t(`boot.steps.${key}.label`)}
+											</span>
+											<span className="boot__step-detail">
+												{t(`boot.steps.${key}.detail`)}
+											</span>
 										</span>
 									</li>
 								);
@@ -89,10 +78,10 @@ export function BootScreen({ stage, error, onRetry }: BootScreenProps) {
 					</>
 				) : (
 					<div className="boot__error">
-						<div className="boot__error-title">Couldn’t start the engine</div>
+						<div className="boot__error-title">{t("boot.errorTitle")}</div>
 						<p className="boot__error-copy">{error}</p>
 						<button type="button" className="banner__retry" onClick={onRetry}>
-							Retry
+							{t("boot.retry")}
 						</button>
 					</div>
 				)}

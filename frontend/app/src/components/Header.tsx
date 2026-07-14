@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface HeaderProps {
 	query: string;
 	onQueryChange: (value: string) => void;
@@ -15,6 +17,7 @@ export function Header({
 	onSelectCategory,
 	cartCount,
 }: HeaderProps) {
+	const { t } = useTranslation("storefront");
 	return (
 		<header className="nimbus-header">
 			<div className="nimbus-header__bar">
@@ -22,7 +25,7 @@ export function Header({
 					<span className="wordmark__name">
 						Nimbus<span className="wordmark__dot">.</span>
 					</span>
-					<span className="wordmark__tag">the everything store</span>
+					<span className="wordmark__tag">{t("brand.tagline")}</span>
 				</div>
 
 				<div className="search">
@@ -51,16 +54,16 @@ export function Header({
 					<input
 						className="search__input"
 						type="search"
-						placeholder="Search the everything store…"
+						placeholder={t("search.placeholder")}
 						value={query}
 						onChange={(e) => onQueryChange(e.target.value)}
-						aria-label="Search products"
+						aria-label={t("search.label")}
 					/>
 				</div>
 
 				<div className="session-pill">
 					<span className="session-pill__dot" />
-					on-device personalization
+					{t("sessionPill")}
 				</div>
 
 				<a
@@ -68,16 +71,16 @@ export function Header({
 					href="https://github.com/hseshadr/edge-reco"
 					target="_blank"
 					rel="noreferrer"
-					title="EdgeReco is open source — view hseshadr/edge-reco on GitHub"
+					title={t("openSourceTitle")}
 				>
-					Open source
+					{t("openSource")}
 					<span aria-hidden="true"> ↗</span>
 				</a>
 
 				{cartCount > 0 && (
 					<span
 						className="cart-pill"
-						title={`${cartCount} added to cart this session (demo signal — nothing is purchased)`}
+						title={t("cart.title", { added: cartCount })}
 					>
 						<svg
 							width="15"
@@ -102,13 +105,13 @@ export function Header({
 			</div>
 
 			{categories.length > 0 && (
-				<nav className="chips" aria-label="Categories">
+				<nav className="chips" aria-label={t("categories.label")}>
 					<button
 						type="button"
 						className={`chip${activeCategory === null ? " chip--active" : ""}`}
 						onClick={() => onSelectCategory(null)}
 					>
-						All
+						{t("categories.all")}
 					</button>
 					{categories.map((category) => (
 						<button

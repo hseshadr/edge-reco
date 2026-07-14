@@ -1,0 +1,23 @@
+{
+	"offline": "Offline — running fully on your device",
+	"boot": {
+		"tagline": "on-device, in your browser",
+		"lede": "Booting the engine in your tab — no backend, no server-side search.",
+		"steps": {
+			"syncing": {
+				"label": "Syncing the signed catalog bundle",
+				"detail": "ed25519 + sha256, into OPFS"
+			},
+			"reassembling": {
+				"label": "Reassembling the index",
+				"detail": "products, embeddings, vectors"
+			},
+			"loading": {
+				"label": "Loading the embedding model",
+				"detail": "all-MiniLM-L6-v2 in a Worker (~25 MB, cached)"
+			}
+		},
+		"errorTitle": "Couldn’t start the engine",
+		"retry": "Retry"
+	}
+}

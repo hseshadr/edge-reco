@@ -1,0 +1,38 @@
+{
+	"brand": {
+		"tagline": "the everything store"
+	},
+	"search": {
+		"placeholder": "Search the everything store…",
+		"label": "Search products"
+	},
+	"sessionPill": "on-device personalization",
+	"openSource": "Open source",
+	"openSourceTitle": "EdgeReco is open source — view hseshadr/edge-reco on GitHub",
+	"cart": {
+		"title": "{{added}} added to cart this session (demo signal — nothing is purchased)"
+	},
+	"categories": {
+		"all": "All",
+		"label": "Categories"
+	},
+	"metrics": {
+		"ariaLabel": "Live engine metrics",
+		"latency": "latency",
+		"backendCalls": "backend calls",
+		"coldStart": "cold start",
+		"heap": "JS heap",
+		"catalog": "catalog"
+	},
+	"why": {
+		"head": "Why this ranks here",
+		"signals": {
+			"popularity": "Popularity",
+			"categoryMatch": "Category match",
+			"tagMatch": "Tag match",
+			"brandMatch": "Brand match",
+			"freshness": "Freshness",
+			"repetitionPenalty": "Repetition penalty"
+		}
+	}
+}

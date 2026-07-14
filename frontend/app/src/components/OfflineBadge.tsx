@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 
 function subscribe(onChange: () => void): () => void {
 	window.addEventListener("online", onChange);
@@ -16,6 +17,7 @@ function subscribe(onChange: () => void): () => void {
  * dropped connection is a non-event. It never lies about connectivity.
  */
 export function OfflineBadge(): JSX.Element | null {
+	const { t } = useTranslation("errors");
 	const online = useSyncExternalStore(
 		subscribe,
 		() => navigator.onLine,
@@ -26,7 +28,7 @@ export function OfflineBadge(): JSX.Element | null {
 	}
 	return (
 		<div className="offline-badge" role="status">
-			Offline — running fully on your device
+			{t("offline")}
 		</div>
 	);
 }
