@@ -5,6 +5,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Internationalization (i18next) across the app** (#36): `i18next` +
+  `react-i18next` initialized in `src/i18n.ts` with bundled **offline** English
+  catalogs (no runtime fetch), so user-facing copy resolves through `t()` and a
+  locale can later be added as a pure copy-paste. Landing, Footer, Header,
+  MetricsStrip, WhyPopover, BootScreen, and OfflineBadge copy moved into the
+  `common` / `landing` / `storefront` / `errors` namespaces; numeric facts still
+  interpolate from `landing-figures.ts`. `locales.parity.test.ts` auto-enforces
+  exact key parity for any future locale, and a headless-Chromium
+  `scripts/verify-i18n.mjs` gate asserts the Landing renders translated copy with
+  a clean console in CI.
+- **Canonical errors: vendored `@edgeproc/errors` + bundle-sync classification**
+  (#37): the portfolio canonical-errors standard adopted at
+  `frontend/packages/edgeproc-errors/` (zero runtime deps, TS source consumed
+  directly), with a new `app/src/api/syncErrors.ts` seam whose
+  `bundleErrorRegistry` classifies the demo's one user-facing failure — the
+  signed catalog-bundle sync — into stable canonical codes
+  (`bundle.download_failed`, `bundle.integrity_failed`, `bundle.timeout`,
+  `bundle.device_unsupported`, `net.unreachable`, `internal.unknown`) keyed on
+  the engine's typed error names. Behaviour-identical: the same raw failure still
+  renders the same message and the same `errors.*` i18n string.
+
 ### Security
 - **Additive HTTP security headers + CI least-privilege permissions** (#32):
   a `/*` block of non-resource-restricting headers (`X-Content-Type-Options:

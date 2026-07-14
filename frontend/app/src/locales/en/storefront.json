@@ -34,5 +34,49 @@
 			"freshness": "Freshness",
 			"repetitionPenalty": "Repetition penalty"
 		}
+	},
+	"syncBadge": {
+		"local": "Running fully on-device · no uplink",
+		"armed": "Flywheel uplink armed · interactions sync to cloud",
+		"synced_one": "{{count}} interaction synced to cloud",
+		"synced_other": "{{count}} interactions synced to cloud"
+	},
+	"install": {
+		"cta": "Install app"
+	},
+	"banner": {
+		"title": "Couldn’t reach the engine",
+		"retry": "Retry",
+		"unexpectedError": "Unexpected error"
+	},
+	"grid": {
+		"kickerCatalog": "Catalog",
+		"kickerSearch": "Search results",
+		"titleBrowse": "Browse",
+		"resultsFor": "Results for “{{query}}”",
+		"empty": "Nothing here yet. Try another search or category.",
+		"count_one": "{{count}} item",
+		"count_other": "{{count}} items"
+	},
+	"card": {
+		"addToTaste": "Add to taste →",
+		"addToTasteAria": "Add “{{title}}” to your taste",
+		"favoriteAria": "Favorite “{{title}}”",
+		"unfavoriteAria": "Unfavorite “{{title}}”",
+		"addToCartAria": "Add “{{title}}” to cart"
+	},
+	"pdp": {
+		"back": "← Back to browse"
+	},
+	"rail": {
+		"personalizing": "personalizing…",
+		"taglineForYou": "live re-ranking",
+		"taglineTrending": "by popularity",
+		"taglineNewArrivals": "freshest first",
+		"taglineDefault": "in-tab ranking",
+		"signals": "{{n}} signals captured this session",
+		"scrollable": "{{label}}, scrollable",
+		"why": "why?",
+		"hide": "hide"
 	}
 }

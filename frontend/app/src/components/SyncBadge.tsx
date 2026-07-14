@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { onUplinkSynced, uplinkEnabled } from "../telemetry/uplink";
 
 /**
@@ -8,6 +9,7 @@ import { onUplinkSynced, uplinkEnabled } from "../telemetry/uplink";
  * plainly that everything runs on-device, so the headline stays legible.
  */
 export function SyncBadge() {
+	const { t } = useTranslation("storefront");
 	const enabled = uplinkEnabled();
 	const [synced, setSynced] = useState(0);
 
@@ -24,7 +26,7 @@ export function SyncBadge() {
 		return (
 			<div className="sync-badge sync-badge--local" role="status">
 				<span className="sync-badge__dot" />
-				Running fully on-device · no uplink
+				{t("syncBadge.local")}
 			</div>
 		);
 	}
@@ -33,8 +35,8 @@ export function SyncBadge() {
 		<div className="sync-badge" role="status">
 			<span className="sync-badge__dot" />
 			{synced === 0
-				? "Flywheel uplink armed · interactions sync to cloud"
-				: `${synced} interaction${synced === 1 ? "" : "s"} synced to cloud`}
+				? t("syncBadge.armed")
+				: t("syncBadge.synced", { count: synced })}
 		</div>
 	);
 }

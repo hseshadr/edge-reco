@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { Product, SearchResult } from "../api/types";
 import { RailRow } from "./RailRow";
 import type { RailSpec } from "./railSelection";
@@ -17,10 +18,15 @@ interface RailStackProps {
 	signalCount: number;
 }
 
-const TAGLINES: Readonly<Record<string, string>> = {
-	for_you: "live re-ranking",
-	trending: "by popularity",
-	new_arrivals: "freshest first",
+/**
+ * Per-strategy tagline i18n keys (into the `storefront` namespace). The label
+ * copy itself lives in the catalog; this maps only which key each rail uses,
+ * with `rail.taglineDefault` as the fallback for any other strategy.
+ */
+const TAGLINE_KEYS: Readonly<Record<string, string>> = {
+	for_you: "rail.taglineForYou",
+	trending: "rail.taglineTrending",
+	new_arrivals: "rail.taglineNewArrivals",
 };
 
 /**
@@ -34,6 +40,7 @@ export function RailStack({
 	personalizing,
 	signalCount,
 }: RailStackProps) {
+	const { t } = useTranslation("storefront");
 	const nonEmpty = rails.filter((rail) => rail.results.length > 0);
 	if (nonEmpty.length === 0) {
 		return null;
@@ -49,7 +56,7 @@ export function RailStack({
 						label={spec.label}
 						results={results}
 						onPick={onPick}
-						tagline={TAGLINES[spec.strategy] ?? "in-tab ranking"}
+						tagline={t(TAGLINE_KEYS[spec.strategy] ?? "rail.taglineDefault")}
 						personalizing={isForYou && personalizing}
 						{...(isForYou ? { signalCount } : {})}
 					/>

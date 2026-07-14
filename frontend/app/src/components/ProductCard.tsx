@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import type { Product } from "../api/types";
 import { formatPrice } from "../format";
 import { ProductImage } from "./ProductImage";
@@ -29,6 +30,7 @@ export function ProductCard({
 	favorited,
 	dwellRef,
 }: ProductCardProps) {
+	const { t } = useTranslation("storefront");
 	return (
 		<motion.article
 			className="card"
@@ -45,7 +47,7 @@ export function ProductCard({
 			<button
 				type="button"
 				className="card__overlay"
-				aria-label={`Add “${product.title}” to your taste`}
+				aria-label={t("card.addToTasteAria", { title: product.title })}
 				onClick={() => onPick(product)}
 			/>
 			<div className="card__actions">
@@ -57,8 +59,8 @@ export function ProductCard({
 					aria-pressed={favorited}
 					aria-label={
 						favorited
-							? `Unfavorite “${product.title}”`
-							: `Favorite “${product.title}”`
+							? t("card.unfavoriteAria", { title: product.title })
+							: t("card.favoriteAria", { title: product.title })
 					}
 					onClick={() => onFavorite(product)}
 				>
@@ -80,7 +82,7 @@ export function ProductCard({
 				<button
 					type="button"
 					className="card__action"
-					aria-label={`Add “${product.title}” to cart`}
+					aria-label={t("card.addToCartAria", { title: product.title })}
 					onClick={() => onAddToCart(product)}
 				>
 					<svg
@@ -116,7 +118,7 @@ export function ProductCard({
 					<span className="card__price">
 						{formatPrice(product.price, product.currency)}
 					</span>
-					<span className="card__pick">Add to taste &rarr;</span>
+					<span className="card__pick">{t("card.addToTaste")}</span>
 				</div>
 			</div>
 		</motion.article>
