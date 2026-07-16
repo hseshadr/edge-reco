@@ -13,7 +13,7 @@
 ## Northstar status (verified 2026-07-16)
 
 **The reference storefront is live, offline-capable, and measurable in the browser.**
-The production source is commit `d5637b1`; hosted CI passed, and the exact build is
+At this verification, the deployed application code was commit `d5637b1`; hosted CI passed, and the exact build is
 live at both `https://edge-reco.com` and an immutable Cloudflare Pages deployment.
 The browser smoke test measured a 3.24 s cold boot, 16.9 ms search, 1.2 ms
 recommendation, about 18.4 MB JS heap, zero external-origin requests, and zero
