@@ -87,6 +87,9 @@ def bundle(
         int, typer.Option(help="Number of embedding rows in vector/embeddings.f32")
     ] = 0,
     product_count: Annotated[int, typer.Option(help="Number of products in the catalog")] = 0,
+    sequence: Annotated[
+        int, typer.Option(help="Monotonic signed release sequence (increment every publish)")
+    ] = 1,
 ) -> None:
     """Build a signed, content-addressed bundle (FAISS index + catalog) origin."""
     from edgereco.catalog.publish import publish_bundle
@@ -101,6 +104,7 @@ def bundle(
         embedding_dim=embedding_dim,
         embedding_count=embedding_count,
         product_count=product_count,
+        sequence=sequence,
     )
     typer.echo(f"Built bundle '{catalog_id}' v{version} → {origin_dir}")
 
@@ -359,11 +363,11 @@ def search(
     """Search the catalog and print results."""
     from edgereco.api.deps import ServiceContainer
     from edgereco.catalog.models import SessionProfile
-    from edgereco.reco.reranker import rerank
+    from edgereco.reco.reranker import rerank_search
 
     container = ServiceContainer.from_dirs(cache_dir, index_dir)
     results = _fused_search_results(container, query, k=max(limit * 3, 30))
-    results = rerank(results, SessionProfile())
+    results = rerank_search(results, SessionProfile())
     if category:
         results = [r for r in results if r.product.category == category]
     _print_search_results(results[:limit], output_json)

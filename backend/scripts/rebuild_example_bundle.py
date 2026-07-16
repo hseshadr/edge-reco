@@ -109,6 +109,7 @@ def main() -> None:
         embedding_dim=DIM,
         embedding_count=count,
         product_count=count,
+        sequence=1,
     )
     shutil.rmtree(staging)
     _drop_producer_scratch()

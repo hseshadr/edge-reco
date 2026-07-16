@@ -34,6 +34,14 @@ export interface VersionPointer {
 	/** Hex sha256 of the manifest's canonical bytes. */
 	readonly manifest_hash: string;
 	readonly version: string;
+	/** Optional signed identity binding. Null/absent fields stay out of the
+	 * backward-compatible signature preimage. */
+	readonly bundle_id?: string | null;
+	readonly channel?: string | null;
+	/** Required on every incoming release. A cached sequence-less active pointer
+	 * may migrate once; after that, lower/missing counters and equal-sequence
+	 * different identities are rejected before manifest fetch. */
+	readonly sequence: number;
 	/** ed25519 over canonicalBytes(self, exclude {signature}), base64. */
 	readonly signature: string;
 }
@@ -54,9 +62,13 @@ export interface SyncResult {
 export interface CacheStore {
 	hasChunk(chunkHash: string): Promise<boolean>;
 	/** Decompress → sha256 → verify == chunkHash (fail-closed) → store. */
-	putChunkCompressed(chunkHash: string, compressed: Uint8Array): Promise<void>;
+	putChunkCompressed(
+		chunkHash: string,
+		compressed: Uint8Array,
+		expectedSize: number,
+	): Promise<void>;
 	/** Read → decompress → verify == chunkHash (fail-closed) → return plaintext. */
-	getChunk(chunkHash: string): Promise<Uint8Array>;
+	getChunk(chunkHash: string, expectedSize: number): Promise<Uint8Array>;
 	putManifest(manifestBytes: Uint8Array): Promise<string>;
 	getManifest(manifestHash: string): Promise<Uint8Array>;
 	readActive(): Promise<VersionPointer | null>;
@@ -64,7 +76,17 @@ export interface CacheStore {
 }
 
 /** Transport seam: fetch raw bytes for a URL (injectable for tests). */
-export type FetchBytes = (url: string) => Promise<Uint8Array>;
+export interface FetchBytesOptions {
+	readonly cache?: RequestCache;
+	/** Maximum response bytes to buffer. The transport enforces this while
+	 * streaming, and sync re-checks injected transports after resolution. */
+	readonly maxBytes?: number;
+}
+
+export type FetchBytes = (
+	url: string,
+	options?: FetchBytesOptions,
+) => Promise<Uint8Array>;
 
 /** Fail-closed ed25519 verifier: resolves on a valid signature, else throws. */
 export type Verify = (

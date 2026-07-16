@@ -16,12 +16,13 @@ const product: Product = {
 	currency: "USD",
 	popularity_score: 0.5,
 	freshness_score: 0.5,
-	image_url: "https://img.example.com/p1.jpg",
+	image_url: "/test-assets/p1.jpg",
 	url: "",
 	attributes: {},
 };
 
 const components: ScoreComponents = {
+	retrieval: 0,
 	popularity: 0.4,
 	category_match: 0.2,
 	tag_match: 0.15,

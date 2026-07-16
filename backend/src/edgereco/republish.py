@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Final
 
 import httpx
+from edgeproc.bundles.cas import FilesystemCacheStore
 from edgeproc.bundles.signing import Verifier
 from pydantic import BaseModel
 
@@ -92,6 +93,10 @@ def retrain_and_republish(
     materialized = sync_and_materialize(
         base_url=bundle_base_url, cache_root=cache_root, verifier=verifier
     )
+    active = FilesystemCacheStore(cache_root).read_active()
+    if active is None:  # pragma: no cover - sync_and_materialize promoted or raised
+        raise RuntimeError("sync completed without an active bundle pointer")
+    next_sequence = 1 if active.sequence is None else active.sequence + 1
     base = load_jsonl(materialized / "products.jsonl")
     meta = CatalogMeta.model_validate_json((materialized / "catalog_meta.json").read_bytes())
     blended = blend_popularity(base, engagement, alpha=alpha)
@@ -104,6 +109,7 @@ def retrain_and_republish(
         meta=meta,
         version=new_version,
         product_count=len(blended),
+        sequence=next_sequence,
     )
     return RetrainResult(
         version=new_version, product_count=len(blended), changed=_deltas(base, blended)
@@ -136,6 +142,7 @@ def _publish(
     meta: CatalogMeta,
     version: str,
     product_count: int,
+    sequence: int,
 ) -> None:
     """Sign and lay out the republished origin (new manifest + ``latest``).
 
@@ -154,6 +161,7 @@ def _publish(
         embedding_count=meta.embedding_count,
         product_count=product_count,
         require_feature_files=True,
+        sequence=sequence,
     )
 
 

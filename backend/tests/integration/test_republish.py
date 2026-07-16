@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from edgeproc.bundles.manifest import VersionPointer
 from edgeproc.bundles.signing import Ed25519Verifier, generate_keypair
 
 from edgereco.api.deps import sync_and_materialize
@@ -80,6 +81,8 @@ def test_retrain_republishes_signed_bundle_with_boosted_popularity(
     assert [d.product_id for d in result.changed] == ["P1"]
     assert result.changed[0].before == 0.2
     assert result.changed[0].after == 0.7
+    pointer = VersionPointer.model_validate_json((origin / "latest").read_bytes())
+    assert pointer.sequence == 2
 
     # Re-sync the republished origin: a passing verifier proves it is validly
     # signed (fail-closed intact); the catalog carries the recomputed popularity.

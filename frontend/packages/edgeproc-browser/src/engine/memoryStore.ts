@@ -20,15 +20,28 @@ export class MemoryCacheStore implements CacheStore {
 	public async putChunkCompressed(
 		chunkHash: string,
 		compressed: Uint8Array,
+		expectedSize: number,
 	): Promise<void> {
-		const plaintext = await decompressAndVerify(chunkHash, compressed);
+		const plaintext = await decompressAndVerify(
+			chunkHash,
+			compressed,
+			expectedSize,
+		);
 		this.#chunks.set(chunkHash, plaintext);
 	}
 
-	public async getChunk(chunkHash: string): Promise<Uint8Array> {
+	public async getChunk(
+		chunkHash: string,
+		expectedSize: number,
+	): Promise<Uint8Array> {
 		const plaintext = this.#chunks.get(chunkHash);
 		if (plaintext === undefined) {
 			throw new Error(`chunk ${chunkHash} not in store`);
+		}
+		if (plaintext.byteLength !== expectedSize) {
+			throw new Error(
+				`chunk ${chunkHash} has ${plaintext.byteLength} bytes, expected ${expectedSize}`,
+			);
 		}
 		await verifyPlaintext(chunkHash, plaintext);
 		return plaintext;

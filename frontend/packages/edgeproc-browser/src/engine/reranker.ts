@@ -3,8 +3,11 @@
 // (the demo's WhyPopover reads score_components); rerank re-scores a result set
 // and sorts it descending. The weights and the formula match scorer.py exactly:
 //
-//   score = 0.40*popularity + 0.20*cat + 0.15*tag + 0.10*brand + 0.10*fresh
-//           + sim_weight*similarity - (0.25 if recently_viewed else 0)
+//   search score = normalized RRF relevance + personalized score
+//   recommendation score = personalized score only
+//   personalized score = 0.40*popularity + 0.20*cat + 0.15*tag + 0.10*brand
+//                        + 0.10*fresh + sim_weight*similarity
+//                        - (0.25 if recently_viewed else 0)
 //
 // tag_match is the MEAN tag affinity over the product's tags (0 if it has none).
 // `similarity` is the per-candidate cosine to a seed product, non-zero only for
@@ -14,6 +17,10 @@
 import type { Product, ScoreComponents, SearchResult } from "./domain";
 import { DEFAULT_RANKING_CONFIG, type ScoringWeights } from "./rankingConfig";
 import type { SessionProfile } from "./session";
+
+// Search intent is the primary signal. RRF is normalized to [0, 1] before this
+// weight is applied, so popularity can refine the fused ranking without erasing it.
+const SEARCH_RELEVANCE_WEIGHT = 0.2;
 
 /**
  * Personalized score + signal breakdown for a product (scorer.score_product).
@@ -31,6 +38,7 @@ export function scoreProduct(
 	weights: ScoringWeights = DEFAULT_RANKING_CONFIG.scoring_weights,
 	similarity = 0,
 	cooccurrence = 0,
+	retrieval = 0,
 ): SearchResult {
 	const catMatch = profile.categoryAffinity.get(product.category) ?? 0;
 
@@ -59,6 +67,7 @@ export function scoreProduct(
 	const cooccurrenceTerm = weights.cooccurrence * cooccurrence;
 
 	const components: ScoreComponents = {
+		retrieval,
 		popularity,
 		category_match: category,
 		tag_match: tag,
@@ -72,6 +81,7 @@ export function scoreProduct(
 	return {
 		product,
 		score:
+			retrieval +
 			popularity +
 			category +
 			tag +
@@ -94,8 +104,18 @@ export function rerank(
 	profile: SessionProfile,
 	weights: ScoringWeights = DEFAULT_RANKING_CONFIG.scoring_weights,
 ): ReadonlyArray<SearchResult> {
+	const maxRetrieval = Math.max(0, ...results.map((result) => result.score));
 	const rescored = results.map((r, index) => ({
-		result: scoreProduct(r.product, profile, weights),
+		result: scoreProduct(
+			r.product,
+			profile,
+			weights,
+			0,
+			0,
+			maxRetrieval === 0
+				? 0
+				: SEARCH_RELEVANCE_WEIGHT * (Math.max(0, r.score) / maxRetrieval),
+		),
 		index,
 	}));
 	rescored.sort((a, b) => b.result.score - a.result.score || a.index - b.index);

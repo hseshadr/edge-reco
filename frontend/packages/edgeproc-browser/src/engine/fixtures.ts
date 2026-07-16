@@ -59,6 +59,18 @@ export function catalogMetaChunkHash(): string {
 	return hash;
 }
 
+/** Signed uncompressed byte length for {@link catalogMetaChunkHash}. */
+export function catalogMetaChunkSize(): number {
+	const meta = activeManifest().files.find(
+		(file) => file.path === "catalog_meta.json",
+	);
+	const size = meta?.chunks[0]?.size;
+	if (size === undefined) {
+		throw new Error("catalog_meta.json chunk size missing from the manifest");
+	}
+	return size;
+}
+
 /**
  * A `FetchBytes` adapter backed by the real catalog files, so the sync state
  * machine runs end-to-end without a network. Counts requests for assertions.

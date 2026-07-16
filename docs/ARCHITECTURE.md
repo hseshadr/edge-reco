@@ -74,17 +74,26 @@ The **product-detail page (PDP)** that hosts the seed-based rails is **state-bas
 ### Scoring formula
 
 ```
-score = 0.40·popularity
-      + 0.20·category_affinity
-      + 0.15·tag_affinity
-      + 0.10·brand_affinity
-      + 0.10·freshness
-      − 0.25·repetition
+personalized_score = 0.40·popularity
+                   + 0.20·category_affinity
+                   + 0.15·tag_affinity
+                   + 0.10·brand_affinity
+                   + 0.10·freshness
+                   − 0.25·repetition
+
+search_score = 0.20·(RRF / max_candidate_RRF) + personalized_score
 ```
 
 Recently-viewed products get penalized; matching categories / brands / tags get amplified. Session affinity accumulates per click / view / favorite / cart event in the `SessionProfile`.
 
-These are the default (`for_you`) weights, and they are **not hardcoded** — they ride in the signed bundle as `ranking_config.json` (typed `RankingConfig`, `reco/ranking_config.py`); each named strategy carries its own copy of the same `ScoringWeights` shape (plus the optional `similarity` and `cooccurrence` terms, default 0). Both tiers read the weights off the verified config at sync time; `DEFAULT_RANKING_CONFIG` reproduces the values above and is the fallback for a bundle that predates the file. Retuning ranking is therefore a **data republish** (re-sign a new `ranking_config.json`), not a code change — and parity holds because both tiers read the same signed bytes. Every weight is range-constrained `>= 0` (`Field(ge=0)`), and a `schema_version` gates the shape, so a tampered or negative weight in a signed config fails Pydantic validation fail-closed rather than silently skewing the ranking.
+The normalized RRF term exists only on query search; recommendations have no query
+and therefore use `personalized_score` only. Its 0.20 ceiling is a mirrored engine
+invariant, regression-tested in both tiers and against the real q8 browser model. It
+keeps an exact query match from being discarded merely because a different candidate
+is more popular or personalized, while leaving room for those signals to refine the
+fused candidate set.
+
+The personalized weights are **not hardcoded** — they ride in the signed bundle as `ranking_config.json` (typed `RankingConfig`, `reco/ranking_config.py`); each named strategy carries its own copy of the same `ScoringWeights` shape (plus the optional `similarity` and `cooccurrence` terms, default 0). Both tiers read the weights off the verified config at sync time; `DEFAULT_RANKING_CONFIG` reproduces the values above and is the fallback for a bundle that predates the file. Retuning personalized ranking is therefore a **data republish** (re-sign a new `ranking_config.json`), not a code change — and parity holds because both tiers read the same signed bytes. Every weight is range-constrained `>= 0` (`Field(ge=0)`), and a `schema_version` gates the shape, so a tampered or negative weight in a signed config fails Pydantic validation fail-closed rather than silently skewing the ranking.
 
 ## Backend tier (Python)
 
@@ -160,8 +169,36 @@ Regenerate via `backend/scripts/gen_*_fixture.py`. The browser tests under `fron
 - **Uplink is optional & off the inference path**: search / recommend / rerank / sync make zero backend calls. The flywheel uplink (a click is captured in-tab, persisted, then batched as a fire-and-forget beacon to the `/events` collector) is gated by `VITE_EVENTS_URL` — **unset = fully disabled** — and must never block or break the app. It feeds the cloud's retrain; it never gates the in-tab rail re-rank.
 - **Retrain is a data change, not a formula change**: the cloud retrain (`edgereco retrain`) aggregates collected events, recomputes `popularity_score` (from the collector's `--events-url`) **and the `cooccurrence.json` neighbour map (from a `--sessions` JSONL log)**, and republishes a re-signed bundle. It must *only* move those data artifacts — never the scoring weights — so both tiers pick up the new ranking on sync with no code change. It reuses the prebuilt FAISS `vector/` verbatim (embeddings are text-derived, popularity-independent). Republish to a runtime origin; the committed seed bundle and the browser parity fixtures stay byte-stable. The read-only `edgereco audit` surface previews exactly what a retrain would change — event counts, top popularity movers, changed co-occurrence edges — and must never sign, publish, or touch the inference path.
 
+## Release reliability and performance contract
+
+The browser release gate uses the committed 720-product catalog, the real q8
+MiniLM model, ONNX/WASM, signed-bundle sync, and headless Chromium. Budgets are
+chosen from the demo promise (a short first-load screen, then visibly instant local
+search), before measurement:
+
+- cold launch to query-ready: **≤30 s**;
+- ten warm realistic searches: **p50 ≤300 ms, p95 ≤750 ms**;
+- steady Chromium JavaScript heap after those searches: **≤512 MiB**;
+- post-ready search/recommend application backend calls: **0** and third-party
+  requests during search: **0**. Remote catalog image URLs render as local editorial
+  placeholders; Hugging Face, jsDelivr, fonts, and image CDNs are never contacted;
+- engine Worker requests time out at **60 s** and first model embedding at **300 s**;
+  crashes reject every pending request, and the boot UI exposes a tested Retry path;
+- the optional API session store retains at most **10,000** sessions and expires a
+  session after **1 hour** idle. API search/recommend request limits remain capped at
+  100.
+
+Run the measured browser contract with
+`pnpm -C frontend -F frontend test:e2e:c1`; the search-quality spec prints boot,
+p50, p95, and heap measurements and fails on any budget or egress regression. The
+minified offline suite separately boots with model CDNs blocked, reloads after
+network cutoff, and proves signed-cache recovery. Production health additionally
+requires the exact-SHA and canonical-host checks in `.github/workflows/deploy.yml`.
+
 ## Further reading
 
 - [`QUICKSTART.md`](QUICKSTART.md) — clone → run.
 - [`DEPLOY.md`](DEPLOY.md) — backend-free in-browser vs edge-origin shapes.
+- [`SECURITY-PRIVACY.md`](SECURITY-PRIVACY.md) — threat boundaries, data flow,
+  egress, retention, and operator requirements.
 - [`diagrams/`](diagrams/) — the rest of the d2 sources (manifest lifecycle, artifact distribution, event uplink, personalization flywheel).

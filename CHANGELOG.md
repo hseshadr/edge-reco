@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Measured release contract for the real browser path**: the C1 Chromium gate now
+  boots the committed 720-product signed catalog with the real q8 MiniLM model,
+  proves the Timberland waterproof boot is the first result for its exact query,
+  rejects every request outside the app and signed-bundle origins, and enforces
+  cold-start (30 s), warm-search (p50 300 ms / p95 750 ms), heap (512 MiB), and
+  zero-backend-call budgets. The architecture and new security/privacy contract
+  publish the same numbers, timeouts, retention bounds, data inventory, and
+  residual risks.
+- **Bounded API sessions**: the optional server now holds at most 10,000 session
+  profiles, expires them after one hour idle, and evicts least-recently-used
+  profiles deterministically under pressure.
 - **Internationalization (i18next) across the app** (#36): `i18next` +
   `react-i18next` initialized in `src/i18n.ts` with bundled **offline** English
   catalogs (no runtime fetch), so user-facing copy resolves through `t()` and a
@@ -28,6 +39,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   renders the same message and the same `errors.*` i18n string.
 
 ### Security
+- **Zero third-party storefront egress by default**: remote catalog-image URLs now
+  render as local editorial category tiles, the app uses platform-native fonts,
+  and CSP/service-worker configuration no longer permits or caches Google Fonts,
+  Amazon image hosts, Hugging Face, or jsDelivr. Release-owned root-relative
+  product images remain supported.
+- **Collector Docker context narrowed to `backend/`**: the optional image resolves
+  release-tagged dependencies from `uv.lock`; sibling repositories, `.env` files,
+  signing keys, PEM files, VCS state, and host caches never enter the build context.
 - **Additive HTTP security headers + CI least-privilege permissions** (#32):
   a `/*` block of non-resource-restricting headers (`X-Content-Type-Options:
   nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
@@ -49,6 +68,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the Node parity path (test-time HF fetch) is untouched.
 
 ### Changed
+- **Search reranking preserves query relevance**: the normalized BM25/vector RRF
+  signal contributes a measured 0.20 relevance component before session-aware
+  product signals. Cross-tier parity and a real-model regression prevent a popular
+  personalized apparel item from outranking the exact waterproof hiking boot.
+- **Deployment success now means production identity**: missing Cloudflare secrets
+  fail visibly; Wrangler records the exact CI SHA; the workflow waits for a
+  successful Cloudflare production deployment with that SHA and rejects a missing
+  or lossy `www` → apex permanent redirect. `public.key`, signed bundle bytes,
+  Vite assets, model weights, and ORT files receive explicit MIME/cache contracts.
 - **Production SEO, crawlability, and static delivery hardened** (#34): more
   crawlable root HTML with tighter search snippets, route-specific Open
   Graph/Twitter metadata for `/edgeproc`, `/github`, and `/faq`, sitemap
@@ -57,12 +85,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   CORS removed from same-origin static responses, and built-artifact
   regression tests (`scripts/production-artifacts.test.mjs`) wired into the
   frontend gate. Recommendation and search logic unchanged.
-- **A manual `Deploy edge-reco.com` dispatch without Cloudflare secrets now
-  skips cleanly (green no-op)** instead of failing at the guard step —
-  mirroring the auto path's preflight. Production deploys run via local
-  wrangler, so the workflow is expected to no-op until
-  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` are configured; the
-  fail-loud guard step remains as defense in depth.
 
 ## [0.11.0] — 2026-07-12
 

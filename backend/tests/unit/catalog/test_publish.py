@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from edgeproc.bundles.adapters import FilesystemAdapter
 from edgeproc.bundles.cas import FilesystemCacheStore
-from edgeproc.bundles.manifest import IndexManifest
+from edgeproc.bundles.manifest import IndexManifest, VersionPointer
 from edgeproc.bundles.signing import (
     Ed25519Verifier,
     SignatureError,
@@ -71,6 +71,11 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
         embedding_count=1,
         product_count=1,
     )
+
+    pointer = VersionPointer.model_validate_json((origin / "latest").read_bytes())
+    assert pointer.bundle_id == "amazon-demo"
+    assert pointer.channel == "stable"
+    assert pointer.sequence == 1
 
     cache = FilesystemCacheStore(tmp_path / "cache")
     sync_index(

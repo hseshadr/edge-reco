@@ -31,6 +31,7 @@ export interface Product {
  * Python scorer's components dict (scorer.score_product) byte-for-byte.
  */
 export interface ScoreComponents {
+	retrieval: number;
 	popularity: number;
 	category_match: number;
 	tag_match: number;

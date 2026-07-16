@@ -1,5 +1,5 @@
 from edgereco.catalog.models import Product, SearchResult, SessionProfile
-from edgereco.reco.reranker import rerank
+from edgereco.reco.reranker import rerank, rerank_search
 
 
 def _product(pid: str, category: str = "Electronics", pop: float = 0.5) -> Product:
@@ -14,15 +14,15 @@ def _result(
 
 def test_rerank_with_empty_profile_preserves_order() -> None:
     results = [_result("a", 0.9), _result("b", 0.7), _result("c", 0.5)]
-    reranked = rerank(results, SessionProfile())
+    reranked = rerank_search(results, SessionProfile())
     assert len(reranked) == 3
 
 
 def test_rerank_boosts_matching_category() -> None:
-    # formal: 0.40*0.6 = 0.24; electronics: 0.40*0.2 + 0.20*1.0 = 0.28 → electronics wins
+    # Recommendation candidates ignore retrieval scores and use session affinity.
     results = [
         _result("formal", 0.9, "Clothing", 0.6),
-        _result("electronics", 0.7, "Electronics", 0.2),
+        _result("electronics", 0.89, "Electronics", 0.2),
     ]
     profile = SessionProfile(category_affinity={"Electronics": 1.0})
     reranked = rerank(results, profile)
@@ -34,3 +34,15 @@ def test_rerank_applies_repetition_penalty() -> None:
     profile = SessionProfile(recently_viewed=["a"])
     reranked = rerank(results, profile)
     assert reranked[0].product.id == "b"
+
+
+def test_should_keep_strong_retrieval_ahead_of_popularity() -> None:
+    # Given
+    results = [_result("relevant", 99.0, pop=0.6), _result("popular", 1.0, pop=0.8)]
+
+    # When
+    reranked = rerank_search(results, SessionProfile())
+
+    # Then
+    assert [result.product.id for result in reranked] == ["relevant", "popular"]
+    assert reranked[0].score_components["retrieval"] == 0.2

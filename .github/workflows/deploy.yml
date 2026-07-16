@@ -1,18 +1,18 @@
 # Deploy https://edge-reco.com — Cloudflare Pages (static, backend-free PWA).
 #
 # AUTO-DEPLOY: runs automatically after the "CI" workflow passes on `main`
-# (and on manual workflow_dispatch). It stays INERT until these repository
-# secrets exist — when they are absent BOTH the auto-run and a manual run
-# SKIP cleanly (green no-op, no red X). Secrets required:
+# (and on manual workflow_dispatch). Missing deployment secrets are a hard
+# failure: a green deploy workflow always means a deploy was attempted and its
+# Cloudflare source identity was verified. Secrets required:
 #
 #   CLOUDFLARE_API_TOKEN    Pages:Edit-scoped API token
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account that owns the `edge-reco`
 #                           Pages project + the edge-reco.com zone
 #
-# Production deploys run via local wrangler (docs/DEPLOY.md), so until the
-# secrets are added this workflow is EXPECTED to no-op — never to fail. It
-# cannot half-deploy: the deploy job only runs when the preflight secrets
-# check passes, with a fail-loud guard step kept as defense in depth.
+# Production deploys run via pinned wrangler (docs/DEPLOY.md). The guard runs
+# before checkout, and the final step verifies Cloudflare reports the exact
+# commit SHA that passed CI. A stale or partial deploy therefore cannot be
+# reported as green.
 # SPA-ONLY: a static `build:pages` artifact (signed catalog copied same-origin
 # into dist/bundle) — no R2, no bundle signing key in CI. See docs/DEPLOY.md.
 #
@@ -38,47 +38,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Gate every deploy. Trigger gate: the CI run that fired this must have
-  # succeeded on main (a manual dispatch passes through). Secrets gate: when
-  # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are absent, configured=false
-  # makes BOTH the auto-run and a manual dispatch SKIP cleanly (green no-op)
-  # instead of red-X'ing the run.
-  preflight:
-    name: Gate deploy
+  deploy:
+    name: Build + deploy to Cloudflare Pages
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
-    outputs:
-      configured: ${{ steps.check.outputs.configured }}
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - name: Detect whether deploy secrets are configured
-        id: check
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Deploy secrets not configured — skipping deploy (clean no-op). See .github/workflows/deploy.yml header."
-          fi
-
-  deploy:
-    name: Build + deploy to Cloudflare Pages
-    needs: preflight
-    # Runs ONLY when the secrets are configured — auto-run and manual dispatch
-    # alike skip cleanly otherwise (mirroring the auto path's preflight; a
-    # manual dispatch used to punch through and red-X at the guard step).
-    if: needs.preflight.outputs.configured == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Guard — refuse to run until the deploy secrets are configured
-        # Unreachable while preflight gates this job — kept as defense in depth
-        # should the `if` condition ever drift.
-        # Runs BEFORE checkout — run from the always-present workspace root.
+      - name: Guard deployment credentials
         working-directory: ${{ github.workspace }}
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -94,17 +64,17 @@ jobs:
           exit "$missing"
 
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           # Deploy the exact commit that passed CI (auto-run); HEAD for manual.
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: frontend/.node-version # 22 — the Cloudflare Pages target
           cache: pnpm
@@ -120,7 +90,7 @@ jobs:
       # file is under the Cloudflare Pages 25 MiB single-asset limit (the q8
       # ONNX is ~22.97 MB; pinned by scripts/download-model.test.mjs).
       - name: Cache self-hosted model weights
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: frontend/app/public/models
           key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
@@ -140,4 +110,51 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler@4.103.0 pages deploy frontend/app/dist --project-name=edge-reco --branch=main
+        run: >-
+          npx wrangler@4.103.0 pages deploy frontend/app/dist
+          --project-name=edge-reco
+          --branch=main
+          --commit-hash="$EXPECTED_SHA"
+          --commit-dirty=false
+
+      - name: Verify deployed source identity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/edge-reco/deployments?env=production&per_page=10"
+          for attempt in $(seq 1 12); do
+            payload=$(curl --fail-with-body --silent --show-error \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api")
+            deployed_sha=$(jq -r --arg sha "$EXPECTED_SHA" \
+              '.result[] | select(.source.config.commit_hash == $sha) | .source.config.commit_hash' \
+              <<<"$payload" | head -n 1)
+            status=$(jq -r --arg sha "$EXPECTED_SHA" \
+              '.result[] | select(.source.config.commit_hash == $sha) | .latest_stage.status' \
+              <<<"$payload" | head -n 1)
+            if [ "$deployed_sha" = "$EXPECTED_SHA" ] && [ "$status" = "success" ]; then
+              echo "Cloudflare production deployment verified: $deployed_sha"
+              exit 0
+            fi
+            echo "Waiting for Cloudflare identity: attempt=$attempt sha=${deployed_sha:-missing} status=${status:-missing}"
+            sleep 5
+          done
+          echo "::error::Cloudflare never reported successful production source.config.commit_hash=$EXPECTED_SHA"
+          exit 1
+
+      - name: Verify canonical hosts
+        run: |
+          curl --fail --silent --show-error --max-time 15 \
+            --output /dev/null https://edge-reco.com/
+          readarray -t redirect < <(curl --silent --show-error --max-time 15 \
+            --output /dev/null --write-out '%{http_code}\n%{redirect_url}\n' \
+            'https://www.edge-reco.com/faq?source=deploy-check')
+          status="${redirect[0]:-missing}"
+          target="${redirect[1]:-missing}"
+          expected='https://edge-reco.com/faq?source=deploy-check'
+          if { [ "$status" != "301" ] && [ "$status" != "308" ]; } || \
+             [ "$target" != "$expected" ]; then
+            echo "::error::www canonical redirect failed: status=$status target=$target expected=$expected"
+            exit 1
+          fi
+          echo "Canonical hosts verified: www redirects to $target ($status)"

@@ -40,9 +40,22 @@ const DEFAULT_STYLE: CategoryStyle = {
 	glyph: "\u{2728}",
 	label: "Catalog",
 };
+const LOCAL_ASSET_ORIGIN = "https://edge-reco.invalid";
 
 function styleFor(category: string): CategoryStyle {
 	return CATEGORY_STYLES[category.trim().toLowerCase()] ?? DEFAULT_STYLE;
+}
+
+/** Only release-owned root-relative assets may leave the placeholder boundary. */
+function isLocalImage(url: string): boolean {
+	if (!url.startsWith("/") || url.startsWith("//") || url.includes("\\")) {
+		return false;
+	}
+	try {
+		return new URL(url, LOCAL_ASSET_ORIGIN).origin === LOCAL_ASSET_ORIGIN;
+	} catch {
+		return false;
+	}
 }
 
 interface ProductImageProps {
@@ -51,13 +64,14 @@ interface ProductImageProps {
 
 export function ProductImage({ product }: ProductImageProps) {
 	const [broken, setBroken] = useState(false);
-	const hasImage = product.image_url.trim() !== "" && !broken;
+	const imageUrl = product.image_url.trim();
+	const hasImage = isLocalImage(imageUrl) && !broken;
 
 	if (hasImage) {
 		return (
 			<img
 				className="pimg"
-				src={product.image_url}
+				src={imageUrl}
 				alt={product.title}
 				loading="lazy"
 				onError={() => setBroken(true)}

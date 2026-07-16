@@ -3,7 +3,9 @@
 // integrity boundary is identical (mirrors edge-proc cas.py _verify_or_remove).
 
 import { sha256Hex } from "./crypto";
-import { decompress } from "./zstd";
+import { decompressBounded } from "./zstd";
+
+export const MAX_DECOMPRESSED_CHUNK_BYTES = 8 * 1024 * 1024;
 
 /** A stored object failed its content-address / decompress check (fail-closed). */
 export class IntegrityError extends Error {
@@ -17,14 +19,29 @@ export class IntegrityError extends Error {
 export async function decompressAndVerify(
 	chunkHash: string,
 	compressed: Uint8Array,
+	expectedSize: number,
 ): Promise<Uint8Array> {
+	if (
+		!Number.isSafeInteger(expectedSize) ||
+		expectedSize < 0 ||
+		expectedSize > MAX_DECOMPRESSED_CHUNK_BYTES
+	) {
+		throw new IntegrityError(
+			`chunk ${chunkHash} declares invalid decompressed size ${expectedSize}`,
+		);
+	}
 	let plaintext: Uint8Array;
 	try {
-		plaintext = await decompress(compressed);
+		plaintext = await decompressBounded(compressed, expectedSize);
 	} catch (cause) {
 		throw new IntegrityError(`chunk ${chunkHash} failed to decompress`, {
 			cause,
 		});
+	}
+	if (plaintext.byteLength !== expectedSize) {
+		throw new IntegrityError(
+			`chunk ${chunkHash} decompressed to ${plaintext.byteLength} bytes, expected ${expectedSize}`,
+		);
 	}
 	if ((await sha256Hex(plaintext)) !== chunkHash) {
 		throw new IntegrityError(`chunk ${chunkHash} failed content-address check`);

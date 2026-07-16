@@ -41,6 +41,8 @@ async function handleSync(req: SyncRequest): Promise<EngineResponse> {
 		store: cacheStore,
 		fetchBytes,
 		verify: (message, signature) => verifyEd25519(pubkey, message, signature),
+		expectedBundleId: req.expectedBundleId,
+		expectedChannel: req.expectedChannel,
 	});
 	const raw = await cacheStore.getManifest(result.manifestHash);
 	activeManifest = JSON.parse(DECODER.decode(raw)) as IndexManifest;

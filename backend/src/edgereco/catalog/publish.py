@@ -88,6 +88,7 @@ def publish_bundle(
     embedding_count: int,
     product_count: int,
     require_feature_files: bool = False,
+    sequence: int = 1,
 ) -> None:
     """Write ``catalog_meta.json`` then build the signed origin from the staging dir.
 
@@ -118,6 +119,9 @@ def publish_bundle(
         signer=signer,
         bundle_id=catalog_id,
         version=version,
+        bind_identity=True,
+        channel="stable",
+        sequence=sequence,
     )
 
 

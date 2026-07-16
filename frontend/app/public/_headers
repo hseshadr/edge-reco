@@ -1,10 +1,11 @@
-# Cloudflare Pages headers. Two concerns:
+# Cloudflare Pages headers. Three concerns:
 #   1. A global baseline of security headers (the /* block).
 #   2. Freshness for the service worker + manifest so updates propagate fast.
+#   3. Immutable caching for release-pinned trust and runtime assets.
 
 # Baseline security headers for every response. The CSP allows the app's known
-# runtime edges: local module workers and ONNX WASM, Amazon catalog images, and
-# Google Fonts. Inline executable scripts stay blocked; the two JSON-LD blocks
+# runtime edges: local module workers and ONNX WASM. Catalog images use local
+# editorial placeholders. Inline scripts stay blocked; the two JSON-LD blocks
 # are pinned by hash. Cloudflare Pages adds wildcard CORS to static responses by
 # default, but this deployment is same-origin, so detach it here.
 /*
@@ -13,7 +14,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-ST9qnRidkbMTVXZFRJaR0oO2gFOyXRSKcN4rb/4d9yM=' 'sha256-ICu6RKCjCK7Myvbr4Mi9jOiGsH2qBIXyfYYQDNwdOfw='; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: https://m.media-amazon.com https://images-na.ssl-images-amazon.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; manifest-src 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-ST9qnRidkbMTVXZFRJaR0oO2gFOyXRSKcN4rb/4d9yM=' 'sha256-ICu6RKCjCK7Myvbr4Mi9jOiGsH2qBIXyfYYQDNwdOfw='; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; manifest-src 'self'; upgrade-insecure-requests
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()
 
@@ -22,3 +23,23 @@
   Cache-Control: public, max-age=0, must-revalidate
 /manifest.webmanifest
   Cache-Control: public, max-age=0, must-revalidate
+
+# The trust root is intentionally release-pinned. Rotate it only with a new,
+# versioned path and an application release; clients must never reinterpret it.
+/public.key
+  Content-Type: application/octet-stream
+  Cache-Control: public, max-age=31536000, immutable
+
+# Signed bundle manifests/chunks are content-addressed. Vite assets and the
+# self-hosted model/ORT runtime are sha256-pinned by build preflight, so each
+# successful release can cache them without revalidation.
+/bundle/chunk/*
+  Cache-Control: public, max-age=31536000, immutable
+/bundle/manifest/*
+  Cache-Control: public, max-age=31536000, immutable
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+/ort/*
+  Cache-Control: public, max-age=31536000, immutable

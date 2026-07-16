@@ -87,10 +87,10 @@ services:
   collector:
     profiles: ["flywheel"]
     build:
-      # ~/dev/oss — the demo_server image needs all three sibling repos (see the
-      # Dockerfile header); this compose file lives two levels under that root.
-      context: ../..
-      dockerfile: edge-reco/backend/demo_server/Dockerfile
+      # Backend-only context: release-tagged dependencies come from uv.lock, and
+      # host secrets/sibling repositories never enter Docker's build context.
+      context: ../backend
+      dockerfile: demo_server/Dockerfile
     container_name: nimbus-collector
     depends_on:
       edge:
@@ -103,7 +103,7 @@ services:
       DEMO_CORS_ORIGINS: ${DEMO_CORS_ORIGINS:-http://localhost:5174}
       # Sync the SAME signed bundle the browser uses (prebuilt vector/, no rebuild).
       EDGERECO_BUNDLE_BASE_URL: http://edge:8081
-      EDGERECO_VERIFY_KEY_PATH: /workspace/edge-reco/backend/examples/keys/public.key
+      EDGERECO_VERIFY_KEY_PATH: /app/examples/keys/public.key
     ports:
       - "${COLLECTOR_HOST_PORT:-8000}:8000"
     healthcheck:

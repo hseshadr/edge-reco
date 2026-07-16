@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from edgereco.api.deps import Container, ServiceContainer, get_session_id
 from edgereco.api.models import SearchResponse
 from edgereco.catalog.models import SearchResult
-from edgereco.reco.reranker import rerank
+from edgereco.reco.reranker import rerank_search
 from edgereco.search.hybrid import reciprocal_rank_fusion
 
 router = APIRouter()
@@ -50,7 +50,7 @@ def search(
     total_pre_filter = len(results)
 
     profile = container.sessions.get(session_id)
-    ranked = rerank(results, profile, container.ranking_config.scoring_weights)
+    ranked = rerank_search(results, profile, container.ranking_config.scoring_weights)
     results = _filter_category(ranked, category)
 
     return SearchResponse(results=results[:limit], query=q, total=total_pre_filter)

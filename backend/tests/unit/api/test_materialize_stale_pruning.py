@@ -40,7 +40,9 @@ def _stage(tmp_path: Path, name: str) -> Path:
     return staging
 
 
-def _publish(staging: Path, origin: Path, key_path: Path, version: str) -> None:
+def _publish(
+    staging: Path, origin: Path, key_path: Path, version: str, *, sequence: int = 1
+) -> None:
     publish_bundle(
         staging_dir=staging,
         origin_dir=origin,
@@ -51,6 +53,7 @@ def _publish(staging: Path, origin: Path, key_path: Path, version: str) -> None:
         embedding_dim=_DIM,
         embedding_count=len(_PRODUCTS),
         product_count=len(_PRODUCTS),
+        sequence=sequence,
     )
 
 
@@ -78,7 +81,7 @@ def test_rematerialize_prunes_files_dropped_by_new_version(tmp_path: Path) -> No
     (local / "stale.json").write_text("{}", encoding="utf-8")
 
     # v2 (no extra.bin) republished to the same origin; CAS files must survive.
-    _publish(_stage(tmp_path, "staging_v2"), origin, key_path, version="v2")
+    _publish(_stage(tmp_path, "staging_v2"), origin, key_path, version="v2", sequence=2)
     cas_before = {
         p
         for p in cache_root.rglob("*")

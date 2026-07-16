@@ -53,11 +53,18 @@ export interface RuntimeConfig {
 	readonly bundleBaseUrl: string;
 	/** Same-origin URL of the pinned ed25519 public key (NOT the bundle origin). */
 	readonly pubkeyUrl: string;
+	readonly expectedBundleId?: string;
+	readonly expectedChannel?: string;
 }
 
 /** The sync-Worker surface bootstrap needs: pull the bundle, read its files. */
 export interface EnginePort {
-	sync(baseUrl: string, pubkeyUrl: string): Promise<SyncResult>;
+	sync(
+		baseUrl: string,
+		pubkeyUrl: string,
+		expectedBundleId?: string,
+		expectedChannel?: string,
+	): Promise<SyncResult>;
 	readFile(path: string): Promise<Uint8Array>;
 }
 
@@ -150,7 +157,9 @@ export function configFromEnv(): RuntimeConfig {
 	// The pinned key ships in the SPA build (public/public.key), served from the
 	// app's OWN trusted origin — never fetched from the untrusted bundle origin.
 	const pubkeyUrl = new URL("public.key", document.baseURI).toString();
-	return { bundleBaseUrl, pubkeyUrl };
+	const expectedBundleId = import.meta.env.VITE_BUNDLE_ID ?? "amazon-demo";
+	const expectedChannel = import.meta.env.VITE_BUNDLE_CHANNEL ?? "stable";
+	return { bundleBaseUrl, pubkeyUrl, expectedBundleId, expectedChannel };
 }
 
 /**
@@ -192,6 +201,8 @@ export class EngineRuntime {
 		const result = await engineClient.sync(
 			config.bundleBaseUrl,
 			config.pubkeyUrl,
+			config.expectedBundleId,
+			config.expectedChannel,
 		);
 		onStage({ kind: "synced", result });
 
