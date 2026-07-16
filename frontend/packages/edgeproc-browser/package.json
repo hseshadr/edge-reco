@@ -18,12 +18,12 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@hpcc-js/wasm-zstd": "^1.13.4",
+		"@hpcc-js/wasm-zstd": "^1.13.5",
 		"@huggingface/transformers": "^4.2.0",
 		"@noble/ed25519": "^3.1.0"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.3",
+		"@biomejs/biome": "^2.5.4",
 		"@types/node": "^26.1.1",
 		"@vitejs/plugin-react": "^6.0.3",
 		"@vitest/coverage-v8": "^4.1.10",
