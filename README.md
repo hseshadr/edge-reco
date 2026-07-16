@@ -263,9 +263,11 @@ own browser cache, and the ONNX runtime (~23 MB, also served same-origin from
 is already in OPFS — the service worker deliberately never touches it, so the
 ed25519 + sha256 integrity guarantees are unchanged.
 
-The one honest limitation: **external product images can't be cached**, so they
-fall back to placeholder tiles when offline. Everything else — hybrid search,
-browse, and all recommendation rails — runs without a connection.
+The catalog's external product-image URLs render as intentional local category tiles,
+not remote `<img>` requests. That keeps query-derived results from leaking browsing
+interest to an image CDN and makes the storefront visually stable offline. A fork can
+ship release-owned root-relative images without changing the boundary. Everything —
+hybrid search, browse, and all recommendation rails — runs without a connection.
 
 Prove it yourself:
 
@@ -459,6 +461,7 @@ content.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture, system context, request lifecycle (with d2 diagrams).
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run the demo end-to-end.
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns.
+- [`docs/SECURITY-PRIVACY.md`](docs/SECURITY-PRIVACY.md) — threat model, privacy/egress inventory, retention, and operator requirements.
 - [`docs/diagrams/`](docs/diagrams/) — d2 sources + rendered SVGs.
 
 ### Repo layout

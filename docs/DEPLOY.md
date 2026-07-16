@@ -110,6 +110,12 @@ A `frontend/app/public/_headers` file instructs Cloudflare Pages to serve `sw.js
 worker updates propagate immediately on the next page load. No extra Pages configuration
 is required for offline support — it is on by default in the Pages build.
 
+The same file serves `public.key` as `application/octet-stream` and caches the pinned
+trust root, content-addressed bundle data, hashed Vite assets, and build-verified
+model/ORT files as immutable release assets. A trust-root or model rotation therefore
+requires a versioned asset path plus an application release; silently replacing a file
+at one of these stable paths is not a supported deployment operation.
+
 Then add the apex domain in the Pages project → **Custom domains** → `edge-reco.com`.
 Cloudflare provisions the DNS record (CNAME-flattening at the apex) and the TLS
 certificate automatically. CF rebuilds and redeploys on every push to `main`.
@@ -127,9 +133,11 @@ alternative — or for a repo where you'd rather drive the deploy from CI — th
 `wrangler pages deploy` after the `CI` workflow goes green on `main` (and on manual
 `workflow_dispatch`).
 
-**It ships INERT.** Until the two repository secrets below exist, an auto-run **skips
-cleanly** (no red X on every push to `main`) and a manual dispatch **fails fast** at the
-guard step — it can never half-deploy.
+**It fails loudly when it cannot deploy.** Until the two repository secrets below
+exist, both automatic and manual runs stop at the credential guard with a red failure.
+A green workflow means Wrangler uploaded the build and the Cloudflare API reported a
+successful production deployment whose `source.config.commit_hash` exactly matches the
+commit that passed CI.
 
 To go live:
 
@@ -149,13 +157,31 @@ To go live:
    No bundle-signing key is needed in CI: this is the static SPA shape (the signed
    catalog is committed and copied same-origin by `build:pages`).
 
-3. **Attach the custom domain** in the Pages project → **Custom domains** → `edge-reco.com`.
-   Cloudflare provisions the apex DNS (CNAME-flattening) and TLS automatically.
+3. **Attach the apex domain** in the Pages project → **Custom domains** →
+   `edge-reco.com`. Cloudflare provisions the apex DNS (CNAME-flattening) and TLS
+   automatically.
+
+4. **Make `www` canonical, not a second copy.** Add a proxied `www` DNS record in the
+   Cloudflare zone, then create a permanent Redirect Rule from
+   `www.edge-reco.com/*` to `https://edge-reco.com/$1` with query strings preserved.
+   Do not attach `www` as an independently served Pages hostname. The deploy workflow
+   probes `/faq?source=deploy-check` and fails unless `www` returns 301/308 to the
+   identical apex path and query.
 
 The build emits `frontend/app/dist`; `wrangler pages deploy frontend/app/dist
---project-name=edge-reco --branch=main` uploads it. A `frontend/app/public/_redirects`
+--project-name=edge-reco --branch=main --commit-hash=<CI_SHA>` uploads it. A
+`frontend/app/public/_redirects`
 (`/*  /index.html  200`) keeps any path serving the SPA shell — harmless today (the
 storefront has no client-side router) and future-proof if one is ever added.
+
+Every Pages deployment has an immutable deployment URL, so rollback is the Cloudflare
+Pages **Deployments → Rollback to this deployment** operation. After rollback, verify
+the selected deployment's source commit in Cloudflare before announcing recovery; the
+next CI-driven deploy repeats the same exact-SHA identity gate.
+
+The canonical-host check is deliberately part of the green contract. If the external
+DNS/Redirect Rule is missing or drifts, code can still upload, but the workflow remains
+red and production must not be reported healthy.
 
 ## Shape 2 — Edge-origin API server
 

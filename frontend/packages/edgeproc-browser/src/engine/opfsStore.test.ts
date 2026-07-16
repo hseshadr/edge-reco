@@ -6,12 +6,22 @@
 // is Worker-only, so there is no real OPFS under Vitest's node environment).
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { catalogMetaChunkHash, chunkBytes } from "./fixtures";
+import {
+	catalogMetaChunkHash,
+	catalogMetaChunkSize,
+	chunkBytes,
+} from "./fixtures";
 import { IntegrityError } from "./integrity";
-import { OpfsCacheStore } from "./opfsStore";
+import {
+	canPromotePointer,
+	OpfsCacheStore,
+	selectHighestPointer,
+} from "./opfsStore";
+import type { VersionPointer } from "./types";
 
 // A real catalog chunk hash + its verbatim zstd bytes (plaintext sha256 == name).
 const REAL_CHUNK = catalogMetaChunkHash();
+const REAL_CHUNK_SIZE = catalogMetaChunkSize();
 
 /** One OPFS file as a growable byte buffer; the sync access handle reads/writes it. */
 class FakeFile {
@@ -112,9 +122,15 @@ describe("OpfsCacheStore self-heal on a corrupt chunk", () => {
 		const root = stubOpfs();
 		const store = await OpfsCacheStore.open();
 
-		await store.putChunkCompressed(REAL_CHUNK, chunkBytes(REAL_CHUNK));
+		await store.putChunkCompressed(
+			REAL_CHUNK,
+			chunkBytes(REAL_CHUNK),
+			REAL_CHUNK_SIZE,
+		);
 		expect(await store.hasChunk(REAL_CHUNK)).toBe(true);
-		expect((await store.getChunk(REAL_CHUNK)).byteLength).toBeGreaterThan(0);
+		expect(
+			(await store.getChunk(REAL_CHUNK, REAL_CHUNK_SIZE)).byteLength,
+		).toBeGreaterThan(0);
 
 		// Poison the stored bytes on disk (a partial write / bit-rot corrupts the
 		// content-addressed object so its plaintext no longer hashes to its name).
@@ -126,24 +142,61 @@ describe("OpfsCacheStore self-heal on a corrupt chunk", () => {
 
 		// Fail-closed read AND self-heal: the read still rejects, but the bad entry
 		// is evicted so hasChunk goes false — the sync loop will re-fetch it.
-		await expect(store.getChunk(REAL_CHUNK)).rejects.toBeInstanceOf(
-			IntegrityError,
-		);
+		await expect(
+			store.getChunk(REAL_CHUNK, REAL_CHUNK_SIZE),
+		).rejects.toBeInstanceOf(IntegrityError);
 		expect(await store.hasChunk(REAL_CHUNK)).toBe(false);
 
 		// Re-sync lands the good chunk again and loads recover — no permanent poison.
-		await store.putChunkCompressed(REAL_CHUNK, chunkBytes(REAL_CHUNK));
-		expect((await store.getChunk(REAL_CHUNK)).byteLength).toBeGreaterThan(0);
+		await store.putChunkCompressed(
+			REAL_CHUNK,
+			chunkBytes(REAL_CHUNK),
+			REAL_CHUNK_SIZE,
+		);
+		expect(
+			(await store.getChunk(REAL_CHUNK, REAL_CHUNK_SIZE)).byteLength,
+		).toBeGreaterThan(0);
 	});
 
 	it("leaves a healthy chunk in place across repeated reads (no spurious eviction)", async () => {
 		stubOpfs();
 		const store = await OpfsCacheStore.open();
-		await store.putChunkCompressed(REAL_CHUNK, chunkBytes(REAL_CHUNK));
+		await store.putChunkCompressed(
+			REAL_CHUNK,
+			chunkBytes(REAL_CHUNK),
+			REAL_CHUNK_SIZE,
+		);
 
-		await store.getChunk(REAL_CHUNK);
-		await store.getChunk(REAL_CHUNK);
+		await store.getChunk(REAL_CHUNK, REAL_CHUNK_SIZE);
+		await store.getChunk(REAL_CHUNK, REAL_CHUNK_SIZE);
 
 		expect(await store.hasChunk(REAL_CHUNK)).toBe(true);
+	});
+});
+
+const pointer = (
+	sequence: number,
+	manifestHash = "a".repeat(64),
+): VersionPointer => ({
+	manifest_hash: manifestHash,
+	version: `v${sequence}`,
+	bundle_id: "bundle",
+	channel: "stable",
+	sequence,
+	signature: "signed",
+});
+
+describe("durable OPFS active pointer selection", () => {
+	it("keeps the newest valid slot when another slot is torn", () => {
+		expect(selectHighestPointer([pointer(4), null, pointer(3)])?.sequence).toBe(
+			4,
+		);
+	});
+
+	it("rejects stale and equal-sequence equivocation during promotion", () => {
+		const current = pointer(7);
+		expect(canPromotePointer(current, pointer(6))).toBe(false);
+		expect(canPromotePointer(current, pointer(7, "b".repeat(64)))).toBe(false);
+		expect(canPromotePointer(current, pointer(8))).toBe(true);
 	});
 });

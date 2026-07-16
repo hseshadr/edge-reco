@@ -18,6 +18,7 @@ def score_product(
     *,
     similarity: float = 0.0,
     cooccurrence: float = 0.0,
+    retrieval: float = 0.0,
 ) -> SearchResult:
     """Score ``product`` under ``weights``.
 
@@ -36,6 +37,7 @@ def score_product(
     penalty = weights.repetition_penalty if product.id in profile.recently_viewed else 0.0
 
     components = {
+        "retrieval": retrieval,
         "popularity": weights.popularity * product.popularity_score,
         "category_match": weights.category * cat_match,
         "tag_match": weights.tag * tag_match,
@@ -49,7 +51,8 @@ def score_product(
         "repetition_penalty": penalty,
     }
     score = (
-        components["popularity"]
+        components["retrieval"]
+        + components["popularity"]
         + components["category_match"]
         + components["tag_match"]
         + components["brand_match"]

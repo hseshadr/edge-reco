@@ -10,6 +10,8 @@ export interface SyncRequest {
 	readonly id: number;
 	readonly baseUrl: string;
 	readonly pubkeyUrl: string;
+	readonly expectedBundleId: string;
+	readonly expectedChannel: string;
 }
 
 /** Materialize a synced file's bytes from the active manifest. */

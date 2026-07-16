@@ -42,7 +42,7 @@ def _products(tag: str) -> str:
     return f'{{"id":"P1","title":"T {tag}","category":"C","description":"{_PADDING}"}}\n'
 
 
-def _publish(ctx: StepContext, *, tag: str, version: str) -> Path:
+def _publish(ctx: StepContext, *, tag: str, version: str, sequence: int = 1) -> Path:
     """Stage products + a dummy vector/ dir and publish a signed origin."""
     staging = ctx.tmp_path / f"staging-{version}"
     (staging / "vector").mkdir(parents=True)
@@ -59,6 +59,7 @@ def _publish(ctx: StepContext, *, tag: str, version: str) -> Path:
         embedding_dim=384,
         embedding_count=1,
         product_count=1,
+        sequence=sequence,
     )
     return origin
 
@@ -99,7 +100,7 @@ def _already_synced(ctx: StepContext) -> None:
 
 @when("the origin republishes a bundle that shares most of its content")
 def _republish(ctx: StepContext) -> None:
-    ctx.origin2 = _publish(ctx, tag="v2", version="v2")
+    ctx.origin2 = _publish(ctx, tag="v2", version="v2", sequence=2)
 
 
 @when("I sync the new version into the same cache")

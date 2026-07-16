@@ -214,6 +214,49 @@ test("delivery headers enforce transport and a resource-aware CSP", async () => 
 	}
 });
 
+test("delivery headers pin the trust root and immutable release assets", async () => {
+	const headers = await artifact("_headers");
+	assert.match(
+		headers,
+		/\/public\.key\s+Content-Type:\s*application\/octet-stream\s+Cache-Control:\s*public,\s*max-age=31536000,\s*immutable/iu,
+	);
+	for (const path of [
+		"/bundle/chunk/*",
+		"/bundle/manifest/*",
+		"/assets/*",
+		"/models/*",
+		"/ort/*",
+	]) {
+		const block = headers.slice(headers.indexOf(path));
+		assert.ok(block.startsWith(path), `missing header block for ${path}`);
+		assert.match(
+			block.split(/\n(?=\/)/u, 1)[0] ?? "",
+			/Cache-Control:\s*public,\s*max-age=31536000,\s*immutable/iu,
+		);
+	}
+});
+
+test("the app shell has no third-party font dependency", async () => {
+	const document = await htmlDocument("index.html");
+	const externalFonts = [...document.querySelectorAll("link[href]")]
+		.map((link) => link.getAttribute("href") ?? "")
+		.filter((href) => /fonts\.(?:googleapis|gstatic)\.com/u.test(href));
+	assert.deepEqual(externalFonts, []);
+
+	const headers = await artifact("_headers");
+	assert.doesNotMatch(headers, /fonts\.(?:googleapis|gstatic)\.com/u);
+	assert.doesNotMatch(headers, /media-amazon\.com/u);
+
+	const serviceWorkerConfig = await readFile(
+		join(APP_DIR, "vite.config.ts"),
+		"utf8",
+	);
+	assert.doesNotMatch(
+		serviceWorkerConfig,
+		/"(?:huggingface\.co|hf\.co|cdn\.jsdelivr\.net)"/u,
+	);
+});
+
 test("robots.txt and llms.txt keep AI crawlers and canonical sources accessible", async () => {
 	const robots = await artifact("robots.txt");
 	for (const crawler of AI_CRAWLERS) {

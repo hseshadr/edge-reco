@@ -57,10 +57,10 @@ function makeProduct(id: string, title: string): Product {
 		currency: "USD",
 		popularity_score: 0.5,
 		freshness_score: 0.5,
-		// A real image_url makes ProductImage render an <img alt=title>; the
+		// A release-owned image_url makes ProductImage render an <img alt=title>; the
 		// fallback tile would otherwise repeat the title as visible text and make
 		// findByText ambiguous.
-		image_url: `https://img.example.com/${id}.jpg`,
+		image_url: `/test-assets/${id}.jpg`,
 		url: "",
 		attributes: {},
 	};

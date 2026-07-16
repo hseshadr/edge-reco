@@ -97,57 +97,9 @@ const pwa = process.env.VITEST
 					navigateFallbackDenylist: [/\/bundle\//],
 					runtimeCaching: [
 						{
-							urlPattern: ({ url }) =>
-								url.origin === "https://fonts.googleapis.com",
-							handler: "StaleWhileRevalidate",
-							options: { cacheName: "google-fonts-stylesheets" },
-						},
-						{
-							urlPattern: ({ url }) =>
-								url.origin === "https://fonts.gstatic.com",
-							handler: "CacheFirst",
-							options: {
-								cacheName: "google-fonts-files",
-								expiration: {
-									maxEntries: 16,
-									maxAgeSeconds: 60 * 60 * 24 * 365,
-								},
-								cacheableResponse: { statuses: [0, 200] },
-							},
-						},
-						{
-							// LEGACY FALLBACK — should never fire: model weights are now
-							// SELF-HOSTED under /models/ (house standard §8.1b) and the
-							// cold-CDN-blocked e2e proves the runtime never touches the HF
-							// host. The route (and its cache NAME) is kept so (a) a client
-							// still running an old app build keeps its offline model, and
-							// (b) if the local mirror ever regressed to the remote fallback,
-							// the model would still be cached rather than re-fetched forever.
-							urlPattern: ({ url }) =>
-								url.hostname.endsWith("huggingface.co") ||
-								url.hostname.endsWith("hf.co"),
-							handler: "CacheFirst",
-							options: {
-								cacheName: "edgereco-model",
-								expiration: {
-									maxEntries: 64,
-									maxAgeSeconds: 60 * 60 * 24 * 365,
-								},
-								cacheableResponse: { statuses: [0, 200] },
-							},
-						},
-						{
-							// The onnxruntime-web wasm runtime. NOW: served same-origin from
-							// the staged /ort/ mirror (house standard §8.1b — the loader
-							// module's default base is jsDelivr, and the cold-CDN-blocked
-							// e2e proves we never touch it); this route makes the pair
-							// offline-capable without precaching ~23 MB on every visitor.
-							// The jsDelivr half of the pattern is the legacy fallback for
-							// clients still running an old app build — same cache NAME as
-							// always, so their offline copy stays valid.
-							urlPattern: ({ url }) =>
-								url.hostname === "cdn.jsdelivr.net" ||
-								url.pathname.startsWith("/ort/"),
+							// The same-origin onnxruntime-web WASM mirror stays offline-capable
+							// without forcing a ~23 MB service-worker install download.
+							urlPattern: ({ url }) => url.pathname.startsWith("/ort/"),
 							handler: "CacheFirst",
 							options: {
 								cacheName: "edgereco-wasm",

@@ -130,14 +130,15 @@ describe("scoreProduct (Phase-3 co-occurrence term)", () => {
 });
 
 describe("rerank", () => {
-	it("re-scores and sorts descending by personalized score", () => {
+	it("keeps strong retrieval relevance ahead of popularity", () => {
 		const input: SearchResult[] = [
 			{ product: P2, score: 99, score_components: null },
 			{ product: P1, score: 1, score_components: null },
 		];
 		const out = rerank(input, emptyProfile());
-		// P1 popularity 0.8 outscores P2 popularity 0.6 regardless of input order.
-		expect(out.map((r) => r.product.id)).toEqual(["p1", "p2"]);
+		// Search relevance is the primary signal; popularity may refine, not erase it.
+		expect(out.map((r) => r.product.id)).toEqual(["p2", "p1"]);
+		expect(out[0]?.score_components?.retrieval).toBe(0.2);
 		expect(out[0]?.score_components).not.toBeNull();
 	});
 

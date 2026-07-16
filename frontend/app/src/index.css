@@ -1,7 +1,7 @@
 /* =========================================================================
    NIMBUS — design system
    Refined editorial concept-store. Warm paper, one signal red-orange,
-   deep cool secondary. Fraunces display + Hanken Grotesk body.
+   deep cool secondary. Platform-native editorial serif + humanist sans.
    ========================================================================= */
 
 :root {
@@ -17,8 +17,11 @@
 	--line: #e5ddd0;
 
 	/* typography */
-	--font-display: "Fraunces", "Times New Roman", serif;
-	--font-body: "Hanken Grotesk", system-ui, sans-serif;
+	--font-display:
+		"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia,
+		serif;
+	--font-body:
+		"Avenir Next", Avenir, "Segoe UI", Helvetica, Arial, system-ui, sans-serif;
 
 	/* rhythm */
 	--gut: clamp(16px, 3vw, 40px);

@@ -75,12 +75,19 @@ export class EngineClient {
 	}
 
 	/** Sync the signed bundle at `baseUrl`, pinning the raw pubkey at `pubkeyUrl`. */
-	public async sync(baseUrl: string, pubkeyUrl: string): Promise<SyncResult> {
+	public async sync(
+		baseUrl: string,
+		pubkeyUrl: string,
+		expectedBundleId = "amazon-demo",
+		expectedChannel = "stable",
+	): Promise<SyncResult> {
 		const response = await this.#send({
 			kind: "sync",
 			id: this.#allocId(),
 			baseUrl,
 			pubkeyUrl,
+			expectedBundleId,
+			expectedChannel,
 		});
 		if (response.ok && response.kind === "sync") {
 			return response.result;

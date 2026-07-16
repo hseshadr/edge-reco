@@ -33,6 +33,7 @@ export default defineConfig({
 			url: "http://localhost:5174/engine-harness.html",
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
+			env: { VITE_BUNDLE_BASE_URL: "http://localhost:8910/catalog" },
 		},
 		{
 			command: "node tests/e2e-c1/catalog-server.mjs",

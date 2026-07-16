@@ -10,14 +10,17 @@
 // (~25 MB) loads on first use, so the suite gets a long timeout. Skippable via
 // EDGE_RECO_SKIP_EMBEDDING_PARITY=1 (the embedder is the gated part).
 
+import { resolve } from "node:path";
+import { env, pipeline } from "@huggingface/transformers";
 import { describe, expect, it } from "vitest";
 import hybridFixture from "./__fixtures__/hybrid_parity.json" with {
 	type: "json",
 };
-import { createEmbedder } from "./embedder";
+import { createEmbedder, createEmbedderWith, type ExtractFn } from "./embedder";
 import { catalogFetch } from "./fixtures";
 import { MemoryCacheStore } from "./memoryStore";
 import { createSearchEngine, type SearchEngine } from "./searchEngine";
+import { buildProfile } from "./session";
 import { materializeFile, syncIndex } from "./sync";
 import type { IndexManifest, Verify } from "./types";
 import type { VectorIndexFiles } from "./vectorIndex";
@@ -65,6 +68,21 @@ async function syncedFiles(): Promise<VectorIndexFiles> {
 async function realEngine(): Promise<SearchEngine> {
 	// createEmbedder loads the real transformers.js pipeline lazily (node env).
 	return createSearchEngine(await syncedFiles(), createEmbedder());
+}
+
+async function browserModelEngine(): Promise<SearchEngine> {
+	env.allowLocalModels = true;
+	env.allowRemoteModels = false;
+	env.localModelPath = resolve(process.cwd(), "../../app/public/models");
+	const embedder = createEmbedderWith(async () => {
+		const extract = await pipeline(
+			"feature-extraction",
+			"Xenova/all-MiniLM-L6-v2",
+			{ dtype: "q8" },
+		);
+		return extract as unknown as ExtractFn;
+	});
+	return createSearchEngine(await syncedFiles(), embedder);
 }
 
 /** Bucket an ordered (id, score) list into ids grouped by rounded score, so
@@ -116,6 +134,35 @@ describe.skipIf(SKIP)(
 					expect(response.query).toBe(testCase.query);
 					// The full hybrid path populates the per-signal breakdown.
 					expect(response.results[0]?.score_components).not.toBeNull();
+				}
+			},
+			TIMEOUT_MS,
+		);
+
+		it(
+			"keeps the exact hiking boot above personalized apparel in the browser model",
+			async () => {
+				const engine = await browserModelEngine();
+				const shirt = engine
+					.catalog()
+					.find((product) => product.id === "B0BZDLXKTS");
+				expect(shirt).toBeDefined();
+				const profile = buildProfile(
+					Array.from(
+						{ length: 10 },
+						(_, index) =>
+							({
+								event_type: "favorite",
+								product_id: "B0BZDLXKTS",
+								timestamp: `2026-07-15T00:00:${String(index).padStart(2, "0")}Z`,
+							}) as const,
+					),
+					new Map(shirt === undefined ? [] : [[shirt.id, shirt]]),
+				);
+
+				for (const query of ["waterproof hiking boot", "hiking boots"]) {
+					const response = await engine.search(query, { limit: 10, profile });
+					expect(response.results[0]?.product.id).toBe("B0C62MD9JY");
 				}
 			},
 			TIMEOUT_MS,
