@@ -16,8 +16,14 @@
 // Run: `pnpm -F frontend run build:pages` (locally, or as the Cloudflare Pages
 // build command — see docs/DEPLOY.md).
 
-import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+	cpSync,
+	existsSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,6 +58,38 @@ function die(message) {
 	process.exit(1);
 }
 
+function sourceCommit(env) {
+	const explicit = env.EXPECTED_SHA ?? env.GITHUB_SHA;
+	if (explicit !== undefined && /^[0-9a-f]{40}$/u.test(explicit)) {
+		return explicit;
+	}
+	return execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: resolve(APP_DIR, "..", ".."),
+		encoding: "utf8",
+	}).trim();
+}
+
+function writeBuildIdentity(env) {
+	const packageJson = JSON.parse(
+		readFileSync(join(APP_DIR, "package.json"), "utf8"),
+	);
+	const latest = JSON.parse(readFileSync(join(CATALOG_DIR, "latest"), "utf8"));
+	const identity = {
+		commit: sourceCommit(env),
+		version: packageJson.version,
+		buildTime: new Date().toISOString(),
+		bundleId: latest.bundle_id,
+		bundleVersion: latest.version,
+		bundleManifestHash: latest.manifest_hash,
+		channel: latest.channel,
+	};
+	writeFileSync(
+		join(DIST_DIR, "build.json"),
+		`${JSON.stringify(identity, null, 2)}\n`,
+		"utf8",
+	);
+}
+
 function main() {
 	if (!existsSync(join(CATALOG_DIR, "latest"))) {
 		die(`no signed bundle at ${CATALOG_DIR} — expected the committed catalog.`);
@@ -76,6 +114,7 @@ function main() {
 	if (!existsSync(join(DIST_BUNDLE_DIR, "latest"))) {
 		die("bundle copy failed — dist/bundle/latest missing.");
 	}
+	writeBuildIdentity(env);
 	process.stdout.write(
 		`>> Pages dist ready: ${DIST_DIR} (signed bundle copied same-origin to dist/bundle)\n`,
 	);

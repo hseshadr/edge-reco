@@ -105,6 +105,8 @@ export const EMBEDDING_DTYPE = "q8";
 /** Embeds a query string into a normalized 384-d vector. */
 export interface Embedder {
 	embed(text: string): Promise<Float32Array>;
+	/** Release any worker/model resources owned by this embedder. */
+	dispose?(): void;
 }
 
 /** A feature-extraction call producing a flat numeric data buffer. */

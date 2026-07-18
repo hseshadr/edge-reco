@@ -126,3 +126,17 @@ describe("EngineClient bounded response deadline (backstop)", () => {
 		vi.advanceTimersByTime(60_000);
 	});
 });
+
+describe("EngineClient disposal", () => {
+	it("rejects pending requests and terminates its worker", async () => {
+		const worker = new FakeWorker();
+		const client = new EngineClient(worker);
+		const pending = client.readFile("catalog_meta.json");
+		const assertion = expect(pending).rejects.toBeInstanceOf(WorkerCrashError);
+
+		client.dispose();
+
+		await assertion;
+		expect(worker.terminated).toBe(true);
+	});
+});

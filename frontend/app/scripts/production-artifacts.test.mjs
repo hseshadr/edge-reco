@@ -89,6 +89,21 @@ test("root exposes substantive crawlable product content", async () => {
 	assert.match(text, /Reciprocal Rank Fusion/i);
 });
 
+test("production artifact exposes a verifiable source identity", async (t) => {
+	if (DIST_DIR === undefined) {
+		t.skip("build identity exists only in the generated production dist");
+		return;
+	}
+	const identity = JSON.parse(await artifact("build.json"));
+	assert.match(identity.commit, /^[0-9a-f]{40}$/u);
+	assert.match(identity.version, /^\d+\.\d+\.\d+$/u);
+	assert.match(identity.buildTime, /^\d{4}-\d{2}-\d{2}T[^\s]+Z$/u);
+	assert.equal(identity.bundleId, "amazon-demo");
+	assert.equal(identity.bundleVersion, "v1");
+	assert.match(identity.bundleManifestHash, /^[0-9a-f]{64}$/u);
+	assert.equal(identity.channel, "stable");
+});
+
 test("root and EdgeProc snippets stay within search-result limits", async () => {
 	for (const file of ["index.html", "edgeproc.html"]) {
 		const document = await htmlDocument(file);
@@ -178,6 +193,7 @@ test("unknown routes use a noindex 404 instead of the SPA shell", async () => {
 
 test("delivery headers enforce transport and a resource-aware CSP", async () => {
 	const headers = await artifact("_headers");
+	assert.match(headers, /\/build\.json\s+Cache-Control:\s*no-store/iu);
 	assert.match(
 		headers,
 		/Strict-Transport-Security:\s*max-age=(?:31536000|\d{9,})/iu,

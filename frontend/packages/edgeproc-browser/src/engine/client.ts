@@ -48,6 +48,7 @@ export class EngineClient {
 	readonly #timeoutMs: number;
 	#nextId = 0;
 	#crash: WorkerCrashError | undefined;
+	#disposed = false;
 
 	public constructor(
 		worker: EngineWorkerLike,
@@ -108,8 +109,19 @@ export class EngineClient {
 		throw new Error(this.#errorOf(response));
 	}
 
-	public terminate(): void {
+	/** Reject in-flight work and release the sync worker. Safe to call twice. */
+	public dispose(): void {
+		if (this.#disposed) {
+			return;
+		}
+		this.#disposed = true;
+		this.#onCrash("engine worker disposed");
 		this.#worker.terminate();
+	}
+
+	/** Backwards-compatible alias for callers that own the raw worker lifecycle. */
+	public terminate(): void {
+		this.dispose();
 	}
 
 	#allocId(): number {

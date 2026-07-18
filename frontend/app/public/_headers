@@ -24,6 +24,11 @@
 /manifest.webmanifest
   Cache-Control: public, max-age=0, must-revalidate
 
+# Generated per deployment; never serve an older source identity from an edge
+# cache. The deploy workflow compares its commit to EXPECTED_SHA.
+/build.json
+  Cache-Control: no-store
+
 # The trust root is intentionally release-pinned. Rotate it only with a new,
 # versioned path and an application release; clients must never reinterpret it.
 /public.key

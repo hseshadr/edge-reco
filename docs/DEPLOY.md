@@ -169,10 +169,24 @@ To go live:
    identical apex path and query.
 
 The build emits `frontend/app/dist`; `wrangler pages deploy frontend/app/dist
---project-name=edge-reco --branch=main --commit-hash=<CI_SHA>` uploads it. A
-`frontend/app/public/_redirects`
-(`/*  /index.html  200`) keeps any path serving the SPA shell — harmless today (the
-storefront has no client-side router) and future-proof if one is ever added.
+--project-name=edge-reco --branch=main --commit-hash=<CI_SHA>` uploads it. The
+`frontend/app/public/_redirects` file intentionally has no SPA wildcard rewrite:
+the storefront has no client-side URL router, and unknown paths should retain
+the generated noindex 404 rather than serving the root shell.
+
+Each Pages build also emits `/build.json` with the CI source commit, application
+version, and signed catalog manifest hash. It is served with `Cache-Control:
+no-store`; the deploy workflow compares its `commit` to the exact `EXPECTED_SHA`
+after the Cloudflare API identity check. This gives a public, machine-readable
+identity check without trusting a mutable README or an unversioned bundle pointer.
+
+The `www` → apex redirect cannot be implemented by Pages' `_redirects` file:
+Cloudflare Pages does not support domain-level redirect rules there. The exact
+remaining external step is therefore to create a proxied `www` DNS record and a
+Cloudflare Redirect Rule for `www.edge-reco.com/*` →
+`https://edge-reco.com/$1` (301/308, preserving query strings). The deploy workflow
+probes that rule and remains red until it exists; do not report the site as
+canonical-host healthy while that check fails.
 
 Every Pages deployment has an immutable deployment URL, so rollback is the Cloudflare
 Pages **Deployments → Rollback to this deployment** operation. After rollback, verify

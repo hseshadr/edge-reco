@@ -12,6 +12,7 @@ type AnyListener = (event: unknown) => void;
 /** In-memory embedder-Worker double: records posts, lets tests emit events. */
 class FakeEmbedderWorker implements WorkerLike {
 	public readonly posted: EmbedRequest[] = [];
+	public terminated = false;
 	readonly #listeners = new Map<string, AnyListener[]>();
 
 	public postMessage(message: EmbedRequest): void {
@@ -52,6 +53,10 @@ class FakeEmbedderWorker implements WorkerLike {
 		for (const listener of this.#listeners.get("messageerror") ?? []) {
 			listener({ data: null });
 		}
+	}
+
+	public terminate(): void {
+		this.terminated = true;
 	}
 }
 
@@ -121,5 +126,19 @@ describe("WorkerEmbedder bounded response deadline (backstop)", () => {
 
 		// the cleared deadline must not fire anything afterwards
 		vi.advanceTimersByTime(60_000);
+	});
+});
+
+describe("WorkerEmbedder disposal", () => {
+	it("rejects pending embeds and terminates its worker", async () => {
+		const worker = new FakeEmbedderWorker();
+		const embedder = createWorkerEmbedder(worker);
+		const pending = embedder.embed("desk lamp");
+		const assertion = expect(pending).rejects.toBeInstanceOf(WorkerCrashError);
+
+		embedder.dispose?.();
+
+		await assertion;
+		expect(worker.terminated).toBe(true);
 	});
 });

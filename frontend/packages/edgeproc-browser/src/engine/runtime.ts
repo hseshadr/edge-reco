@@ -66,6 +66,10 @@ export interface EnginePort {
 		expectedChannel?: string,
 	): Promise<SyncResult>;
 	readFile(path: string): Promise<Uint8Array>;
+	/** Release the sync worker once the bundle is materialized. */
+	dispose?(): void;
+	/** Legacy lifecycle alias for worker-backed ports. */
+	terminate?(): void;
 }
 
 /** The seams bootstrap depends on; defaulted to the real Workers, faked in tests. */
@@ -170,6 +174,9 @@ export class EngineRuntime {
 	readonly #deps: RuntimeDeps;
 	#enginePromise: Promise<SearchEngine> | null = null;
 	#ready: SearchEngine | null = null;
+	#enginePort: EnginePort | null = null;
+	#embedder: Embedder | null = null;
+	#generation = 0;
 
 	public constructor(deps: RuntimeDeps = defaultDeps) {
 		this.#deps = deps;
@@ -186,49 +193,133 @@ export class EngineRuntime {
 		onStage: OnStage = () => {},
 	): Promise<SearchEngine> {
 		if (this.#enginePromise === null) {
-			this.#enginePromise = this.#build(config, onStage).catch((error) => {
-				// Let a failed bootstrap be retried by clearing the memo.
-				this.#enginePromise = null;
-				throw error;
-			});
+			const generation = this.#generation;
+			this.#enginePromise = this.#build(config, onStage, generation).catch(
+				(error) => {
+					// Let a failed bootstrap be retried by clearing the memo. A stale
+					// build must not clear a newer attempt after explicit dispose().
+					if (this.#generation === generation) {
+						this.#enginePromise = null;
+					}
+					throw error;
+				},
+			);
 		}
 		return this.#enginePromise;
 	}
 
-	async #build(config: RuntimeConfig, onStage: OnStage): Promise<SearchEngine> {
-		const engineClient = this.#deps.spawnEngine();
-		onStage({ kind: "syncing" });
-		const result = await engineClient.sync(
-			config.bundleBaseUrl,
-			config.pubkeyUrl,
-			config.expectedBundleId,
-			config.expectedChannel,
-		);
-		onStage({ kind: "synced", result });
+	async #build(
+		config: RuntimeConfig,
+		onStage: OnStage,
+		generation: number,
+	): Promise<SearchEngine> {
+		let engineClient: EnginePort | null = null;
+		let embedder: Embedder | null = null;
+		try {
+			engineClient = this.#deps.spawnEngine();
+			this.#enginePort = engineClient;
+			onStage({ kind: "syncing" });
+			const result = await engineClient.sync(
+				config.bundleBaseUrl,
+				config.pubkeyUrl,
+				config.expectedBundleId,
+				config.expectedChannel,
+			);
+			this.#assertCurrent(generation);
+			onStage({ kind: "synced", result });
 
-		onStage({ kind: "reassembling" });
-		const [files, rankingConfig, cooccurrence] = await Promise.all([
-			readBundleFiles(engineClient),
-			readRankingConfig(engineClient),
-			readCooccurrence(engineClient),
-		]);
+			onStage({ kind: "reassembling" });
+			const [files, rankingConfig, cooccurrence] = await Promise.all([
+				readBundleFiles(engineClient),
+				readRankingConfig(engineClient),
+				readCooccurrence(engineClient),
+			]);
+			// The sync worker has done its job; release OPFS/IPC resources before
+			// loading the model so the two largest allocations do not overlap.
+			this.#releaseEngine(engineClient);
+			engineClient = null;
+			this.#assertCurrent(generation);
 
-		onStage({ kind: "loading-model" });
-		const embedder = this.#deps.makeEmbedder();
-		// Force the ~25 MB model download/compile now so "loading-model" reflects
-		// real work and the first user query is fast.
-		await embedder.embed(WARMUP_PROMPT);
+			onStage({ kind: "loading-model" });
+			embedder = this.#deps.makeEmbedder();
+			this.#embedder = embedder;
+			// Force the ~25 MB model download/compile now so "loading-model" reflects
+			// real work and the first user query is fast.
+			await embedder.embed(WARMUP_PROMPT);
+			this.#assertCurrent(generation);
 
-		const engine = await createSearchEngine(
-			files,
-			embedder,
-			rankingConfig,
-			cooccurrence,
-		);
-		this.#ready = engine;
-		onStage({ kind: "ready" });
-		return engine;
+			const engine = await createSearchEngine(
+				files,
+				embedder,
+				rankingConfig,
+				cooccurrence,
+			);
+			this.#assertCurrent(generation);
+			this.#ready = engine;
+			onStage({ kind: "ready" });
+			return engine;
+		} catch (error) {
+			if (engineClient !== null) {
+				this.#releaseEngine(engineClient);
+			}
+			if (embedder !== null) {
+				this.#releaseEmbedder(embedder);
+			}
+			throw error;
+		}
 	}
+
+	/** Release both worker-backed resources and permit a fresh bootstrap. */
+	public dispose(): void {
+		this.#generation += 1;
+		this.#enginePromise = null;
+		this.#ready = null;
+		const enginePort = this.#enginePort;
+		this.#enginePort = null;
+		if (enginePort !== null) {
+			disposeResource(enginePort);
+		}
+		const embedder = this.#embedder;
+		this.#embedder = null;
+		if (embedder !== null) {
+			disposeResource(embedder);
+		}
+	}
+
+	#assertCurrent(generation: number): void {
+		if (generation !== this.#generation) {
+			throw new Error("engine runtime disposed during bootstrap");
+		}
+	}
+
+	#releaseEngine(enginePort: EnginePort): void {
+		if (this.#enginePort !== enginePort) {
+			return;
+		}
+		this.#enginePort = null;
+		disposeResource(enginePort);
+	}
+
+	#releaseEmbedder(embedder: Embedder): void {
+		if (this.#embedder !== embedder) {
+			return;
+		}
+		this.#embedder = null;
+		disposeResource(embedder);
+	}
+}
+
+interface DisposableResource {
+	dispose?: () => void;
+	terminate?: () => void;
+}
+
+function disposeResource(resource: DisposableResource): void {
+	if (resource.dispose !== undefined) {
+		resource.dispose();
+		return;
+	}
+	resource.terminate?.();
 }
 
 /** Re-exported so call sites that only need the pure embedder can build one. */

@@ -32,6 +32,7 @@ export interface WorkerLike {
 		listener: (event: { message: string }) => void,
 	): void;
 	addEventListener(type: "messageerror", listener: () => void): void;
+	terminate(): void;
 }
 
 /** Tuning knobs for the embedder client. */
@@ -58,6 +59,7 @@ class WorkerEmbedder implements Embedder {
 	readonly #timeoutMs: number;
 	#nextId = 0;
 	#crash: WorkerCrashError | undefined;
+	#disposed = false;
 
 	public constructor(worker: WorkerLike, options: WorkerEmbedderOptions = {}) {
 		this.#worker = worker;
@@ -94,6 +96,16 @@ class WorkerEmbedder implements Embedder {
 			entry.reject(this.#crash);
 		}
 		this.#pending.clear();
+	}
+
+	/** Reject in-flight work and release the model worker. Safe to call twice. */
+	public dispose(): void {
+		if (this.#disposed) {
+			return;
+		}
+		this.#disposed = true;
+		this.#onCrash("embedder worker disposed");
+		this.#worker.terminate();
 	}
 
 	public embed(text: string): Promise<Float32Array> {

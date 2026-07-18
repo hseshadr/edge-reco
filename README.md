@@ -28,9 +28,11 @@ cd frontend && uv run poe gate
 ```
 
 One boundary is intentionally visible: `www.edge-reco.com` is an external DNS
-configuration item and currently does not resolve; the repository's automatic
-Cloudflare deploy remains fail-closed when its credentials are absent. The apex and
-immutable Pages deployment are the verified production surfaces.
+configuration item and currently serves the site with HTTP 200 instead of the
+required permanent redirect to the apex. The repository's automatic Cloudflare
+deploy remains fail-closed until that Redirect Rule exists; the deploy workflow
+probes it and stays red. The apex and immutable Pages deployment are the verified
+production surfaces.
 
 **Every Black Friday, the same thing breaks.** Your store's search and recommendations — the "you might also like," the personalized picks — run on paid cloud services, and your company pays the bill on every search and every click, for every shopper. To survive the one wild hour of the year you rent far more computing power than you need, then pay for it all year. The smartest part of your store is also the most expensive — and the first to fall over right when it matters most.
 
