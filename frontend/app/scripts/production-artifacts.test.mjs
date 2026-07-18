@@ -104,6 +104,17 @@ test("production artifact exposes a verifiable source identity", async (t) => {
 	assert.equal(identity.channel, "stable");
 });
 
+test("production artifact carries the canonical-host Pages worker", async (t) => {
+	if (DIST_DIR === undefined) {
+		t.skip("the advanced-mode worker exists only in the generated production dist");
+		return;
+	}
+	const worker = await artifact("_worker.js");
+	assert.match(worker, /www\.edge-reco\.com/u);
+	assert.match(worker, /Response\.redirect\(url\.toString\(\), 308\)/u);
+	assert.match(worker, /env\.ASSETS\.fetch\(request\)/u);
+});
+
 test("root and EdgeProc snippets stay within search-result limits", async () => {
 	for (const file of ["index.html", "edgeproc.html"]) {
 		const document = await htmlDocument(file);

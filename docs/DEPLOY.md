@@ -162,12 +162,12 @@ To go live:
    `edge-reco.com`. Cloudflare provisions the apex DNS (CNAME-flattening) and TLS
    automatically.
 
-4. **Make `www` canonical, not a second copy.** Add a proxied `www` DNS record in the
-   Cloudflare zone, then create a permanent Redirect Rule from
-   `www.edge-reco.com/*` to `https://edge-reco.com/$1` with query strings preserved.
-   Do not attach `www` as an independently served Pages hostname. The deploy workflow
-   probes `/faq?source=deploy-check` and fails unless `www` returns 301/308 to the
-   identical apex path and query.
+4. **Make `www` canonical, not a second copy.** Attach `www.edge-reco.com` as a
+   custom domain on this Pages project, alongside the apex. The checked-in advanced
+   mode worker (`frontend/app/public/_worker.js`) redirects every `www` request to
+   the apex with status 308 while preserving path and query strings. The deploy
+   workflow probes `/faq?source=deploy-check` and fails unless `www` returns 301/308
+   to the identical apex path and query.
 
 The build emits `frontend/app/dist`; `wrangler pages deploy frontend/app/dist
 --project-name=edge-reco --branch=main --commit-hash=<CI_SHA>` uploads it. The
@@ -182,22 +182,21 @@ after Cloudflare reports the Pages deployment as successful. This gives a public
 machine-readable identity check without trusting a mutable README, an incompatible
 Workers-style source field, or an unversioned bundle pointer.
 
-The `www` → apex redirect cannot be implemented by Pages' `_redirects` file:
-Cloudflare Pages does not support domain-level redirect rules there. The exact
-remaining external step is therefore to create a proxied `www` DNS record and a
-Cloudflare Redirect Rule for `www.edge-reco.com/*` →
-`https://edge-reco.com/$1` (301/308, preserving query strings). The deploy workflow
-probes that rule and remains red until it exists; do not report the site as
-canonical-host healthy while that check fails.
+The `www` → apex redirect intentionally lives in the Pages advanced-mode worker,
+not `_redirects`: Pages `_redirects` cannot express a host-based redirect. The
+worker has full control of requests, returns 308 only for the exact public `www`
+hostname, and delegates all other traffic to `env.ASSETS.fetch(request)`. Keep the
+deploy probe in place so a removed custom domain or worker regression cannot be
+reported as canonical-host healthy.
 
 Every Pages deployment has an immutable deployment URL, so rollback is the Cloudflare
 Pages **Deployments → Rollback to this deployment** operation. After rollback, verify
 the selected deployment's `/build.json` commit before announcing recovery; the next
 CI-driven deploy repeats the same exact-SHA identity gate.
 
-The canonical-host check is deliberately part of the green contract. If the external
-DNS/Redirect Rule is missing or drifts, code can still upload, but the workflow remains
-red and production must not be reported healthy.
+The canonical-host check is deliberately part of the green contract. If the custom
+domain or worker redirect is missing or drifts, code can still upload, but the
+workflow remains red and production must not be reported healthy.
 
 ## Shape 2 — Edge-origin API server
 

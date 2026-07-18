@@ -18,7 +18,7 @@
 #
 # One-time prerequisites (outside this workflow, done by a human with wrangler):
 #   npx wrangler pages project create edge-reco --production-branch=main
-#   + attach the edge-reco.com custom domain (docs/DEPLOY.md)
+#   + attach edge-reco.com and www.edge-reco.com custom domains (docs/DEPLOY.md)
 name: Deploy edge-reco.com
 
 on:
