@@ -1,6 +1,6 @@
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import assert from "node:assert/strict";
 import vm from "node:vm";
 
 const WORKER = new URL("../public/_worker.js", import.meta.url);
@@ -13,7 +13,10 @@ async function loadWorker() {
 		Response,
 		module: { exports: undefined },
 	};
-	vm.runInNewContext(source.replace("export default", "module.exports ="), context);
+	vm.runInNewContext(
+		source.replace("export default", "module.exports ="),
+		context,
+	);
 	return context.module.exports;
 }
 
@@ -25,7 +28,10 @@ test("Pages worker redirects www to apex while preserving path and query", async
 	);
 
 	assert.equal(response.status, 308);
-	assert.equal(response.headers.get("location"), "https://edge-reco.com/faq?source=deploy-check");
+	assert.equal(
+		response.headers.get("location"),
+		"https://edge-reco.com/faq?source=deploy-check",
+	);
 });
 
 test("Pages worker serves apex requests through the static asset binding", async () => {

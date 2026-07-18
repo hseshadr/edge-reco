@@ -106,7 +106,9 @@ test("production artifact exposes a verifiable source identity", async (t) => {
 
 test("production artifact carries the canonical-host Pages worker", async (t) => {
 	if (DIST_DIR === undefined) {
-		t.skip("the advanced-mode worker exists only in the generated production dist");
+		t.skip(
+			"the advanced-mode worker exists only in the generated production dist",
+		);
 		return;
 	}
 	const worker = await artifact("_worker.js");
