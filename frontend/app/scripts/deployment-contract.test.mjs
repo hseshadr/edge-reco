@@ -18,10 +18,10 @@ test("deploy workflow fails visibly instead of reporting a green no-op", async (
 	assert.match(workflow, /exit "\$missing"/u);
 });
 
-test("deploy workflow verifies the Cloudflare source commit", async () => {
+test("deploy workflow does not trust an optional Cloudflare source field", async () => {
 	const workflow = await readFile(WORKFLOW, "utf8");
-	assert.match(workflow, /Verify deployed source identity/u);
-	assert.match(workflow, /source\.config\.commit_hash/u);
+	assert.doesNotMatch(workflow, /source\.config\.commit_hash/u);
+	assert.match(workflow, /Verify public build identity/u);
 	assert.match(workflow, /EXPECTED_SHA/u);
 });
 

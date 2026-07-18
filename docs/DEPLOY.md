@@ -135,9 +135,10 @@ alternative — or for a repo where you'd rather drive the deploy from CI — th
 
 **It fails loudly when it cannot deploy.** Until the two repository secrets below
 exist, both automatic and manual runs stop at the credential guard with a red failure.
-A green workflow means Wrangler uploaded the build and the Cloudflare API reported a
-successful production deployment whose `source.config.commit_hash` exactly matches the
-commit that passed CI.
+A green workflow means Wrangler uploaded the build and the public, no-store
+`/build.json` artifact reports the exact commit that passed CI. The workflow does not
+depend on Cloudflare's optional `source.config.commit_hash` field, which is absent for
+manual Wrangler uploads even when the deployment is healthy.
 
 To go live:
 
@@ -177,8 +178,9 @@ the generated noindex 404 rather than serving the root shell.
 Each Pages build also emits `/build.json` with the CI source commit, application
 version, and signed catalog manifest hash. It is served with `Cache-Control:
 no-store`; the deploy workflow compares its `commit` to the exact `EXPECTED_SHA`
-after the Cloudflare API identity check. This gives a public, machine-readable
-identity check without trusting a mutable README or an unversioned bundle pointer.
+after Wrangler reports a successful upload. This gives a public, machine-readable
+identity check without trusting a mutable README, an optional Cloudflare source field,
+or an unversioned bundle pointer.
 
 The `www` → apex redirect cannot be implemented by Pages' `_redirects` file:
 Cloudflare Pages does not support domain-level redirect rules there. The exact
@@ -190,8 +192,8 @@ canonical-host healthy while that check fails.
 
 Every Pages deployment has an immutable deployment URL, so rollback is the Cloudflare
 Pages **Deployments → Rollback to this deployment** operation. After rollback, verify
-the selected deployment's source commit in Cloudflare before announcing recovery; the
-next CI-driven deploy repeats the same exact-SHA identity gate.
+the selected deployment's `/build.json` commit before announcing recovery; the next
+CI-driven deploy repeats the same exact-SHA identity gate.
 
 The canonical-host check is deliberately part of the green contract. If the external
 DNS/Redirect Rule is missing or drifts, code can still upload, but the workflow remains

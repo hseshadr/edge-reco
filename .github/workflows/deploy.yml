@@ -3,16 +3,16 @@
 # AUTO-DEPLOY: runs automatically after the "CI" workflow passes on `main`
 # (and on manual workflow_dispatch). Missing deployment secrets are a hard
 # failure: a green deploy workflow always means a deploy was attempted and its
-# Cloudflare source identity was verified. Secrets required:
+# public build identity was verified. Secrets required:
 #
 #   CLOUDFLARE_API_TOKEN    Pages:Edit-scoped API token
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account that owns the `edge-reco`
 #                           Pages project + the edge-reco.com zone
 #
 # Production deploys run via pinned wrangler (docs/DEPLOY.md). The guard runs
-# before checkout, and the final step verifies Cloudflare reports the exact
-# commit SHA that passed CI. A stale or partial deploy therefore cannot be
-# reported as green.
+# before checkout, and the final step verifies the exact source SHA through the
+# deployed, no-store `/build.json` artifact. A stale or partial deploy therefore
+# cannot be reported as green.
 # SPA-ONLY: a static `build:pages` artifact (signed catalog copied same-origin
 # into dist/bundle) — no R2, no bundle signing key in CI. See docs/DEPLOY.md.
 #
@@ -116,31 +116,6 @@ jobs:
           --branch=main
           --commit-hash="$EXPECTED_SHA"
           --commit-dirty=false
-
-      - name: Verify deployed source identity
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/edge-reco/deployments?env=production&per_page=10"
-          for attempt in $(seq 1 12); do
-            payload=$(curl --fail-with-body --silent --show-error \
-              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api")
-            deployed_sha=$(jq -r --arg sha "$EXPECTED_SHA" \
-              '.result[] | select(.source.config.commit_hash == $sha) | .source.config.commit_hash' \
-              <<<"$payload" | head -n 1)
-            status=$(jq -r --arg sha "$EXPECTED_SHA" \
-              '.result[] | select(.source.config.commit_hash == $sha) | .latest_stage.status' \
-              <<<"$payload" | head -n 1)
-            if [ "$deployed_sha" = "$EXPECTED_SHA" ] && [ "$status" = "success" ]; then
-              echo "Cloudflare production deployment verified: $deployed_sha"
-              exit 0
-            fi
-            echo "Waiting for Cloudflare identity: attempt=$attempt sha=${deployed_sha:-missing} status=${status:-missing}"
-            sleep 5
-          done
-          echo "::error::Cloudflare never reported successful production source.config.commit_hash=$EXPECTED_SHA"
-          exit 1
 
       - name: Verify public build identity
         run: |
