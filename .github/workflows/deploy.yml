@@ -117,6 +117,31 @@ jobs:
           --commit-hash="$EXPECTED_SHA"
           --commit-dirty=false
 
+      - name: Verify deployed source identity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/edge-reco/deployments?env=production&per_page=10"
+          for attempt in $(seq 1 12); do
+            payload=$(curl --fail-with-body --silent --show-error \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api")
+            deployed_sha=$(jq -r --arg sha "$EXPECTED_SHA" \
+              '.result[] | select(.deployment_trigger.metadata.commit_hash == $sha) | .deployment_trigger.metadata.commit_hash' \
+              <<<"$payload" | head -n 1)
+            status=$(jq -r --arg sha "$EXPECTED_SHA" \
+              '.result[] | select(.deployment_trigger.metadata.commit_hash == $sha) | .latest_stage.status' \
+              <<<"$payload" | head -n 1)
+            if [ "$deployed_sha" = "$EXPECTED_SHA" ] && [ "$status" = "success" ]; then
+              echo "Cloudflare production deployment verified: $deployed_sha"
+              exit 0
+            fi
+            echo "Waiting for Cloudflare deployment: attempt=$attempt sha=${deployed_sha:-missing} status=${status:-missing}"
+            sleep 5
+          done
+          echo "::error::Cloudflare never reported successful deployment_trigger.metadata.commit_hash=$EXPECTED_SHA"
+          exit 1
+
       - name: Verify public build identity
         run: |
           for attempt in $(seq 1 12); do
