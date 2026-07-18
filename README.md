@@ -10,11 +10,13 @@
 
 ### ▶ [Try the live demo — edge-reco.com](https://edge-reco.com) · zero install, runs entirely in your browser tab
 
-## Northstar status (verified 2026-07-16)
+## Northstar status (verified 2026-07-18)
 
 **The reference storefront is live, offline-capable, and measurable in the browser.**
-At this verification, the deployed application code was commit `d5637b1`; hosted CI passed, and the exact build is
-live at both `https://edge-reco.com` and an immutable Cloudflare Pages deployment.
+The prior 2026-07-16 snapshot recorded `d5637b1`; the current deployed application
+code is commit `bcd171394eaa276cd9d2420837ee4d7d73232ec2`. Hosted CI run
+`29663369169` and deploy run `29663440678` both passed, and the exact build is live
+at `https://edge-reco.com` and an immutable Cloudflare Pages deployment.
 The browser smoke test measured a 3.24 s cold boot, 16.9 ms search, 1.2 ms
 recommendation, about 18.4 MB JS heap, zero external-origin requests, and zero
 backend calls after sync. The live apex also returns HSTS, CSP, COOP, and restrictive
@@ -27,12 +29,10 @@ curl -fsSLI https://edge-reco.com/
 cd frontend && uv run poe gate
 ```
 
-One boundary is intentionally visible: `www.edge-reco.com` is an external DNS
-configuration item and currently serves the site with HTTP 200 instead of the
-required permanent redirect to the apex. The repository's automatic Cloudflare
-deploy remains fail-closed until that Redirect Rule exists; the deploy workflow
-probes it and stays red. The apex and immutable Pages deployment are the verified
-production surfaces.
+The canonical `www.edge-reco.com` host now returns a permanent 308 redirect to the
+apex while preserving path and query. The Pages worker normalizes hostname case and
+a trailing DNS dot before making that redirect comparison; the deploy workflow
+probes the canonical redirect as part of its exact-release checks.
 
 **Every Black Friday, the same thing breaks.** Your store's search and recommendations — the "you might also like," the personalized picks — run on paid cloud services, and your company pays the bill on every search and every click, for every shopper. To survive the one wild hour of the year you rent far more computing power than you need, then pay for it all year. The smartest part of your store is also the most expensive — and the first to fall over right when it matters most.
 
