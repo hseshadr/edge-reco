@@ -34,6 +34,20 @@ test("Pages worker redirects www to apex while preserving path and query", async
 	);
 });
 
+test("Pages worker normalizes host case and a trailing DNS dot before redirecting", async () => {
+	const worker = await loadWorker();
+	const response = await worker.fetch(
+		new Request("https://WWW.EDGE-RECO.COM./faq?source=deploy-check"),
+		{ ASSETS: { fetch: async () => new Response("asset") } },
+	);
+
+	assert.equal(response.status, 308);
+	assert.equal(
+		response.headers.get("location"),
+		"https://edge-reco.com/faq?source=deploy-check",
+	);
+});
+
 test("Pages worker serves apex requests through the static asset binding", async () => {
 	const worker = await loadWorker();
 	const asset = new Response("asset");
