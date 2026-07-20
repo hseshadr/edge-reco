@@ -22,6 +22,7 @@ const OPTS: ObserveOptions = {
 	readyAt: READY_AT,
 	edgeOrigin: "https://cdn.example.com",
 	eventsUrl: "https://events.example.com/events",
+	appOrigin: "http://localhost:4173",
 };
 
 function entry(name: string, startTime: number) {
@@ -41,6 +42,13 @@ describe("countBackendCalls", () => {
 
 	it("does NOT count product images", () => {
 		const entries = [entry("https://m.media-amazon.com/images/I/abc.jpg", 150)];
+		expect(countBackendCalls(entries, OPTS)).toBe(0);
+	});
+
+	it("does NOT count same-origin /images/ local product assets", () => {
+		// Baked-in bundle images served same-origin (/images/<id>.svg) are static
+		// assets, not backend calls — the honest "0 after sync" headline must hold.
+		const entries = [entry("http://localhost:4173/images/P1.svg", 150)];
 		expect(countBackendCalls(entries, OPTS)).toBe(0);
 	});
 

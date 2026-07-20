@@ -6,6 +6,37 @@ const EVENTS_URL = "https://events.example.com/api/events";
 
 describe("classifyResource", () => {
 	describe("image bucket", () => {
+		it("classifies a same-origin /images/<id>.svg local asset as image", () => {
+			expect(
+				classifyResource("http://localhost:5173/images/B0B1DZXBYY.svg", {
+					edgeOrigin: EDGE_ORIGIN,
+					appOrigin: "http://localhost:5173",
+				}),
+			).toBe("image");
+		});
+
+		it("classifies a same-origin /images/ asset as image even when the app origin equals edgeOrigin", () => {
+			// The local-image rule fires before the edge rule, so a same-origin
+			// bundle host never causes a product image to count as a backend call.
+			expect(
+				classifyResource("https://cdn.example.com/images/P1.svg", {
+					edgeOrigin: EDGE_ORIGIN,
+					appOrigin: EDGE_ORIGIN,
+				}),
+			).toBe("image");
+		});
+
+		it("does NOT treat a remote host's /images/ path as a local image (scoped to appOrigin)", () => {
+			// A real backend call to a path containing /images/ on some OTHER origin
+			// must still count — the local rule is app-origin-scoped, so this is "other".
+			expect(
+				classifyResource("https://api.evil.com/images/leak", {
+					edgeOrigin: EDGE_ORIGIN,
+					appOrigin: "http://localhost:5173",
+				}),
+			).toBe("other");
+		});
+
 		it("classifies a media-amazon.com URL as image", () => {
 			expect(
 				classifyResource("https://m.media-amazon.com/images/I/71abc.jpg", {

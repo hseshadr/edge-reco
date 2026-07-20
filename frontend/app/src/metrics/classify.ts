@@ -10,12 +10,20 @@ export interface ClassifyOptions {
 	readonly edgeOrigin: string;
 	/** The optional analytics uplink URL. `null` or `undefined` means disabled. */
 	readonly eventsUrl?: string | null;
+	/**
+	 * The app's own origin (e.g. `location.origin`). When set, same-origin
+	 * `/images/<id>.svg` requests are treated as local product-image assets
+	 * (bucket "image"), not backend calls. Omit to disable that rule.
+	 */
+	readonly appOrigin?: string | null;
 }
 
 /**
  * Bucket a URL into one of four categories.
  * Matching order (first match wins):
- *   1. "image"  — host ends with `media-amazon.com`
+ *   1. "image"  — a product image: a same-origin `/images/…` asset baked into
+ *                 the bundle and served locally, OR a host ending in
+ *                 `media-amazon.com`
  *   2. "uplink" — URL starts with the origin of `opts.eventsUrl` (when set)
  *   3. "edge"   — URL's origin equals `opts.edgeOrigin`
  *   4. "other"  — everything else (including unparseable URLs)
@@ -31,7 +39,20 @@ export function classifyResource(
 		return "other";
 	}
 
-	// 1. Product images from Amazon's media CDN — not a backend call.
+	// 1. Product images.
+	//   a) Local images baked into the signed bundle and served same-origin as
+	//      /images/<id>.svg — static assets, not a backend call. Scoped to the
+	//      app's OWN origin so a remote host with an /images/ path can never mask
+	//      a real backend call. Checked before the edge rule so these never count
+	//      even if the bundle is served from the app's own origin.
+	if (
+		opts.appOrigin != null &&
+		parsed.origin === opts.appOrigin &&
+		parsed.pathname.startsWith("/images/")
+	) {
+		return "image";
+	}
+	//   b) Legacy/remote product images from Amazon's media CDN.
 	if (
 		parsed.hostname === "media-amazon.com" ||
 		parsed.hostname.endsWith(".media-amazon.com")

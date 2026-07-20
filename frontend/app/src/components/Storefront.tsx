@@ -239,6 +239,7 @@ export function Storefront() {
 			readyAt: performance.now(),
 			edgeOrigin: new URL(resolveBundleBaseUrl()).origin,
 			eventsUrl: import.meta.env.VITE_EVENTS_URL,
+			appOrigin: window.location.origin,
 		});
 		void catalogInfo().then(({ count }) => record({ productCount: count }));
 		return stop;
