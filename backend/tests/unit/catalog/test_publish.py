@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 
 import pytest
+from assay.receipt import ScoreReceipt
+from avow import content_hash, verify_signature
 from edgeproc.bundles.adapters import FilesystemAdapter
 from edgeproc.bundles.cas import FilesystemCacheStore
 from edgeproc.bundles.manifest import IndexManifest, VersionPointer
@@ -26,6 +28,7 @@ from edgereco.catalog.publish import BUNDLE_FILES, CURRENT_META_SCHEMA, publish_
 from edgereco.cli import app
 from edgereco.reco.cooccurrence import CooccurrenceMatrix, Neighbor
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
+from edgereco.reco.score_receipt import RANKING_RECEIPT_NAME
 
 runner = CliRunner()
 
@@ -98,6 +101,7 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
         "vector/embeddings.f32",
         "catalog_meta.json",
         "ranking_config.json",
+        "ranking_receipt.json",
         "cooccurrence.json",
     } == {entry.path for entry in manifest.files}
     assert meta["catalog_id"] == "amazon-demo"
@@ -201,6 +205,46 @@ def test_bundle_carries_signed_ranking_config(tmp_path: Path) -> None:
     manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "ranking_config.json")
     assert RankingConfig.model_validate_json(raw) == DEFAULT_RANKING_CONFIG
+
+
+def test_bundle_carries_verifiable_ranking_receipt(tmp_path: Path) -> None:
+    """Every publish seals the STAGED weights as a signed ranking attestation
+    (``ranking_receipt.json``) an offline verifier can check under the SAME
+    publisher key that signs the bundle — one pinned identity for both."""
+    staging = _staging(tmp_path)
+    tuned = DEFAULT_RANKING_CONFIG.model_copy(deep=True)
+    tuned.scoring_weights.popularity = 0.55
+    (staging / "ranking_config.json").write_text(tuned.model_dump_json(), encoding="utf-8")
+    origin = tmp_path / "origin"
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="amazon-demo",
+        version="v1",
+        embedding_model="m",
+        embedding_dim=384,
+        embedding_count=1,
+        product_count=1,
+    )
+
+    cache = FilesystemCacheStore(tmp_path / "cache")
+    sync_index(
+        base_url=str(origin),
+        store=cache,
+        adapter=FilesystemAdapter(),
+        verifier=Ed25519Verifier(public),
+    )
+    manifest = _active_manifest(cache)
+    raw = materialize_file(cache, manifest, RANKING_RECEIPT_NAME)
+    receipt = ScoreReceipt.model_validate_json(raw)
+    verify_signature(receipt, expected_public_key=public.public_bytes_raw().hex())
+    governed = content_hash(tuned.scoring_weights.model_dump(mode="json"))
+    assert receipt.payload.metric_version == governed
 
 
 def test_bundle_preserves_staged_ranking_config(tmp_path: Path) -> None:
@@ -491,6 +535,7 @@ def test_bundle_files_contract() -> None:
         "vector",
         "catalog_meta.json",
         "ranking_config.json",
+        "ranking_receipt.json",
         "cooccurrence.json",
     )
 
