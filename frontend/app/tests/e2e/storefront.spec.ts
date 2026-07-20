@@ -24,8 +24,11 @@ import { expect, test } from "@playwright/test";
  *     `window.__edgeprocDemoTestHooks.makeEmbedder`) so the test does not wait
  *     on the ~25 MB transformers.js model download. The vector leg still runs
  *     against the real index.
- *   - Product images (m.media-amazon.com) are blocked so the run is offline +
- *     deterministic; the cards fall back to their gradient tiles.
+ *   - Product images are now baked into the signed bundle as license-clean SVGs
+ *     the app ships same-origin under /images/<id>.svg, so the cards render REAL
+ *     images (not the gradient-tile fallback). No external image host is hit; the
+ *     run stays offline + deterministic. The m.media-amazon.com abort below is a
+ *     belt-and-braces guard that nothing regresses back to a remote image host.
  */
 
 // The card root is an <article> in v0.9.0; the full-card action is the overlay
@@ -78,8 +81,10 @@ test.beforeEach(async ({ page }) => {
 		};
 	}, EMBEDDING_DIM);
 
-	// Block external product images: keeps the run offline + deterministic and
-	// forces the gradient-tile fallback. (Not part of the engine under test.)
+	// Belt-and-braces: images are now baked into the bundle and served same-origin
+	// (/images/<id>.svg), so no external host should ever be hit. Abort any stray
+	// remote image request so a regression to a remote host fails loudly instead
+	// of silently going offline. (Not part of the engine under test.)
 	await page.route(/m\.media-amazon\.com/, (route) => route.abort());
 });
 
@@ -91,6 +96,36 @@ async function launch(page: import("@playwright/test").Page): Promise<void> {
 		timeout: 60_000,
 	});
 }
+
+test("storefront renders REAL product images, not gradient placeholders", async ({
+	page,
+}) => {
+	// Regression guard for the shipped-placeholders bug: every card must render a
+	// same-origin /images/<id>.svg that ACTUALLY LOADS (naturalWidth > 0) — never
+	// the .pimg-tile gradient fallback. If the baked images or the local rewrite
+	// regress, this fails loudly instead of quietly serving placeholder tiles.
+	await launch(page);
+
+	const firstImg = page
+		.locator("main article.card .card__media img.pimg")
+		.first();
+	await expect(firstImg).toBeVisible();
+	await expect(firstImg).toHaveAttribute("src", /^\/images\//);
+
+	// The image decoded: a broken/blocked image reports naturalWidth === 0.
+	await expect
+		.poll(
+			() => firstImg.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+			{
+				message: "the baked local product image must actually load",
+				timeout: 15_000,
+			},
+		)
+		.toBeGreaterThan(0);
+
+	// No card fell back to the gradient placeholder tile.
+	await expect(page.locator("main article.card .pimg-tile")).toHaveCount(0);
+});
 
 test("home shows ≥3 labeled strategy rails over the catalog grid", async ({
 	page,

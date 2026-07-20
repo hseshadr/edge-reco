@@ -58,7 +58,7 @@ describe("Landing", () => {
 				/The optional learning loop is off until you switch it on/,
 			),
 		).toBeInTheDocument();
-		expect(screen.getByText(/~1\.6 MB signed bundle/)).toBeInTheDocument();
+		expect(screen.getByText(/~2\.2 MB signed bundle/)).toBeInTheDocument();
 	});
 
 	it("calls onLaunch when the Launch CTA is clicked", async () => {

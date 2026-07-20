@@ -50,4 +50,21 @@ describe("ProductImage egress boundary", () => {
 			"/products/P1.webp",
 		);
 	});
+
+	it("renders the baked-in local /images/<id>.svg as a real image, not the tile", () => {
+		// The signed bundle rewrites each product's image_url to the root-relative
+		// local asset the app ships in public/images. This is the branch that would
+		// have caught the shipped-placeholders regression: a real <img>, not a tile.
+		render(
+			<ProductImage
+				product={{ ...product, image_url: `/images/${product.id}.svg` }}
+			/>,
+		);
+
+		expect(screen.getByRole("img", { name: product.title })).toHaveAttribute(
+			"src",
+			`/images/${product.id}.svg`,
+		);
+		expect(screen.queryByText("Sports")).not.toBeInTheDocument();
+	});
 });

@@ -10,7 +10,9 @@ import { expect, test } from "@playwright/test";
  *      ed25519/sha256 verify + 720-product reassembly) and mounts the store.
  *   3. The MetricsStrip shows LIVE, in-tab telemetry: after a search the latency
  *      tile reads a real measured value, and the "backend calls" tile stays 0 —
- *      the honest headline of the backend-free demo (images blocked, uplink off).
+ *      the honest headline of the backend-free demo (product images are baked
+ *      into the signed bundle and served same-origin, so browsing hits no
+ *      application backend and the uplink stays off).
  *
  * REAL vs STUBBED — identical to storefront.spec.ts: only the embedder TRANSPORT
  * is stubbed (the deterministic 384-d hook below) so the run doesn't wait on the
@@ -55,8 +57,10 @@ test.beforeEach(async ({ page }) => {
 		};
 	}, EMBEDDING_DIM);
 
-	// Block external product images: keeps the run offline + deterministic AND
-	// keeps the honest "backend calls = 0" true (images are post-sync requests).
+	// Belt-and-braces: product images are now baked into the bundle and served
+	// same-origin, so no external host should ever be hit. Abort any stray remote
+	// image request so a regression to a remote host fails loudly rather than
+	// silently going offline.
 	await page.route(/m\.media-amazon\.com/, (route) => route.abort());
 });
 
@@ -127,7 +131,8 @@ test("live metrics strip: search drives a real latency; backend calls stay 0", a
 	await expect(latency).toHaveText(/ms/, { timeout: 15_000 });
 
 	// --- The honest headline: backend calls stay 0 after browsing + searching ---
-	// Images are blocked and the uplink is off, so 0 is the true expected value.
+	// Images are same-origin static assets and the uplink is off, so 0 is the
+	// true expected value (no per-query backend ranking call).
 	const backendCalls = tileValue("backend calls");
 	await expect(backendCalls).toHaveText("0");
 
