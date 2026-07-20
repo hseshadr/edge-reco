@@ -78,12 +78,17 @@ wheels = [
 
 [[package]]
 name = "avow"
-source = { editable = "../../assay" }
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pynacl" },
     { name = "rfc8785" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ff/f0/1dc7762ab48e377fc00cab870a280e474ea726fcc0a9c44110b18076f744/avow-0.1.0.tar.gz", hash = "sha256:f5deea68504f0d0e7691cd122af06a33cbbb04de28b54729e1c65f41cf4557aa", size = 40970, upload-time = "2026-07-20T14:00:30.959Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/d6/d19563c60b57fa9584a3c621a864019757f41516ddaff026803722fdcbb4/avow-0.1.0-py3-none-any.whl", hash = "sha256:6876263aa344e7a9a000e1fc4cae19ed437cb2f31f1fb2559cb3012049e00964", size = 27904, upload-time = "2026-07-20T14:00:29.449Z" },
 ]
 
 [package.optional-dependencies]
@@ -91,33 +96,6 @@ assay = [
     { name = "numpy" },
     { name = "scikit-learn" },
     { name = "scipy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", marker = "extra == 'assay'", specifier = ">=2.5" },
-    { name = "numpy", marker = "extra == 'cli'", specifier = ">=2.5" },
-    { name = "pydantic", specifier = ">=2.11" },
-    { name = "pydantic-settings", specifier = ">=2.11" },
-    { name = "pynacl", specifier = ">=1.6" },
-    { name = "rfc8785", specifier = ">=0.1.4" },
-    { name = "scikit-learn", marker = "extra == 'assay'", specifier = ">=1.9" },
-    { name = "scikit-learn", marker = "extra == 'cli'", specifier = ">=1.9" },
-    { name = "scipy", marker = "extra == 'assay'", specifier = ">=1.18" },
-    { name = "scipy", marker = "extra == 'cli'", specifier = ">=1.18" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.27" },
-]
-provides-extras = ["assay", "cli"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=2.2.0" },
-    { name = "poethepoet", specifier = ">=0.48.0" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-cov", specifier = ">=6.0" },
-    { name = "radon", specifier = ">=6.0" },
-    { name = "ruff", specifier = ">=0.15.21" },
-    { name = "xenon", specifier = ">=0.9" },
 ]
 
 [[package]]
@@ -562,7 +540,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "avow", extras = ["assay"], editable = "../../assay" },
+    { name = "avow", extras = ["assay"], specifier = ">=0.1.0,<0.2" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.4" },
     { name = "faiss-cpu", specifier = ">=1.9" },
