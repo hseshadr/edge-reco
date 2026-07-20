@@ -479,7 +479,7 @@ export — so a cold visitor sees an honest, runnable, properly-credited demo.
 
 ## [0.3.0] — 2026-05-29
 
-Northstar hardening: full test pyramid wired into CI, modern dependencies, and a
+Hardening: full test pyramid wired into CI, modern dependencies, and a
 discoverable config surface — so the repo is not just clear but provably works
 end-to-end on a cold clone.
 
