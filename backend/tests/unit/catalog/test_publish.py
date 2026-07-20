@@ -107,6 +107,42 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
     assert meta["catalog_id"] == "amazon-demo"
 
 
+def test_bundle_covers_staged_product_images(tmp_path: Path) -> None:
+    """Staged ``images/*.svg`` are read into the bundle, listed in the manifest, and
+    reassemble verbatim after sync — i.e. they are inside the ed25519 signature."""
+    staging = _staging(tmp_path)
+    (staging / "images").mkdir()
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"/>'
+    (staging / "images" / "P1.svg").write_bytes(svg)
+    origin = tmp_path / "origin"
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="amazon-demo",
+        version="v1",
+        embedding_model="m",
+        embedding_dim=384,
+        embedding_count=1,
+        product_count=1,
+    )
+
+    cache = FilesystemCacheStore(tmp_path / "cache")
+    sync_index(
+        base_url=str(origin),
+        store=cache,
+        adapter=FilesystemAdapter(),
+        verifier=Ed25519Verifier(public),
+    )
+    manifest = _active_manifest(cache)
+    assert "images/P1.svg" in {entry.path for entry in manifest.files}
+    assert materialize_file(cache, manifest, "images/P1.svg") == svg
+
+
 def test_bundle_carries_signed_cooccurrence(tmp_path: Path) -> None:
     """A built bundle contains a signed ``cooccurrence.json`` that round-trips; an
     empty matrix is the default when the staging dir provides none."""
@@ -537,6 +573,7 @@ def test_bundle_files_contract() -> None:
         "ranking_config.json",
         "ranking_receipt.json",
         "cooccurrence.json",
+        "images",
     )
 
 

@@ -56,6 +56,7 @@ BUNDLE_FILES: Final[tuple[str, ...]] = (
     "ranking_config.json",
     "ranking_receipt.json",
     "cooccurrence.json",
+    "images",
 )
 _META_NAME: Final[str] = "catalog_meta.json"
 _RANKING_NAME: Final[str] = "ranking_config.json"
@@ -233,11 +234,13 @@ def _refuse_symlink(path: Path, staging_dir: Path) -> None:
 
 
 def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
-    """Read every bundle file into ``{relpath: bytes}`` (vector/ recursed).
+    """Read every bundle file into ``{relpath: bytes}`` (``vector/`` + ``images/`` recursed).
 
-    Every entry — the fixed top-level files AND each file under ``vector/`` — is
-    checked with ``is_symlink()`` before it is read, so a planted symlink can never
-    inline an arbitrary host file into the signed bundle.
+    Every entry — the fixed top-level files AND each file under ``vector/`` /
+    ``images/`` — is checked with ``is_symlink()`` before it is read, so a planted
+    symlink can never inline an arbitrary host file into the signed bundle. The
+    ``images/`` dir is optional: a staging dir without one (an older catalog, or a
+    republish that predates baked-in cards) simply signs no image entries.
     """
     files: dict[str, bytes] = {}
     for name in (
@@ -250,8 +253,14 @@ def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
         path = staging_dir / name
         _refuse_symlink(path, staging_dir)
         files[name] = path.read_bytes()
-    for path in sorted((staging_dir / "vector").rglob("*")):
+    _read_tree(staging_dir, "vector", files)
+    _read_tree(staging_dir, "images", files)
+    return files
+
+
+def _read_tree(staging_dir: Path, subdir: str, files: dict[str, bytes]) -> None:
+    """Read every file under ``staging_dir/subdir`` into ``files`` (symlink-refused)."""
+    for path in sorted((staging_dir / subdir).rglob("*")):
         _refuse_symlink(path, staging_dir)
         if path.is_file():
             files[path.relative_to(staging_dir).as_posix()] = path.read_bytes()
-    return files
