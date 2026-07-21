@@ -22,6 +22,11 @@ dependencies = [
   # shared_libs_python.vector_mgmt.core.types in embeddings/index.py, so the
   # import is declared honestly here. Pinned via the [tool.uv.sources] git tag below.
   "shared-libs-python",
+  # Trust kernel: the ranking attestation (reco/score_receipt.py) seals the bundle's
+  # scoring weights as a signed Assay composite receipt at publish time. The [assay]
+  # extra pulls the scoring face (scikit-learn stack — already transitive here via
+  # sentence-transformers). Published on PyPI.
+  "avow[assay]>=0.1.0,<0.2",
   # Security floors on transitive deps (pulled via fastapi / edge-proc[bundles] /
   # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
   # where a fix exists. See `poe audit`.
