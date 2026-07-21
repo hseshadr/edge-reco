@@ -10,7 +10,7 @@
 
 ### ▶ [Try the live demo — edge-reco.com](https://edge-reco.com) · zero install, runs entirely in your browser tab
 
-## Northstar status (verified 2026-07-18)
+## Status (verified 2026-07-18)
 
 **The reference storefront is live, offline-capable, and measurable in the browser.**
 The prior 2026-07-16 snapshot recorded `d5637b1`; the current deployed application

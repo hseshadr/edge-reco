@@ -16,6 +16,10 @@ The bundle CONTRACT (what the consumer wave's ``from_synced`` relies on):
   Consumers read the scorer's weights from here; absent (a pre-config staging
   dir), the producer writes ``DEFAULT_RANKING_CONFIG``, the byte-identical legacy
   weights, so re-bundling never changes scores.
+- ``ranking_receipt.json`` — the ranking attestation (``reco.score_receipt``): the
+  staged weights sealed as a signed Assay composite receipt under the same
+  publisher key as the bundle. Regenerated every publish; older bundles simply
+  lack it (consumers read specific names and ignore extras).
 - ``cooccurrence.json`` — the item-to-item co-occurrence neighbour map
   (``reco.cooccurrence``). Co-occurrence strategies read it; absent, the producer
   writes an empty matrix so older bundles degrade gracefully.
@@ -38,6 +42,11 @@ from pydantic import BaseModel
 
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
+from edgereco.reco.score_receipt import (
+    RANKING_RECEIPT_NAME,
+    sign_ranking_receipt,
+    signing_key_from_seed,
+)
 
 # Logical top-level entries a bundle staging dir must provide; ``vector`` is a dir.
 BUNDLE_FILES: Final[tuple[str, ...]] = (
@@ -45,6 +54,7 @@ BUNDLE_FILES: Final[tuple[str, ...]] = (
     "vector",
     "catalog_meta.json",
     "ranking_config.json",
+    "ranking_receipt.json",
     "cooccurrence.json",
 )
 _META_NAME: Final[str] = "catalog_meta.json"
@@ -109,6 +119,7 @@ def publish_bundle(
     _write_json_no_follow(staging_dir / _META_NAME, meta.model_dump_json())
     _ensure_ranking_config(staging_dir, require_present=require_feature_files)
     _ensure_cooccurrence(staging_dir, require_present=require_feature_files)
+    _write_ranking_receipt(staging_dir, private_key_path)
     files = _read_bundle_files(staging_dir)
     signer = Ed25519Signer.from_private_bytes(private_key_path.read_bytes())
     origin_dir.mkdir(parents=True, exist_ok=True)
@@ -144,6 +155,19 @@ def _ensure_ranking_config(staging_dir: Path, *, require_present: bool = False) 
             "silently republish with legacy default weights"
         )
     _write_json_no_follow(ranking_path, DEFAULT_RANKING_CONFIG.model_dump_json())
+
+
+def _write_ranking_receipt(staging_dir: Path, private_key_path: Path) -> None:
+    """Seal the STAGED weights as ``ranking_receipt.json`` — regenerated every publish.
+
+    A derived artifact like ``catalog_meta.json``: always rewritten from the staged
+    ``ranking_config.json`` plus the publisher key (the same raw Ed25519 seed that
+    signs the bundle), never carried over from a synced bundle, so the attestation
+    can never drift from the config this bundle actually ships.
+    """
+    config = RankingConfig.model_validate_json((staging_dir / _RANKING_NAME).read_bytes())
+    receipt = sign_ranking_receipt(config, signing_key_from_seed(private_key_path))
+    _write_json_no_follow(staging_dir / RANKING_RECEIPT_NAME, receipt.model_dump_json())
 
 
 def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) -> None:
@@ -216,7 +240,13 @@ def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
     inline an arbitrary host file into the signed bundle.
     """
     files: dict[str, bytes] = {}
-    for name in ("products.jsonl", _META_NAME, _RANKING_NAME, _COOCCURRENCE_NAME):
+    for name in (
+        "products.jsonl",
+        _META_NAME,
+        _RANKING_NAME,
+        RANKING_RECEIPT_NAME,
+        _COOCCURRENCE_NAME,
+    ):
         path = staging_dir / name
         _refuse_symlink(path, staging_dir)
         files[name] = path.read_bytes()
