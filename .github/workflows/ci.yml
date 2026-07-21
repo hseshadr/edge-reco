@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      # The substrate libs (edge-proc, shared-libs-python) are pulled from public
+      # The substrate libs (edge-proc, edgeproc-core) are pulled from public
       # GitHub via the git sources pinned in backend/pyproject.toml — exactly what
       # an external cloner gets. No private-repo token, no path patching: CI builds
       # the project the same way `git clone … && uv sync` does for anyone.

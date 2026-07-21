@@ -19,9 +19,9 @@ dependencies = [
   "structlog>=24.4",
   "edge-proc[localvec,bundles]",
   # Direct dependency (not just transitive via edge-proc): edgereco imports
-  # shared_libs_python.vector_mgmt.core.types in embeddings/index.py, so the
+  # edgeproc_core.vector_mgmt.core.types in embeddings/index.py, so the
   # import is declared honestly here. Pinned via the [tool.uv.sources] git tag below.
-  "shared-libs-python",
+  "edgeproc-core",
   # Trust kernel: the ranking attestation (reco/score_receipt.py) seals the bundle's
   # scoring weights as a signed Assay composite receipt at publish time. The [assay]
   # extra pulls the scoring face (scikit-learn stack — already transitive here via
@@ -54,16 +54,22 @@ package = true
 
 [tool.uv.sources]
 # Open-source onboarding: clone ONLY this repo and `uv sync` — the substrate libs
-# are pulled from public GitHub, pinned to release tags. (uv applies these sources
-# from the root project for ALL deps by name, so shared-libs-python — a transitive
-# dep of edge-proc — must be sourced here too; neither lib is on PyPI.)
-edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", tag = "v0.1.4" }
-shared-libs-python = { git = "https://github.com/hseshadr/shared-libs-python.git", tag = "v0.1.3" }
+# are pulled from public GitHub. (uv applies these sources from the root project
+# for ALL deps by name, so edgeproc-core — a transitive dep of edge-proc — must be
+# sourced here too; neither lib is on PyPI.)
+#
+# Pinned by full commit SHA, not by tag. A git tag is mutable: whoever can push to
+# those repos can retarget it at different code, and every clone would silently
+# resolve a dependency nobody reviewed. The two SHAs below must also move together —
+# edge-proc imports edgeproc-core, so a pair that straddles the rename would fail at
+# import time, not at resolve time.
+edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", rev = "08523196c0a575b2b4fc6581fb7db61baf8b1662" }
+edgeproc-core = { git = "https://github.com/hseshadr/shared-libs-python.git", rev = "6cdf8475b223262821622a021c561aed9213a472" }
 
 # Co-developing the substrate locally? Clone the siblings next to this repo and
 # swap the two lines above for path sources (uncomment):
 #   edge-proc = { path = "../../edge-proc" }
-#   shared-libs-python = { path = "../../shared-libs-python" }
+#   edgeproc-core = { path = "../../shared-libs-python" }
 
 [project.scripts]
 edgereco = "edgereco.cli:app"
@@ -92,7 +98,7 @@ disallow_any_explicit = true
 warn_unreachable = true
 packages = ["edgereco"]
 # Source roots for mypy to resolve first-party + non-editable sibling path
-# deps (edgeproc, shared_libs_python) WITHOUT installing them. Both siblings use
+# deps (edgeproc, edgeproc_core) WITHOUT installing them. Both siblings use
 # a flat layout (package dir at repo root), so the repo root is the source root.
 # Local dev uses ../edge-proc and ../shared-libs-python; CI checks the siblings
 # out into .deps/ — both are listed so `python -m mypy src` mirrors CI either way.
@@ -130,7 +136,7 @@ disallow_any_explicit = false
 # own (and which is also all-Pydantic). Exempt them so `mypy src` still follows their
 # imports normally.
 [[tool.mypy.overrides]]
-module = ["edgeproc.*", "shared_libs_python.*"]
+module = ["edgeproc.*", "edgeproc_core.*"]
 disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
