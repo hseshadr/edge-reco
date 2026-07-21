@@ -45,7 +45,7 @@ uv run pytest --cov=edgereco --cov-fail-under=90    # full suite + coverage gate
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src
-uv run xenon --max-absolute B --max-modules B --max-average A src    # complexity gate
+uv run xenon --max-absolute A --max-modules A --max-average A src    # complexity gate
 ```
 
 If all five are green, the Python tier is healthy. (Or run them as one task:
@@ -61,6 +61,7 @@ the `torch>=2.12.1` floor; the `--ignore-vuln` flag has been dropped.))
 ```bash
 cd ../frontend
 pnpm install                                    # resolves the whole workspace
+node app/scripts/download-model.mjs             # one-time: sha256-pinned local embedding model (the parity tests embed with it; CI fetches it the same way)
 pnpm -r run lint                                # biome on app + package
 pnpm -r run typecheck                           # tsc -b on both
 pnpm -r run test                                # vitest on both
@@ -129,12 +130,19 @@ uv run edgereco build-catalog examples/source/catalog.csv /tmp/cache/products.js
 # Build the FAISS index (reads /tmp/cache/products.jsonl, writes /tmp/staging/)
 uv run edgereco index /tmp/cache /tmp/staging
 
-# Sign + publish a content-addressed bundle origin (reuse the pinned signing key)
-uv run edgereco bundle /tmp/staging examples/catalog examples/keys/private.key \
+# Sign + publish a content-addressed bundle origin. The demo's signing key is
+# deliberately not committed (only its public half, examples/keys/public.key, is),
+# so generate your own ed25519 pair once:
+uv run edgeproc keygen --out /tmp/keys
+
+uv run edgereco bundle /tmp/staging /tmp/origin /tmp/keys/private.key \
     --catalog-id amazon-demo --version v1 --product-count 720 --embedding-count 720
 ```
 
 Drop the origin behind any static HTTP server / CDN and point the SPA at it (`VITE_BUNDLE_BASE_URL` at build time).
+Because the browser verifies fail-closed against a **pinned** key, publishing your own
+origin also means pinning your `public.key` in the SPA (`frontend/app/public/public.key`;
+the API-server path reads `EDGERECO_VERIFY_KEY_PATH`).
 
 To regenerate `examples/source/catalog.csv` itself — a balanced 12-category subset of
 a real Amazon dataset — run the streaming curation script (memory-bounded; never
