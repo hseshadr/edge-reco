@@ -2,6 +2,29 @@ packages:
   - app
   - packages/*
 
+# Supply-chain cooldown: refuse any package version published less than 1440
+# minutes (24h) ago — the window in which a compromised release is usually
+# caught and unpublished.
+#
+# Declaring this key explicitly is NOT a no-op. pnpm v11 already applies a
+# 1440-minute default, but evaluates it in NON-STRICT mode: a resolution-path
+# install that trips the cooldown exits 0 and SILENTLY appends the tripped
+# package to a `minimumReleaseAgeExclude:` list in this very file, permanently
+# disabling the check for that package on every future install, CI included.
+# Nothing prints loudly and nothing fails, so the edit rides along in the next
+# `git commit -a`. That auto-injection has already landed in commits twice in
+# this portfolio.
+#
+# Setting the key explicitly auto-enables strict mode, which inverts the
+# outcome: the install hard-fails with ERR_PNPM_NO_MATURE_MATCHING_VERSION and
+# writes nothing. Verified on pnpm 11.5.0 — unset: exit 0 + exemption injected;
+# set: exit 1 + file untouched.
+#
+# A fresh dependency failing here is the control WORKING. Wait the window out.
+# Never add an exemption to go green — a committed exemption is a gate failure,
+# enforced by app/scripts/supply-chain-contract.test.mjs.
+minimumReleaseAge: 1440
+
 # Security dependency overrides. pnpm v10+ reads `overrides` from here, not from
 # the package.json `pnpm` field (which v11 ignores). undici >=7.28.0 clears 6
 # Dependabot alerts (test-only, via jsdom); protobufjs >=7.6.5 clears 1 alert
