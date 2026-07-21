@@ -1,19 +1,20 @@
-"""Session signal tracking and profile updates."""
+"""Session signal tracking and profile updates.
+
+The per-event affinity bumps come from the signed bundle's
+``RankingConfig.interaction_weights`` (``reco.ranking_config``), threaded in by the
+caller — retune by republishing data, no code change. The default reproduces the
+historical hardcoded weights byte-for-byte and mirrors the browser tier's
+``applyInteraction`` (``engine/session.ts``), which reads the same field at runtime.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
 from edgereco.catalog.models import EventType, Product, SessionProfile
+from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, InteractionWeights
 
 RECENTLY_VIEWED_CAP = 50
-
-INTERACTION_WEIGHTS: dict[EventType, dict[str, float]] = {
-    "click": {"category": 0.10, "tag": 0.05, "brand": 0.08},
-    "view": {"category": 0.02, "tag": 0.01, "brand": 0.02},
-    "favorite": {"category": 0.20, "tag": 0.10, "brand": 0.15},
-    "cart": {"category": 0.25, "tag": 0.12, "brand": 0.20},
-}
 
 
 def _bump(current: float, delta: float) -> float:
@@ -38,12 +39,13 @@ def apply_interaction(
     profile: SessionProfile,
     product: Product,
     event_type: EventType,
+    weights: InteractionWeights = DEFAULT_RANKING_CONFIG.interaction_weights,
 ) -> SessionProfile:
-    weights = INTERACTION_WEIGHTS[event_type]
-    cat_aff = _bump_all(profile.category_affinity, [product.category], weights["category"])
-    tag_aff = _bump_all(profile.tag_affinity, product.tags, weights["tag"])
+    graded = weights.for_event(event_type)
+    cat_aff = _bump_all(profile.category_affinity, [product.category], graded.category)
+    tag_aff = _bump_all(profile.tag_affinity, product.tags, graded.tag)
     brand_keys = [product.brand] if product.brand else []
-    brand_aff = _bump_all(profile.brand_affinity, brand_keys, weights["brand"])
+    brand_aff = _bump_all(profile.brand_affinity, brand_keys, graded.brand)
     return SessionProfile(
         category_affinity=cat_aff,
         tag_affinity=tag_aff,
