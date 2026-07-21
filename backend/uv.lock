@@ -475,18 +475,19 @@ wheels = [
 
 [[package]]
 name = "edge-proc"
-version = "0.1.4"
-source = { git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.4#e3bfb570feb8619c823df63b6c012fd8c8c6a9b6" }
+version = "0.1.5"
+source = { git = "https://github.com/hseshadr/edge-proc.git?rev=08523196c0a575b2b4fc6581fb7db61baf8b1662#08523196c0a575b2b4fc6581fb7db61baf8b1662" }
 dependencies = [
+    { name = "edgeproc-core" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "shared-libs-python" },
     { name = "typer" },
 ]
 
 [package.optional-dependencies]
 bundles = [
     { name = "cryptography" },
+    { name = "filelock" },
     { name = "httpx" },
     { name = "packaging" },
     { name = "structlog" },
@@ -500,6 +501,14 @@ localvec = [
 ]
 
 [[package]]
+name = "edgeproc-core"
+version = "0.2.0"
+source = { git = "https://github.com/hseshadr/shared-libs-python.git?rev=6cdf8475b223262821622a021c561aed9213a472#6cdf8475b223262821622a021c561aed9213a472" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[[package]]
 name = "edgereco"
 version = "0.11.0"
 source = { editable = "." }
@@ -507,6 +516,7 @@ dependencies = [
     { name = "avow", extra = ["assay"] },
     { name = "cryptography" },
     { name = "edge-proc", extra = ["bundles", "localvec"] },
+    { name = "edgeproc-core" },
     { name = "faiss-cpu" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -518,7 +528,6 @@ dependencies = [
     { name = "rank-bm25" },
     { name = "sentence-transformers" },
     { name = "setuptools" },
-    { name = "shared-libs-python" },
     { name = "starlette" },
     { name = "structlog" },
     { name = "torch" },
@@ -542,7 +551,8 @@ dev = [
 requires-dist = [
     { name = "avow", extras = ["assay"], specifier = ">=0.1.0,<0.2" },
     { name = "cryptography", specifier = ">=48.0.1" },
-    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?tag=v0.1.4" },
+    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?rev=08523196c0a575b2b4fc6581fb7db61baf8b1662" },
+    { name = "edgeproc-core", git = "https://github.com/hseshadr/shared-libs-python.git?rev=6cdf8475b223262821622a021c561aed9213a472" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
@@ -554,7 +564,6 @@ requires-dist = [
     { name = "rank-bm25", specifier = ">=0.2" },
     { name = "sentence-transformers", specifier = ">=5.5" },
     { name = "setuptools", specifier = ">=83.0.0" },
-    { name = "shared-libs-python", git = "https://github.com/hseshadr/shared-libs-python.git?tag=v0.1.3" },
     { name = "starlette", specifier = ">=1.3.1" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "torch", specifier = ">=2.12.1" },
@@ -1960,14 +1969,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/34/26/f5d29e25ffdb535afef2d35cdb55b325298f96debd670da4c325e08d70f4/setuptools-83.0.0.tar.gz", hash = "sha256:025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef", size = 1154254, upload-time = "2026-07-04T15:31:22.699Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/40/e1e72872c6354b306daef1703549e8e83b4d43cfea356311bf722a043752/setuptools-83.0.0-py3-none-any.whl", hash = "sha256:29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3", size = 1008090, upload-time = "2026-07-04T15:31:20.885Z" },
-]
-
-[[package]]
-name = "shared-libs-python"
-version = "0.1.3"
-source = { git = "https://github.com/hseshadr/shared-libs-python.git?tag=v0.1.3#0ba9ba8c945b55073474322c353d838cf7b3dbba" }
-dependencies = [
-    { name = "pydantic" },
 ]
 
 [[package]]
