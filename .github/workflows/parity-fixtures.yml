@@ -1,0 +1,88 @@
+# Weekly freshness check for ALL five browser-parity fixtures — including the two
+# the per-PR gate (ci.yml `parity-freshness`) deliberately skips: embedding_parity
+# and hybrid_parity re-encode text with the MiniLM model, so regenerating them
+# needs the model download and their floats are sensitive to the resolved
+# torch/sentence-transformers stack. A fresh environment can legally differ from
+# the committed bytes in low-order digits, or flip near-tie orderings through
+# RRF rank quantization.
+#
+# How to read a red run:
+#   - Only low-order float digits changed (ids and their order intact): environment
+#     refresh drift. Take the uploaded artifact, run the frontend gate against it
+#     (the TS engine parity suite is the arbiter), and commit the refresh
+#     deliberately if it stays green.
+#   - Result ids or their ORDER changed: real ranking drift on the Python side.
+#     Treat it like a failing test, not a chore.
+#
+# All run: steps use static commands only — no untrusted ${{ github.event.* }}
+# input is interpolated anywhere. All uses: refs are pinned to full commit SHAs
+# (the same pins as ci.yml).
+name: Parity fixtures (weekly freshness)
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate-and-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+      - name: Pin Python
+        working-directory: backend
+        run: uv python install 3.13
+      - name: Sync
+        working-directory: backend
+        run: uv sync --group dev
+      # Fixed-key cache: only the first run pays the MiniLM download; afterwards the
+      # regen scripts read the local Hugging Face cache.
+      - name: Cache MiniLM weights (Hugging Face)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/huggingface
+          key: hf-minilm-${{ runner.os }}
+      - name: Regenerate all parity fixtures (model download included)
+        working-directory: backend
+        run: |
+          uv run python scripts/gen_search_fixture.py
+          uv run python scripts/gen_cooccurrence_fixture.py
+          uv run python scripts/gen_strategy_fixture.py
+          uv run python scripts/gen_embedding_fixture.py
+          uv run python scripts/gen_hybrid_fixture.py
+      # Biome settles the JSON exactly like the documented regen flow, so the diff
+      # below compares fixture CONTENT, never formatter reflow.
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install workspace
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Settle fixture formatting (biome, same as the documented flow)
+        working-directory: frontend/packages/edgeproc-browser
+        run: |
+          pnpm exec biome check --write \
+            src/engine/__fixtures__/search_parity.json \
+            src/engine/__fixtures__/cooccurrence_parity.json \
+            src/engine/__fixtures__/strategy_parity.json \
+            src/engine/__fixtures__/embedding_parity.json \
+            src/engine/__fixtures__/hybrid_parity.json
+      - name: Fail on any fixture drift
+        run: git diff --exit-code -- frontend/packages/edgeproc-browser/src/engine/__fixtures__/
+      - name: Upload regenerated fixtures on drift
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: regenerated-parity-fixtures-weekly
+          path: frontend/packages/edgeproc-browser/src/engine/__fixtures__/

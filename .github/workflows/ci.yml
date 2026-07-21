@@ -68,6 +68,70 @@ jobs:
       # fixed by a version floor in backend/pyproject.toml; CVE-2025-3000 in torch is
       # now fixed by torch>=2.12.1) — without masking code regressions here.
 
+  # Golden parity fixtures must be REPRODUCIBLE from the committed bundle: if a
+  # Python-side ranking change lands without regenerating them, the browser-parity
+  # guarantee silently rots — the TS suite keeps passing against yesterday's truth.
+  # This job replays the documented regen flow (scripts/gen_*_fixture.py + biome)
+  # for the three MODEL-FREE fixtures — search, cooccurrence, strategy read only
+  # committed bundle bytes, no ML model — and fails on any byte drift. The two
+  # model-dependent fixtures (embedding, hybrid) need the MiniLM download and their
+  # floats are torch-stack sensitive, so they are checked on a weekly schedule
+  # instead (.github/workflows/parity-fixtures.yml). If this job goes red with
+  # float-only, low-order-digit diffs (no id/order changes), that is platform float
+  # drift, not logic rot: take the uploaded artifact, verify the frontend gate is
+  # green against it, and commit the refresh deliberately.
+  parity-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+      - name: Pin Python
+        working-directory: backend
+        run: uv python install 3.13
+      - name: Sync
+        working-directory: backend
+        run: uv sync --group dev
+      - name: Regenerate the model-free parity fixtures
+        working-directory: backend
+        run: |
+          uv run python scripts/gen_search_fixture.py
+          uv run python scripts/gen_cooccurrence_fixture.py
+          uv run python scripts/gen_strategy_fixture.py
+      # Biome settles the JSON exactly like the documented regen flow, so the diff
+      # below compares fixture CONTENT, never formatter reflow.
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install workspace
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Settle fixture formatting (biome, same as the documented flow)
+        working-directory: frontend/packages/edgeproc-browser
+        run: |
+          pnpm exec biome check --write \
+            src/engine/__fixtures__/search_parity.json \
+            src/engine/__fixtures__/cooccurrence_parity.json \
+            src/engine/__fixtures__/strategy_parity.json
+      - name: Fail on fixture drift (regenerate + commit them with your change)
+        run: |
+          git diff --exit-code -- \
+            frontend/packages/edgeproc-browser/src/engine/__fixtures__/search_parity.json \
+            frontend/packages/edgeproc-browser/src/engine/__fixtures__/cooccurrence_parity.json \
+            frontend/packages/edgeproc-browser/src/engine/__fixtures__/strategy_parity.json
+      - name: Upload regenerated fixtures on drift
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: regenerated-parity-fixtures
+          path: frontend/packages/edgeproc-browser/src/engine/__fixtures__/
+
   # The Nimbus storefront + the extracted @edgeproc/browser package live in a pnpm
   # workspace rooted at frontend/. This job mirrors the verified-green local hard
   # gate exactly: biome -> tsc -> vitest -> production build, across both workspace
