@@ -68,7 +68,8 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24" # >= 22.12 required by Vite 8
+          # THE one Node pin (frontend/.nvmrc) — same build as CI and deploy.
+          node-version-file: frontend/.nvmrc
 
       # No install needed: `pnpm audit` reads pnpm-lock.yaml and queries the
       # advisory DB directly.
