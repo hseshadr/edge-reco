@@ -60,7 +60,9 @@ describe("storefront i18n extraction — byte-identical English", () => {
 		expect(t("rail.taglineTrending")).toBe("by popularity");
 		expect(t("rail.taglineNewArrivals")).toBe("freshest first");
 		expect(t("rail.taglineDefault")).toBe("in-tab ranking");
-		expect(t("rail.signals", { n: 3 })).toBe("3 signals — saved only in this browser");
+		expect(t("rail.signals", { n: 3 })).toBe(
+			"3 signals — saved only in this browser",
+		);
 		expect(t("rail.scrollable", { label: "Trending now" })).toBe(
 			"Trending now, scrollable",
 		);

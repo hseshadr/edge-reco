@@ -177,9 +177,7 @@ test("(d) Reset taste returns the For-You rail to baseline and zeroes the badge"
 	const settled = await forYouOrder(page);
 
 	await clickProducts(page, 3);
-	await expect
-		.poll(() => forYouOrder(page))
-		.not.toBe(settled);
+	await expect.poll(() => forYouOrder(page)).not.toBe(settled);
 
 	await page.locator(RESET_TASTE).click();
 

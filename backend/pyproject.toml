@@ -1,6 +1,6 @@
 [project]
 name = "edgereco"
-version = "0.12.0"
+version = "0.13.0"
 description = "Local-first product recommendations — hybrid search + session-aware reranking that runs on the shopper's device, zero backend calls after sync"
 requires-python = ">=3.13"
 license = "MIT"
