@@ -11,20 +11,20 @@ Goal: clone the repo, gate both subprojects, then run the headline demo (Nimbus,
 
 ## Clone and go
 
-Clone **just this repo** — that's all you need. The Python backend declares its
-substrate dependencies ([`edge-proc`](https://github.com/hseshadr/edge-proc) and
-[`shared-libs-python`](https://github.com/hseshadr/shared-libs-python)) as git
-sources pinned to release tags, so `uv sync` pulls them from public GitHub
-automatically (neither is on PyPI):
+Clone **just this repo** — that's all you need. The Python backend pulls
+[`edgeproc-core`](https://github.com/hseshadr/edgeproc-core) from PyPI
+(`edgeproc-core>=0.2.1`) and declares [`edge-proc`](https://github.com/hseshadr/edge-proc)
+as a git source pinned to a full commit SHA, so `uv sync` resolves everything
+automatically:
 
 ```bash
 git clone https://github.com/hseshadr/edge-reco
-cd edge-reco/backend && uv sync     # pulls edge-proc + shared-libs-python from GitHub
+cd edge-reco/backend && uv sync     # edgeproc-core from PyPI, edge-proc from GitHub
 ```
 
 > **Co-developing the substrate?** If you want to hack on edge-proc or
-> shared-libs-python alongside edge-reco, clone the three repos side-by-side and
-> switch the git sources to local path sources — uncomment the two `path = ...`
+> edgeproc-core alongside edge-reco, clone the three repos side-by-side and
+> switch to local path sources — uncomment the two `path = ...`
 > lines in `backend/pyproject.toml`'s `[tool.uv.sources]` (the comments there
 > document the exact swap). This is the *optional* co-developer path; the default
 > above needs none of it.
@@ -33,7 +33,7 @@ cd edge-reco/backend && uv sync     # pulls edge-proc + shared-libs-python from 
 > ~/dev/oss/
 > ├── edge-reco/
 > ├── edge-proc/
-> └── shared-libs-python/
+> └── edgeproc-core/
 > ```
 
 ## 1. Backend gate (Python)
