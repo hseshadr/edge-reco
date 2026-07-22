@@ -1,50 +1,8 @@
 import { useState } from "react";
 import type { Product } from "../api/types";
+import { styleForCategory, toneClassFor } from "./categoryStyle";
 
-interface CategoryStyle {
-	className: string;
-	glyph: string;
-	label: string;
-}
-
-const CATEGORY_STYLES: Record<string, CategoryStyle> = {
-	electronics: {
-		className: "pimg-tile--electronics",
-		glyph: "\u{1F50C}",
-		label: "Electronics",
-	},
-	clothing: {
-		className: "pimg-tile--clothing",
-		glyph: "\u{1F9E5}",
-		label: "Clothing",
-	},
-	"home & kitchen": {
-		className: "pimg-tile--home",
-		glyph: "\u{1FAB4}",
-		label: "Home & Kitchen",
-	},
-	sports: {
-		className: "pimg-tile--sports",
-		glyph: "\u{26BD}",
-		label: "Sports",
-	},
-	books: {
-		className: "pimg-tile--books",
-		glyph: "\u{1F4DA}",
-		label: "Books",
-	},
-};
-
-const DEFAULT_STYLE: CategoryStyle = {
-	className: "pimg-tile--default",
-	glyph: "\u{2728}",
-	label: "Catalog",
-};
 const LOCAL_ASSET_ORIGIN = "https://edge-reco.invalid";
-
-function styleFor(category: string): CategoryStyle {
-	return CATEGORY_STYLES[category.trim().toLowerCase()] ?? DEFAULT_STYLE;
-}
 
 /** Only release-owned root-relative assets may leave the placeholder boundary. */
 function isLocalImage(url: string): boolean {
@@ -79,9 +37,14 @@ export function ProductImage({ product }: ProductImageProps) {
 		);
 	}
 
-	const style = styleFor(product.category);
+	const style = styleForCategory(product.category);
+	const tone = toneClassFor(product.id);
+	const toneSuffix = tone === "" ? "" : ` ${tone}`;
 	return (
-		<div className={`pimg-tile ${style.className}`} aria-hidden="true">
+		<div
+			className={`pimg-tile ${style.className}${toneSuffix}`}
+			aria-hidden="true"
+		>
 			<span className="pimg-tile__cat">{style.label}</span>
 			<span className="pimg-tile__glyph">{style.glyph}</span>
 			<span className="pimg-tile__title">{product.title}</span>
