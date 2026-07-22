@@ -219,7 +219,11 @@ test("clicks record + re-rank the For-You rail (backend-free hero loop)", async 
 		)
 		.not.toBe(before.join(" | "));
 
-	// "why?" reveals the engine's score bars for a For-You pick.
+	// "why?" reveals the engine's score bars for a For-You pick. The in-app
+	// Back now pops REAL history (v0.13.0), so the browser restores the browse
+	// scroll position — scroll home first to unstack the sticky rails before
+	// poking the For-You card's control.
+	await page.evaluate(() => window.scrollTo(0, 0));
 	const topCard = page.locator(`${FOR_YOU} li.rail-card`).first();
 	await topCard.getByRole("button", { name: "why?" }).click();
 	await expect(topCard.locator(".why__bar").first()).toBeVisible();

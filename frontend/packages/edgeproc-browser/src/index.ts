@@ -33,6 +33,7 @@ export { EMBEDDING_DIM, type Embedder } from "./engine/embedder";
 // from the signed bundle; only the TYPES are part of the public surface.
 export {
 	type CandidatePolicy,
+	type InteractionWeights,
 	type RankingConfig,
 	type ScoringWeights,
 	type Strategy,

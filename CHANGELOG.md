@@ -3,6 +3,48 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0] — 2026-07-21
+
+### Added
+- **Durable on-device taste (still 0 backend calls)**: every folded interaction
+  (click / favorite / cart / dwell-view) now appends to an append-only JSONL
+  taste log in the browser's OPFS (`taste/events.jsonl`) through one storage
+  seam (`src/signals/tasteLog.ts`) — versioned no-PII envelopes
+  `{v, ts, type, productId, sessionId}`, rolling window of the newest 500
+  events, atomic `createWritable` swaps, and per-line fail-soft parsing so a
+  torn tail record can never poison boot (a corrupt line is skipped and the
+  next append rewrites a clean file). Boot replays the log through the SAME
+  fold used live (`buildProfile`), so a full reload keeps "Recommended for
+  you" personalized and restores the For-You badge count. A failing storage
+  layer degrades to the old session-only behavior, never a crash.
+- **In-app PDP history**: opening a product pushes a `#/p/<id>` hash entry (no
+  router library; static-host and offline safe), so the browser's Back button
+  returns to browsing IN the app via `popstate` instead of unloading the
+  document, and a reload or deep link on a PDP URL restores that product view
+  without re-emitting a click.
+- **"Reset taste" affordance** next to the For-You signal badge: wipes the
+  durable log, the live profile, and the once-per-session signal caps, then
+  re-ranks the rails back to the popularity baseline — with copy that tells
+  the truth: activity is stored only in this browser, never sent to a server.
+  The badge tooltip now reads "saved only in this browser", and the
+  security/privacy contract documents the log's contents, 500-event retention,
+  and both erasure paths (Reset taste / Clear site data).
+- **Four Playwright property guards** (`tests/e2e/persistent-taste.spec.ts`,
+  real Chromium + real OPFS): clicks re-rank the rail; a FULL RELOAD retains
+  badge + personalization via replay (red-proven: disabling main-thread OPFS
+  fails it 0-vs-3); browser Back from the PDP stays in-app with taste intact;
+  Reset taste returns the rail to the settled baseline and survives a reload
+  as empty.
+
+### Fixed
+- **The in-tab fold now honors bundle-supplied `interaction_weights`**: the
+  browser `sendEvent` fold (and the new boot replay) passes the synced
+  bundle's `ranking_config.json` weights to `applyInteraction` — mirroring the
+  backend `/events` fold contract — instead of silently using the typed
+  defaults, so republishing retuned weights retunes the in-browser hero loop
+  too. The engine now exposes `SearchEngine.interactionWeights()`, and a
+  retuned-bundle test (click weights zeroed) pins the contract.
+
 ## [0.12.0] — 2026-07-21
 
 ### Fixed

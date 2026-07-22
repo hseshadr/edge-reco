@@ -19,11 +19,13 @@
 
 import {
 	applyInteraction,
+	buildProfile,
 	configFromEnv,
 	defaultRuntimeDeps,
 	type Embedder,
 	EngineRuntime,
 	emptyProfile,
+	type InteractionWeights,
 	type OnStage,
 	type RuntimeConfig,
 	type RuntimeDeps,
@@ -31,6 +33,12 @@ import {
 	type SessionProfile,
 } from "@edgeproc/browser";
 import { record } from "../metrics/store";
+import {
+	appendTasteEvent,
+	clearTasteLog,
+	readTasteEvents,
+	type TasteEvent,
+} from "../signals/tasteLog";
 import { enqueueUplink } from "../telemetry/uplink";
 import { resolveBundleBaseUrl } from "./bundleUrl";
 import type {
@@ -111,7 +119,14 @@ function appRuntimeConfig(): RuntimeConfig {
 /** The data-layer API. Created once per app/test session via createDataClient. */
 export interface DataClient {
 	bootstrap(onStage?: OnStage, config?: RuntimeConfig): Promise<void>;
-	resetSession(): void;
+	/** Clear the live profile AND the durable taste log (the Reset-taste path). */
+	resetSession(): Promise<void>;
+	/**
+	 * How many explicit signals (click | favorite | cart) the last bootstrap
+	 * replayed from the durable log — the honest starting value for the
+	 * For-You badge after a reload. Ambient views never count.
+	 */
+	replayedSignalCount(): number;
 	search(q: string, opts?: SearchOptions): Promise<SearchResponse>;
 	recommend(limit?: number): Promise<RecommendResponse>;
 	recommendStrategy(
@@ -137,6 +152,12 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 	const runtime = new EngineRuntime(resolveDeps(deps));
 	let profile: SessionProfile = emptyProfile();
 	let productById: ReadonlyMap<string, Product> = new Map();
+	// The SIGNED BUNDLE's per-event-type affinity bumps, captured at bootstrap.
+	// The fold must use these (mirror of the backend /events fold) — the typed
+	// defaults apply only before bootstrap, when no product resolves anyway.
+	let interactionWeights: InteractionWeights | undefined;
+	// Explicit signals restored from the durable log by the last bootstrap.
+	let replayedSignals = 0;
 
 	function requireEngine(): SearchEngine {
 		const engine = runtime.engine();
@@ -153,9 +174,33 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 		): Promise<void> {
 			const engine = await runtime.bootstrap(config, onStage);
 			productById = new Map(engine.catalog().map((p) => [p.id, p]));
+			interactionWeights = engine.interactionWeights();
+			// Deterministic replay: rebuild the taste profile from the durable
+			// log through the SAME fold used live (buildProfile ≡ repeated
+			// applyInteraction), with the SAME bundle weights. Unknown product
+			// ids (a catalog that moved on) are skipped, matching the fold.
+			const logged = await readTasteEvents();
+			profile = buildProfile(
+				logged.map((event) => ({
+					event_type: event.type,
+					product_id: event.productId,
+					timestamp: event.ts,
+				})),
+				productById,
+				interactionWeights,
+			);
+			replayedSignals = logged.filter(
+				(event: TasteEvent) =>
+					event.type !== "view" && productById.has(event.productId),
+			).length;
 		},
-		resetSession(): void {
+		resetSession(): Promise<void> {
 			profile = emptyProfile();
+			replayedSignals = 0;
+			return clearTasteLog();
+		},
+		replayedSignalCount(): number {
+			return replayedSignals;
 		},
 		search(q: string, opts?: SearchOptions): Promise<SearchResponse> {
 			return requireEngine().search(q, {
@@ -216,16 +261,25 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 				}),
 			);
 		},
-		sendEvent(evt: InteractionEvent): Promise<void> {
+		async sendEvent(evt: InteractionEvent): Promise<void> {
 			const product = productById.get(evt.product_id);
 			if (product !== undefined) {
-				profile = applyInteraction(profile, product, evt.event_type);
+				profile = applyInteraction(
+					profile,
+					product,
+					evt.event_type,
+					interactionWeights,
+				);
+				// Land the event in the durable in-browser log so a reload can
+				// replay it (appendTasteEvent never throws — a storage failure
+				// degrades to today's session-only behavior). Awaited so the
+				// event is durable before the UI acknowledges the interaction.
+				await appendTasteEvent(evt.event_type, evt.product_id);
 			}
 			// Off the inference path: a click ALSO feeds the flywheel uplink —
 			// captured locally and later batched to the mimicked cloud. No-op when
 			// the uplink is disabled (VITE_EVENTS_URL unset). Never blocks/throws.
 			enqueueUplink(evt);
-			return Promise.resolve();
 		},
 		catalogInfo(): Promise<{ readonly count: number }> {
 			return Promise.resolve({ count: requireEngine().ntotal });
@@ -271,8 +325,11 @@ export function bootstrap(
 ): Promise<void> {
 	return active.bootstrap(onStage, config);
 }
-export function resetSession(): void {
-	active.resetSession();
+export function resetSession(): Promise<void> {
+	return active.resetSession();
+}
+export function replayedSignalCount(): number {
+	return active.replayedSignalCount();
 }
 export async function search(
 	q: string,

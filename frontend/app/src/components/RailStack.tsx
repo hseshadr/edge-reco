@@ -16,6 +16,8 @@ interface RailStackProps {
 	personalizing: boolean;
 	/** Session-signal count shown on the For-You rail (the hero-loop badge). */
 	signalCount: number;
+	/** "Reset taste" next to the badge: wipes the durable in-browser activity. */
+	onResetTaste: () => void;
 }
 
 /**
@@ -39,6 +41,7 @@ export function RailStack({
 	onPick,
 	personalizing,
 	signalCount,
+	onResetTaste,
 }: RailStackProps) {
 	const { t } = useTranslation("storefront");
 	const nonEmpty = rails.filter((rail) => rail.results.length > 0);
@@ -58,7 +61,7 @@ export function RailStack({
 						onPick={onPick}
 						tagline={t(TAGLINE_KEYS[spec.strategy] ?? "rail.taglineDefault")}
 						personalizing={isForYou && personalizing}
-						{...(isForYou ? { signalCount } : {})}
+						{...(isForYou ? { signalCount, onResetTaste } : {})}
 					/>
 				);
 			})}

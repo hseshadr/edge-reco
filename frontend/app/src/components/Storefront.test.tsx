@@ -24,8 +24,12 @@ const mocks = vi.hoisted(() => ({
 	recommendStrategy: vi.fn(),
 	similar: vi.fn(),
 	strategies: vi.fn(),
+	catalog: vi.fn(),
 	catalogInfo: vi.fn(),
+	resetSession: vi.fn(),
+	replayedSignalCount: vi.fn(),
 	emitInteraction: vi.fn(),
+	resetSignalCaps: vi.fn(),
 }));
 
 vi.mock("../api/client", () => ({
@@ -34,9 +38,15 @@ vi.mock("../api/client", () => ({
 	recommendStrategy: mocks.recommendStrategy,
 	similar: mocks.similar,
 	strategies: mocks.strategies,
+	catalog: mocks.catalog,
 	catalogInfo: mocks.catalogInfo,
+	resetSession: mocks.resetSession,
+	replayedSignalCount: mocks.replayedSignalCount,
 }));
-vi.mock("../signals/emit", () => ({ emitInteraction: mocks.emitInteraction }));
+vi.mock("../signals/emit", () => ({
+	emitInteraction: mocks.emitInteraction,
+	resetSignalCaps: mocks.resetSignalCaps,
+}));
 // The live-metrics observer pokes real browser APIs; keep it a no-op here.
 vi.mock("../metrics/observe", () => ({
 	startMetricsObservers: () => () => {},
@@ -82,8 +92,13 @@ const RAIL = [result("R1", "Rail Widget")];
 const SEARCH_HIT = result("S1", "Lamp Deluxe");
 
 beforeEach(() => {
+	// Every case starts on the browse view's canonical URL (no PDP hash).
+	window.history.replaceState(null, "", "/");
 	vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 	mocks.strategies.mockReturnValue({} as Record<string, Strategy>);
+	mocks.catalog.mockReturnValue(GRID);
+	mocks.resetSession.mockResolvedValue(undefined);
+	mocks.replayedSignalCount.mockReturnValue(0);
 	mocks.browse.mockResolvedValue({
 		products: GRID,
 		total: GRID.length,
@@ -410,5 +425,91 @@ describe("Storefront session signals", () => {
 			"favorite",
 			expect.objectContaining({ id: "G1" }),
 		);
+	});
+});
+
+describe("Storefront in-app history (PDP routing)", () => {
+	it("opening a product pushes a #/p/<id> history entry", async () => {
+		render(<Storefront />);
+		const grid = await screen.findByText("Grid Gadget");
+		await userEvent.click(
+			grid.closest("article")?.querySelector("button") ?? grid,
+		);
+		await screen.findByRole("heading", { level: 1, name: "Grid Gadget" });
+
+		expect(window.location.hash).toBe("#/p/G1");
+	});
+
+	it("browser Back (popstate) leaves the PDP but stays in-app", async () => {
+		render(<Storefront />);
+		const grid = await screen.findByText("Grid Gadget");
+		await userEvent.click(
+			grid.closest("article")?.querySelector("button") ?? grid,
+		);
+		await screen.findByRole("heading", { level: 1, name: "Grid Gadget" });
+
+		// Simulate the browser's Back: the hash pops to the browse URL and the
+		// window fires popstate (no document unload — that is the whole point).
+		window.history.replaceState(null, "", "/");
+		window.dispatchEvent(new PopStateEvent("popstate"));
+
+		expect(await screen.findByText("Grid Gizmo")).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /Back to browse/i }),
+		).not.toBeInTheDocument();
+	});
+
+	it("restores the PDP from a #/p/<id> deep link on mount without re-emitting a click", async () => {
+		window.history.replaceState(null, "", "/#/p/G2");
+		render(<Storefront />);
+
+		expect(
+			await screen.findByRole("heading", { level: 1, name: "Grid Gizmo" }),
+		).toBeInTheDocument();
+		// A restore is not an interaction — replay already rebuilt the taste.
+		expect(mocks.emitInteraction).not.toHaveBeenCalled();
+	});
+});
+
+describe("Storefront durable taste (badge restore + reset affordance)", () => {
+	it("initializes the For-You badge from the replayed log", async () => {
+		mocks.replayedSignalCount.mockReturnValue(3);
+		render(<Storefront />);
+		await screen.findByText("Rail Widget");
+
+		expect(screen.getByTitle(/saved only in this browser/i)).toHaveTextContent(
+			"3",
+		);
+	});
+
+	it("Reset taste clears profile+log+caps, zeroes the badge, and re-ranks to baseline", async () => {
+		mocks.replayedSignalCount.mockReturnValue(2);
+		render(<Storefront />);
+		await screen.findByText("Rail Widget");
+		expect(screen.getByTitle(/saved only in this browser/i)).toHaveTextContent(
+			"2",
+		);
+		const railCallsBefore = mocks.recommendStrategy.mock.calls.length;
+
+		await userEvent.click(screen.getByRole("button", { name: /Reset taste/i }));
+
+		await waitFor(() => expect(mocks.resetSession).toHaveBeenCalledTimes(1));
+		expect(mocks.resetSignalCaps).toHaveBeenCalledTimes(1);
+		// The badge returns to zero…
+		await waitFor(() =>
+			expect(
+				screen.getByTitle(/saved only in this browser/i),
+			).toHaveTextContent("0"),
+		);
+		// …the rails re-rank against the now-empty profile…
+		await waitFor(() =>
+			expect(mocks.recommendStrategy.mock.calls.length).toBeGreaterThan(
+				railCallsBefore,
+			),
+		);
+		// …and the copy tells the truth about where activity lives.
+		expect(
+			await screen.findByText(/stored only in this browser/i),
+		).toBeInTheDocument();
 	});
 });
