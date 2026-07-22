@@ -3,7 +3,27 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.12.0] — 2026-07-21
+
+### Fixed
+- **Small signal-family text now holds WCAG-AA 4.5:1**: `.metrics-strip__value`
+  (14px metric values) and `.card__pick` (12px hover cue) render with the
+  existing `--signal-ink` token (4.89:1 on `--paper`, 5.18:1 on `--paper-raise`)
+  instead of the hot `--signal` (3.07:1 / 3.25:1). `theme.contrast.test.ts` now
+  measures those two rules' resolved tokens as a property, so a future palette
+  tweak below 4.5:1 fails with the measured ratio.
+- **Sound heading outline on home/browse**: the product grid — owner of the
+  single page `<h1>` — now precedes the rail `<h2>`s in DOM order, with a
+  `.shop--browse` flex-`order` rule keeping the visual stack (rails above grid)
+  unchanged. Guarded by a Storefront mount test on document positions.
+- **The hybrid parity fixture generator replays `/search`'s real scoring**:
+  `scripts/gen_hybrid_fixture.py` called the retrieval-less `rerank()` while the
+  route (and the browser engine the fixture arbitrates) blend normalized RRF
+  retrieval via `rerank_search()`. The weekly parity workflow's red on
+  `hybrid_parity.json` was this script drift — the committed fixture was correct
+  all along, and the fixed script regenerates it byte-for-byte. Pinned by a
+  model-free regression test. `embedding_parity.json` refreshed with CI-exact
+  bytes (float-only drift, ids/order intact, max delta 1.4e-07).
 
 ### Added
 - **Measured release contract for the real browser path**: the C1 Chromium gate now
@@ -68,6 +88,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the Node parity path (test-time HF fetch) is untouched.
 
 ### Changed
+- **`edgeproc-core` now installs from PyPI** (`>=0.2.1`, locked to the registry
+  release): the retired `shared-libs-python` git pin is gone from
+  `[tool.uv.sources]` and `uv.lock` (zero git refs for it remain), and the
+  `edge-proc` pin moved to `d88af07` (same v0.1.5 line, src-identical), the
+  first rev whose own sources consume edgeproc-core from PyPI. Docs, SEO pages,
+  and type-checker paths updated for the repo rename
+  (`shared-libs-python` → `edgeproc-core`).
+- **`@edgeproc/browser` public surface trimmed** (0.5.0): `EMBEDDING_MODEL` and
+  `DEFAULT_RANKING_CONFIG` are engine-internal again — the model id is wired
+  inside `createEmbedder` and the runtime reads ranking config from the signed
+  bundle; no consumer imported either. `EMBEDDING_DIM` and the config *types*
+  remain exported.
 - **Search reranking preserves query relevance**: the normalized BM25/vector RRF
   signal contributes a measured 0.20 relevance component before session-aware
   product signals. Cross-tier parity and a real-model regression prevent a popular
