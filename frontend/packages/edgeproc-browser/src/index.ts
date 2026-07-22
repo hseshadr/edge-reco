@@ -31,12 +31,12 @@ export { EMBEDDING_DIM, type Embedder } from "./engine/embedder";
 // --- the bundle-carried ranking config: strategy map + weights ---
 // DEFAULT_RANKING_CONFIG stays engine-internal: the runtime reads the config
 // from the signed bundle; only the TYPES are part of the public surface.
-export {
-	type CandidatePolicy,
-	type InteractionWeights,
-	type RankingConfig,
-	type ScoringWeights,
-	type Strategy,
+export type {
+	CandidatePolicy,
+	InteractionWeights,
+	RankingConfig,
+	ScoringWeights,
+	Strategy,
 } from "./engine/rankingConfig";
 // --- runtime: bootstrap the engine over the synced bundle ---
 export {
