@@ -576,7 +576,8 @@ input {
 	font-size: 12px;
 	font-weight: 600;
 	letter-spacing: 0.04em;
-	color: var(--signal);
+	/* Small text: --signal-ink holds WCAG-AA 4.5:1 on --paper-raise (theme.contrast.test). */
+	color: var(--signal-ink);
 	opacity: 0;
 	transform: translateX(-4px);
 	transition:
@@ -1766,7 +1767,8 @@ input {
 	font-family: var(--font-display);
 	font-weight: 600;
 	font-size: 14px;
-	color: var(--signal);
+	/* Small text: --signal-ink holds WCAG-AA 4.5:1 on --paper (theme.contrast.test). */
+	color: var(--signal-ink);
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
 }

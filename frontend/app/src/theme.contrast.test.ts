@@ -59,6 +59,23 @@ function token(name: string): string {
 	return value;
 }
 
+/** The declarations of a top-level rule, by exact selector. */
+function rule(selector: string): string {
+	const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
+	if (match?.[1] === undefined) throw new Error(`rule not found: ${selector}`);
+	return match[1];
+}
+
+/** The color token a rule paints its text with (must be a `var(--token)`). */
+function colorToken(selector: string): string {
+	const colorDecl = rule(selector).match(/color:\s*var\((--[\w-]+)\)/);
+	if (colorDecl?.[1] === undefined) {
+		throw new Error(`${selector} color must come from a token`);
+	}
+	return colorDecl[1];
+}
+
 describe("design-token WCAG-AA contrast", () => {
 	// --muted renders 12-14px body text on both paper surfaces (~40 call sites).
 	it.each([
@@ -71,27 +88,30 @@ describe("design-token WCAG-AA contrast", () => {
 			`${fg} on ${bg} measured ${ratio.toFixed(2)}:1`,
 		).toBeGreaterThanOrEqual(4.5);
 	});
+
+	// Small text painted with the hot signal family: the 14px metric values on
+	// the metrics-strip tiles (--paper surface) and the 12px hover "pick" cue on
+	// product cards (--paper-raise surface). Whatever token those rules resolve
+	// to must hold WCAG-AA 4.5:1 for small text — the hot --signal itself does
+	// not, which is exactly what --signal-ink exists for.
+	it.each([
+		[".metrics-strip__value", "--paper"],
+		[".card__pick", "--paper-raise"],
+	])("small text in %s meets 4.5:1 on %s", (selector, bg) => {
+		const ratio = contrast(token(colorToken(selector)), token(bg));
+		expect(
+			ratio,
+			`${selector} measured ${ratio.toFixed(2)}:1 against ${bg}`,
+		).toBeGreaterThanOrEqual(4.5);
+	});
 });
 
 describe("footer link-in-text-block accessibility", () => {
-	/** The declarations of a top-level rule, by exact selector. */
-	function rule(selector: string): string {
-		const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-		const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
-		if (match?.[1] === undefined)
-			throw new Error(`rule not found: ${selector}`);
-		return match[1];
-	}
-
 	it("renders footer links at >=4.5:1 against the page background", () => {
-		const colorDecl = rule(".nimbus-footer__link").match(
-			/color:\s*var\((--[\w-]+)\)/,
+		const ratio = contrast(
+			token(colorToken(".nimbus-footer__link")),
+			token("--paper"),
 		);
-		expect(
-			colorDecl?.[1],
-			"footer link color must come from a token",
-		).toBeDefined();
-		const ratio = contrast(token(colorDecl?.[1] as string), token("--paper"));
 		expect(
 			ratio,
 			`footer link measured ${ratio.toFixed(2)}:1`,
