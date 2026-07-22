@@ -1,6 +1,6 @@
 [project]
 name = "edgereco"
-version = "0.11.0"
+version = "0.12.0"
 description = "Local-first product recommendations — hybrid search + session-aware reranking that runs on the shopper's device, zero backend calls after sync"
 requires-python = ">=3.13"
 license = "MIT"
@@ -20,8 +20,8 @@ dependencies = [
   "edge-proc[localvec,bundles]",
   # Direct dependency (not just transitive via edge-proc): edgereco imports
   # edgeproc_core.vector_mgmt.core.types in embeddings/index.py, so the
-  # import is declared honestly here. Pinned via the [tool.uv.sources] git tag below.
-  "edgeproc-core",
+  # import is declared honestly here. Published on PyPI (0.2.1+).
+  "edgeproc-core>=0.2.1",
   # Trust kernel: the ranking attestation (reco/score_receipt.py) seals the bundle's
   # scoring weights as a signed Assay composite receipt at publish time. The [assay]
   # extra pulls the scoring face (scikit-learn stack — already transitive here via
@@ -53,23 +53,25 @@ dev = [
 package = true
 
 [tool.uv.sources]
-# Open-source onboarding: clone ONLY this repo and `uv sync` — the substrate libs
-# are pulled from public GitHub. (uv applies these sources from the root project
-# for ALL deps by name, so edgeproc-core — a transitive dep of edge-proc — must be
-# sourced here too; neither lib is on PyPI.)
+# Open-source onboarding: clone ONLY this repo and `uv sync`. edgeproc-core now
+# installs from PyPI (see the >=0.2.1 floor in [project].dependencies — the
+# uv.lock pins the exact release + hashes); only edge-proc still comes from
+# public GitHub, pending its own PyPI release.
 #
 # Pinned by full commit SHA, not by tag. A git tag is mutable: whoever can push to
-# those repos can retarget it at different code, and every clone would silently
-# resolve a dependency nobody reviewed. The two SHAs below must also move together —
-# edge-proc imports edgeproc-core, so a pair that straddles the rename would fail at
-# import time, not at resolve time.
-edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", rev = "08523196c0a575b2b4fc6581fb7db61baf8b1662" }
-edgeproc-core = { git = "https://github.com/hseshadr/shared-libs-python.git", rev = "6cdf8475b223262821622a021c561aed9213a472" }
+# that repo can retarget it at different code, and every clone would silently
+# resolve a dependency nobody reviewed.
+#
+# d88af07 (v0.1.5 line, src-identical to 0852319) is the first rev whose own
+# [tool.uv.sources] consumes edgeproc-core from PyPI — required here because uv
+# honors a git dependency's sources, so an older rev would force the retired
+# shared-libs-python git pin back into this lock.
+edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", rev = "d88af078c75bd145b28c5bb2cefd15143cec3d21" }
 
 # Co-developing the substrate locally? Clone the siblings next to this repo and
-# swap the two lines above for path sources (uncomment):
+# swap in path sources (uncomment):
 #   edge-proc = { path = "../../edge-proc" }
-#   edgeproc-core = { path = "../../shared-libs-python" }
+#   edgeproc-core = { path = "../../edgeproc-core" }
 
 [project.scripts]
 edgereco = "edgereco.cli:app"
@@ -97,17 +99,15 @@ warn_unused_configs = true
 disallow_any_explicit = true
 warn_unreachable = true
 packages = ["edgereco"]
-# Source roots for mypy to resolve first-party + non-editable sibling path
-# deps (edgeproc, edgeproc_core) WITHOUT installing them. Both siblings use
-# a flat layout (package dir at repo root), so the repo root is the source root.
-# Local dev uses ../edge-proc and ../shared-libs-python; CI checks the siblings
-# out into .deps/ — both are listed so `python -m mypy src` mirrors CI either way.
+# Source roots for mypy. In the default flow both substrate deps install into
+# site-packages (`uv sync`: edgeproc-core from PyPI, edge-proc from its git
+# pin), so mypy resolves them there; the sibling entries only serve the
+# optional co-developer path-source flow (see [tool.uv.sources]). Both
+# siblings use a flat layout (package dir at repo root).
 mypy_path = [
   "src",
   "../../edge-proc",
-  "../../shared-libs-python",
-  "../.deps/edge-proc",
-  "../.deps/shared-libs-python",
+  "../../edgeproc-core",
 ]
 
 # Pydantic v2 injects `__pydantic_extra__` / `__pydantic_private__: dict[str, Any]`

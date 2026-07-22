@@ -14,7 +14,7 @@
 #
 # NOTE on paths: python targets (the OPTIONAL API backend) run from backend/
 # because the launcher is a `demo_server.*` module under that dir and depends
-# on sibling repos (../../edge-proc, ../../shared-libs-python) via uv local sources.
+# on the substrate deps (edgeproc-core from PyPI, edge-proc via its git pin).
 
 # Absolute path to frontend/ regardless of where make is invoked from.
 FRONTEND_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))

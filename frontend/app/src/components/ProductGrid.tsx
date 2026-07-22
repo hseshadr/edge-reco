@@ -39,7 +39,7 @@ export function ProductGrid({
 }: ProductGridProps) {
 	const { t } = useTranslation("storefront");
 	return (
-		<section aria-label={title}>
+		<section className="grid-section" aria-label={title}>
 			<div className="section-head">
 				<div>
 					<div className="section-head__kicker">{kicker}</div>

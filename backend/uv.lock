@@ -476,7 +476,7 @@ wheels = [
 [[package]]
 name = "edge-proc"
 version = "0.1.5"
-source = { git = "https://github.com/hseshadr/edge-proc.git?rev=08523196c0a575b2b4fc6581fb7db61baf8b1662#08523196c0a575b2b4fc6581fb7db61baf8b1662" }
+source = { git = "https://github.com/hseshadr/edge-proc.git?rev=d88af078c75bd145b28c5bb2cefd15143cec3d21#d88af078c75bd145b28c5bb2cefd15143cec3d21" }
 dependencies = [
     { name = "edgeproc-core" },
     { name = "pydantic" },
@@ -502,15 +502,19 @@ localvec = [
 
 [[package]]
 name = "edgeproc-core"
-version = "0.2.0"
-source = { git = "https://github.com/hseshadr/shared-libs-python.git?rev=6cdf8475b223262821622a021c561aed9213a472#6cdf8475b223262821622a021c561aed9213a472" }
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/54/c853d66cd394df406ea241c8610477c047110083dea6dd2ab53a178d85a9/edgeproc_core-0.2.1.tar.gz", hash = "sha256:d45761b058e5e944e47ce5bbcdeb0bbf250f57a185618a11ea9d2a2276ebf8c8", size = 61595, upload-time = "2026-07-22T02:05:17.704Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/a1/cb2a6353ae4436d30e346c3a60719cb452000f7aeb502a6e1f03e9faac38/edgeproc_core-0.2.1-py3-none-any.whl", hash = "sha256:cc5d357cba3dfcccf3bebbaab46203feb33c371d4e11ed872f8381d75ed64759", size = 26679, upload-time = "2026-07-22T02:05:16.383Z" },
 ]
 
 [[package]]
 name = "edgereco"
-version = "0.11.0"
+version = "0.12.0"
 source = { editable = "." }
 dependencies = [
     { name = "avow", extra = ["assay"] },
@@ -551,8 +555,8 @@ dev = [
 requires-dist = [
     { name = "avow", extras = ["assay"], specifier = ">=0.1.0,<0.2" },
     { name = "cryptography", specifier = ">=48.0.1" },
-    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?rev=08523196c0a575b2b4fc6581fb7db61baf8b1662" },
-    { name = "edgeproc-core", git = "https://github.com/hseshadr/shared-libs-python.git?rev=6cdf8475b223262821622a021c561aed9213a472" },
+    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?rev=d88af078c75bd145b28c5bb2cefd15143cec3d21" },
+    { name = "edgeproc-core", specifier = ">=0.2.1" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },

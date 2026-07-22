@@ -189,9 +189,9 @@ That split is real in both runtimes. The Python side depends on [`edge-proc[loca
 | --- | --- |
 | [**edge-reco**](https://github.com/hseshadr/edge-reco) (this repo) | the product brain — scoring formula, session signals, session-aware re-ranker, the Nimbus demo storefront. |
 | [**edge-proc**](https://github.com/hseshadr/edge-proc) | the reusable local-compute layer — signed catalog delivery, on-device content-addressed cache, fail-closed Ed25519 + SHA-256 verification, and the retrieval primitives. **This is what makes on-device search possible.** |
-| [**shared-libs-python**](https://github.com/hseshadr/shared-libs-python) | the vector-partitioning protocol edge-proc builds its local vector index on. |
+| [**edgeproc-core**](https://github.com/hseshadr/edgeproc-core) | the vector-partitioning protocol edge-proc builds its local vector index on. On PyPI as [`edgeproc-core`](https://pypi.org/project/edgeproc-core/). |
 
-You don't need to clone edge-proc or shared-libs-python — the backend pulls them from public GitHub automatically (see [QUICKSTART](docs/QUICKSTART.md)).
+You don't need to clone edge-proc or edgeproc-core — the backend pulls edgeproc-core from PyPI and edge-proc from public GitHub automatically (see [QUICKSTART](docs/QUICKSTART.md)).
 
 ## Architecture
 
