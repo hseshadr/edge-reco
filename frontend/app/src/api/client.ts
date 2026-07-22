@@ -24,6 +24,7 @@ import {
 	type Embedder,
 	EngineRuntime,
 	emptyProfile,
+	type InteractionWeights,
 	type OnStage,
 	type RuntimeConfig,
 	type RuntimeDeps,
@@ -137,6 +138,10 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 	const runtime = new EngineRuntime(resolveDeps(deps));
 	let profile: SessionProfile = emptyProfile();
 	let productById: ReadonlyMap<string, Product> = new Map();
+	// The SIGNED BUNDLE's per-event-type affinity bumps, captured at bootstrap.
+	// The fold must use these (mirror of the backend /events fold) — the typed
+	// defaults apply only before bootstrap, when no product resolves anyway.
+	let interactionWeights: InteractionWeights | undefined;
 
 	function requireEngine(): SearchEngine {
 		const engine = runtime.engine();
@@ -153,6 +158,7 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 		): Promise<void> {
 			const engine = await runtime.bootstrap(config, onStage);
 			productById = new Map(engine.catalog().map((p) => [p.id, p]));
+			interactionWeights = engine.interactionWeights();
 		},
 		resetSession(): void {
 			profile = emptyProfile();
@@ -219,7 +225,12 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 		sendEvent(evt: InteractionEvent): Promise<void> {
 			const product = productById.get(evt.product_id);
 			if (product !== undefined) {
-				profile = applyInteraction(profile, product, evt.event_type);
+				profile = applyInteraction(
+					profile,
+					product,
+					evt.event_type,
+					interactionWeights,
+				);
 			}
 			// Off the inference path: a click ALSO feeds the flywheel uplink —
 			// captured locally and later batched to the mimicked cloud. No-op when

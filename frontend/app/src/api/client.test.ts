@@ -8,6 +8,7 @@ import {
 	EMBEDDING_DIM,
 	type Embedder,
 	type EnginePort,
+	type RankingConfig,
 	type SyncResult,
 } from "@edgeproc/browser";
 import {
@@ -257,5 +258,92 @@ describe("backend-free data layer", () => {
 		await similar(seed.id, { limit: 3 });
 		const { recommendMs } = getSnapshot();
 		expect(recommendMs).toBeGreaterThanOrEqual(0);
+	});
+});
+
+/**
+ * A fake sync Worker over the real bundle whose ranking_config.json is retuned
+ * in-flight — the unit-test analogue of a maintainer republishing a bundle with
+ * different weights (backend tests/integration/test_events_retune.py).
+ */
+function retunedEnginePort(
+	mutate: (config: RankingConfig) => RankingConfig,
+): EnginePort {
+	const base = fakeEnginePort();
+	return {
+		sync: () => base.sync(),
+		async readFile(path: string): Promise<Uint8Array> {
+			const bytes = await base.readFile(path);
+			if (path !== "ranking_config.json") {
+				return bytes;
+			}
+			const config = JSON.parse(DECODER.decode(bytes)) as RankingConfig;
+			return new TextEncoder().encode(JSON.stringify(mutate(config)));
+		},
+	};
+}
+
+/** Zero out one scoring weight on the top-level weights AND every strategy. */
+function withZeroRepetitionPenalty(config: RankingConfig): RankingConfig {
+	const strategies = Object.fromEntries(
+		Object.entries(config.strategies ?? {}).map(([name, strategy]) => [
+			name,
+			{
+				...strategy,
+				weights: { ...strategy.weights, repetition_penalty: 0 },
+			},
+		]),
+	);
+	return {
+		...config,
+		scoring_weights: { ...config.scoring_weights, repetition_penalty: 0 },
+		strategies,
+	};
+}
+
+describe("bundle-supplied interaction weights drive the in-tab fold", () => {
+	// Mirror of the backend events.py contract: the fold reads the SIGNED
+	// BUNDLE's interaction_weights, not the typed defaults. The retuned bundle
+	// zeroes the click affinity bumps (and the repetition penalty, so
+	// recently-viewed bookkeeping cannot re-rank either) — clicks must then
+	// leave the for_you rail EXACTLY as cold. A fold that ignores the bundle
+	// and uses DEFAULT_RANKING_CONFIG re-ranks the rail and fails this test.
+	it("a bundle that zeroes click weights leaves for_you unmoved by clicks", async () => {
+		__setRuntimeForTests({
+			spawnEngine: () =>
+				retunedEnginePort((config) =>
+					withZeroRepetitionPenalty({
+						...config,
+						interaction_weights: {
+							...config.interaction_weights,
+							click: { category: 0, tag: 0, brand: 0 },
+						},
+					}),
+				),
+			makeEmbedder: () => stubEmbedder,
+		});
+		await bootstrap();
+
+		const cold = await recommendStrategy("for_you", { limit: 10 });
+		const coldOrder = cold.results.map((r) => r.product.id).join(",");
+		const target = cold.results[0]?.product as Product;
+		const sameCategory = catalog()
+			.filter((p) => p.category === target.category)
+			.slice(0, 3);
+		for (const product of sameCategory) {
+			await sendEvent({
+				event_type: "click",
+				product_id: product.id,
+				timestamp: new Date().toISOString(),
+			});
+		}
+
+		const warm = await recommendStrategy("for_you", { limit: 10 });
+		// The clicks DID fold (the click counter moved) …
+		expect(warm.session_clicks).toBe(3);
+		// … but the bundle's zeroed click weights mean zero affinity: the rail
+		// must not move. (DEFAULT weights would bump category/tag/brand and
+		// re-rank — the exact latent bug this test pins.)
+		expect(warm.results.map((r) => r.product.id).join(",")).toBe(coldOrder);
 	});
 });
