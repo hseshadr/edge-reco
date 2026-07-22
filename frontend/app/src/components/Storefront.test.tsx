@@ -122,6 +122,25 @@ describe("Storefront mount", () => {
 		expect(screen.getByText("Rail Widget")).toBeInTheDocument();
 		expect(mocks.browse).toHaveBeenCalledWith({ limit: 24 });
 	});
+
+	it("puts the grid h1 before the rail h2s in DOM order (heading outline)", async () => {
+		render(<Storefront />);
+
+		// Wait for both the grid (owns the page h1) and a rail (owns an h2).
+		expect(await screen.findByText("Grid Gadget")).toBeInTheDocument();
+		expect(await screen.findByText("Rail Widget")).toBeInTheDocument();
+
+		const h1 = screen.getByRole("heading", { level: 1 });
+		const h2s = screen.getAllByRole("heading", { level: 2 });
+		expect(h2s.length).toBeGreaterThan(0);
+		for (const h2 of h2s) {
+			// A sound outline: the page h1 precedes every rail h2 in DOM order
+			// (the visual stack may still show rails first via CSS order).
+			expect(
+				h1.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+		}
+	});
 });
 
 describe("Storefront product navigation", () => {

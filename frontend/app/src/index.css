@@ -285,6 +285,13 @@ input {
 	gap: clamp(32px, 4vw, 56px);
 }
 
+/* Browse: the grid (the page h1) precedes the rails (h2s) in DOM order for a
+   sound heading outline; flex `order` restores the visual stack — rails above
+   the grid — so the layout is unchanged. Search/PDP render plain DOM order. */
+.shop--browse > .grid-section {
+	order: 1;
+}
+
 .rail-stack {
 	display: flex;
 	flex-direction: column;

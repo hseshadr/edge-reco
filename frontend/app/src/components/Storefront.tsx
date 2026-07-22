@@ -400,7 +400,14 @@ export function Storefront() {
 
 			<MetricsStrip />
 
-			<main className="shop">
+			{/* Browse gets a modifier: its grid (the page h1) precedes the rails in
+			    DOM order for a sound heading outline, while CSS `order` keeps the
+			    visual stack (rails above grid) unchanged. */}
+			<main
+				className={
+					view.kind === "browse" && !isSearching ? "shop shop--browse" : "shop"
+				}
+			>
 				{error !== null && (
 					<div className="banner banner--error" role="alert">
 						<div className="banner__title">{t("banner.title")}</div>
@@ -435,8 +442,8 @@ export function Storefront() {
 					</>
 				) : (
 					<>
-						{railStack}
 						{productGrid}
+						{railStack}
 					</>
 				)}
 			</main>
