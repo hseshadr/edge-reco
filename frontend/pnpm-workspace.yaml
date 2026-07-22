@@ -43,10 +43,25 @@ minimumReleaseAge: 1440
 #     needless runtime major bump that also breaks the engine's declared range,
 #     and 8.x carries its own live advisories (GHSA-jfj6-75fj-8934, and j3f2
 #     again through <=8.6.5). 7.6.5 is the patched 7.x line (npm `latest-7`).
+#   sharp: pin transitive sharp to the patched 0.35.x line. `app/package.json`
+#     already declares a direct `sharp: ^0.35.3` devDependency, but that does NOT
+#     force the NESTED copy pnpm resolves under `@huggingface/transformers`
+#     (declared `sharp: ^0.34.5`, capped below 0.35) — pnpm audit still flagged
+#     that path (app>@huggingface/transformers>sharp) with 4 HIGH libvips CVEs
+#     (2026-33327/33328/35590/35591, vulnerable <0.35.0). An explicit override is
+#     the only way to force that nested resolution onto the patched line too.
+#   fast-uri: floor raised to >=3.1.4 for GHSA-v2hh-gcrm-f6hx (host confusion via
+#     literal backslash authority delimiter; vulnerable >=3.0.0 <=3.1.3, patched
+#     >=3.1.4 in the same 3.x line). Pulled in transitively via vite-plugin-pwa>
+#     workbox-build>@apideck/better-ajv-errors>ajv>fast-uri; no direct dependency
+#     exists to bump instead. Bounded `<4` — a minimal security bump within the
+#     patched 3.x line, not an unrelated major upgrade.
 overrides:
   adm-zip: "0.6.0"
   undici: ">=7.28.0 <8"
   protobufjs: ">=7.6.5 <8"
+  sharp: "^0.35.0"
+  fast-uri: ">=3.1.4 <4"
 
 # pnpm v11 does not run a dependency's build/postinstall scripts unless it is
 # explicitly allowlisted here (replaces v10's onlyBuiltDependencies). These are
