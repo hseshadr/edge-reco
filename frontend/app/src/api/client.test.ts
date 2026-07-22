@@ -278,7 +278,7 @@ function retunedEnginePort(
 ): EnginePort {
 	const base = fakeEnginePort();
 	return {
-		sync: () => base.sync(),
+		sync: (...args: Parameters<EnginePort["sync"]>) => base.sync(...args),
 		async readFile(path: string): Promise<Uint8Array> {
 			const bytes = await base.readFile(path);
 			if (path !== "ranking_config.json") {
@@ -437,15 +437,17 @@ describe("durable taste: replay on boot, reset, replayed count", () => {
 		await clickThreeSameCategory();
 		await resetSession();
 
-		expect((await recommendStrategy("for_you", { limit: 5 })).session_clicks)
-			.toBe(0);
+		expect(
+			(await recommendStrategy("for_you", { limit: 5 })).session_clicks,
+		).toBe(0);
 		expect(await readTasteEvents()).toEqual([]);
 
 		// A fresh boot after reset stays cold — nothing left to replay.
 		__setRuntimeForTests(freshDeps());
 		await bootstrap();
-		expect((await recommendStrategy("for_you", { limit: 5 })).session_clicks)
-			.toBe(0);
+		expect(
+			(await recommendStrategy("for_you", { limit: 5 })).session_clicks,
+		).toBe(0);
 		expect(replayedSignalCount()).toBe(0);
 	});
 

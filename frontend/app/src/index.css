@@ -870,6 +870,37 @@ input {
 	box-shadow: 0 4px 12px var(--signal-soft);
 }
 
+/* The badge + "Reset taste" pair on the For-You rail head. */
+.rail__taste {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* Echoes the pill vocabulary (.clicks-badge / .cart-pill), quiet by default. */
+.rail__reset {
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: var(--paper-raise);
+	color: var(--muted);
+	font-family: inherit;
+	font-weight: 600;
+	font-size: 12px;
+	cursor: pointer;
+	transition:
+		color 0.15s ease,
+		border-color 0.15s ease;
+}
+
+.rail__reset:hover,
+.rail__reset:focus-visible {
+	color: var(--ink);
+	border-color: var(--signal);
+}
+
 .cart-pill {
 	flex-shrink: 0;
 	display: flex;
