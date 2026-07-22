@@ -152,6 +152,41 @@ describe("Storefront product navigation", () => {
 });
 
 describe("Storefront error handling", () => {
+	it("surfaces a rail fetch failure through the error banner, not silently", async () => {
+		// A real engine fault on the rails path (e.g. fail-closed malformed bundle)
+		// must reach the user via the app's error surface — an empty rail with only
+		// a console.warn is a silent degrade.
+		mocks.recommendStrategy.mockRejectedValue(new Error("rail engine fault"));
+		render(<Storefront />);
+
+		expect(
+			await screen.findByText("Couldn’t reach the engine"),
+		).toBeInTheDocument();
+		expect(screen.getByText("rail engine fault")).toBeInTheDocument();
+		// The degrade is preserved: the grid still renders; one bad rail never
+		// crashes the page.
+		expect(await screen.findByText("Grid Gadget")).toBeInTheDocument();
+	});
+
+	it("recovers from a rail failure when Retry succeeds", async () => {
+		mocks.recommendStrategy.mockRejectedValueOnce(
+			new Error("rail engine fault"),
+		);
+		render(<Storefront />);
+		expect(
+			await screen.findByText("Couldn’t reach the engine"),
+		).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+		expect(await screen.findByText("Rail Widget")).toBeInTheDocument();
+		await waitFor(() =>
+			expect(
+				screen.queryByText("Couldn’t reach the engine"),
+			).not.toBeInTheDocument(),
+		);
+	});
+
 	it("shows an error banner and recovers when Retry succeeds", async () => {
 		mocks.browse.mockRejectedValueOnce(new Error("engine offline"));
 		render(<Storefront />);

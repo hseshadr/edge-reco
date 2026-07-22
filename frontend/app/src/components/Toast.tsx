@@ -17,7 +17,7 @@ export function Toast({ message }: ToastProps) {
 					transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
 				>
 					<span className="toast__dot" />
-					{message}
+					<span className="toast__msg">{message}</span>
 				</motion.div>
 			)}
 		</AnimatePresence>

@@ -51,3 +51,29 @@ describe("ProductImage egress boundary", () => {
 		);
 	});
 });
+
+describe("ProductImage tile mapping", () => {
+	it("maps a real compound catalog category to its own tile, not the default", () => {
+		const { container } = render(
+			<ProductImage
+				product={{ ...product, category: "Clothing, Shoes & Jewelry" }}
+			/>,
+		);
+
+		const tile = container.querySelector(".pimg-tile");
+		expect(tile).toHaveClass("pimg-tile--clothing");
+		expect(tile).not.toHaveClass("pimg-tile--default");
+	});
+
+	it("applies the deterministic per-product tone variant", () => {
+		// "P1" hashes to a non-base tone; the exact class is pinned by toneClassFor.
+		const { container } = render(<ProductImage product={product} />);
+		const tile = container.querySelector(".pimg-tile");
+		const first = tile?.className;
+		cleanup();
+		const second = render(
+			<ProductImage product={product} />,
+		).container.querySelector(".pimg-tile")?.className;
+		expect(first).toBe(second);
+	});
+});

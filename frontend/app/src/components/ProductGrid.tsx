@@ -43,7 +43,9 @@ export function ProductGrid({
 			<div className="section-head">
 				<div>
 					<div className="section-head__kicker">{kicker}</div>
-					<h2 className="section-head__title">{title}</h2>
+					{/* The grid title is the page h1: browse/search render exactly one
+					    ProductGrid and no other h1 (the PDP view unmounts the grid). */}
+					<h1 className="section-head__title">{title}</h1>
 				</div>
 				{!loading && (
 					<span className="section-head__count">

@@ -10,10 +10,13 @@
 	--paper-raise: #fffdf8;
 	--ink: #17120e;
 	--signal: #ff4d2e;
+	/* --signal deepened for SMALL TEXT: >=4.5:1 on --paper (theme.contrast.test). */
+	--signal-ink: #c53a10;
 	--signal-soft: rgba(255, 77, 46, 0.12);
 	--abyss: #1c3a4a;
 	--abyss-soft: rgba(28, 58, 74, 0.12);
-	--muted: #8c8378;
+	/* WCAG-AA: >=4.5:1 on --paper and --paper-raise (theme.contrast.test). */
+	--muted: #6f675c;
 	--line: #e5ddd0;
 
 	/* typography */
@@ -459,6 +462,9 @@ input {
 .section-head__title {
 	font-size: clamp(28px, 4vw, 38px);
 	font-weight: 600;
+	/* Rendered as an h1 (page title); pin the h2-era margins so the semantic
+	   upgrade did not shift the layout. */
+	margin-block: 0.83em;
 }
 
 .section-head__title em {
@@ -738,8 +744,41 @@ input {
 .pimg-tile--books {
 	background: linear-gradient(135deg, #2a2440 0%, #5a4f8a 55%, #b08fd6 100%);
 }
+.pimg-tile--phones {
+	background: linear-gradient(135deg, #1d3557 0%, #3566a8 55%, #7fb0e8 100%);
+}
+.pimg-tile--tools {
+	background: linear-gradient(135deg, #262023 0%, #5d4a3c 55%, #a08468 100%);
+}
+.pimg-tile--automotive {
+	background: linear-gradient(135deg, #23272e 0%, #48505e 55%, #8b97a8 100%);
+}
+.pimg-tile--crafts {
+	background: linear-gradient(135deg, #55214a 0%, #a04a8c 55%, #e096cd 100%);
+}
+.pimg-tile--health {
+	background: linear-gradient(135deg, #0f4c44 0%, #2e8577 55%, #7fccb8 100%);
+}
+.pimg-tile--office {
+	background: linear-gradient(135deg, #3a2a1d 0%, #6f5138 55%, #b08a63 100%);
+}
+.pimg-tile--garden {
+	background: linear-gradient(135deg, #2f3d14 0%, #5f7a2a 55%, #a4c25e 100%);
+}
+.pimg-tile--pets {
+	background: linear-gradient(135deg, #612e14 0%, #b05a2a 55%, #eb9a64 100%);
+}
 .pimg-tile--default {
 	background: linear-gradient(135deg, #2b2622 0%, #5a4f45 55%, #9c8d7c 100%);
+}
+
+/* Deterministic per-product tone variants (categoryStyle.toneClassFor): subtle
+   texture so a single-category grid is a collection, not one flat color. */
+.pimg-tile--tone-b {
+	filter: saturate(1.15) brightness(1.06);
+}
+.pimg-tile--tone-c {
+	filter: saturate(0.85) brightness(0.94);
 }
 
 /* =========================================================================
@@ -1190,6 +1229,7 @@ input {
 	bottom: 32px;
 	transform: translateX(-50%);
 	z-index: 200;
+	max-width: min(480px, calc(100vw - 40px));
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -1203,10 +1243,22 @@ input {
 }
 
 .toast__dot {
+	flex-shrink: 0;
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
 	background: var(--signal);
+}
+
+/* Long product titles ("Added “…” to your taste"): the pill is width-capped and
+   the copy clamps to two lines instead of overlapping the page body. */
+.toast__msg {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	overflow-wrap: anywhere;
 }
 
 .empty {
@@ -1381,13 +1433,16 @@ input {
 	font-size: 13px;
 }
 
+/* Links sit inside sentence copy at 13px: AA needs a non-color cue (underline)
+   and >=4.5:1 small-text contrast — hence --signal-ink, not raw --signal. */
 .nimbus-footer__link {
-	color: var(--signal);
-	text-decoration: none;
+	color: var(--signal-ink);
+	text-decoration: underline;
+	text-underline-offset: 2px;
 }
 
 .nimbus-footer__link:hover {
-	text-decoration: underline;
+	color: var(--signal);
 }
 
 /* Landing — intro shown before the engine boots (gated behind Launch). Reuses the

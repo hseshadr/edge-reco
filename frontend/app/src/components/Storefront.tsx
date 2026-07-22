@@ -45,34 +45,41 @@ type View = { kind: "browse" } | { kind: "product"; product: Product };
 
 /**
  * Empty results for a rail spec the engine returned nothing for (degrade). An
- * engine throw is LOGGED before we degrade so a real fault (e.g. a fail-closed
- * malformed-bundle error) stays visible in the console — we keep the empty-rail
- * UX so one bad rail never crashes the page. A legitimately-empty co-occurrence
- * rail resolves with `results: []` and never lands here, so it isn't logged.
+ * engine throw is REPORTED through `onError` (the app's error banner) before we
+ * degrade, so a real fault (e.g. a fail-closed malformed-bundle error) is
+ * user-visible — while the empty-rail UX means one bad rail never crashes the
+ * page. A legitimately-empty co-occurrence rail resolves with `results: []`
+ * and never lands here, so it isn't reported.
  */
-async function loadRail(strategy: string, label: string): Promise<RailData> {
+async function loadRail(
+	strategy: string,
+	label: string,
+	onError: (err: unknown) => void,
+): Promise<RailData> {
 	try {
 		const res = await recommendStrategy(strategy, { limit: RAIL_LIMIT });
 		return { spec: { strategy, label }, results: res.results };
 	} catch (err) {
-		console.warn(`rail "${strategy}" failed; rendering empty`, err);
+		onError(err);
 		return { spec: { strategy, label }, results: [] };
 	}
 }
 
 /**
- * Guarded vector-rail fetch: a throw hides the rail upstream. The throw is LOGGED
- * before degrading so a real engine fault is visible; an empty result is a normal
- * value (resolves, never throws) and is NOT logged — a cold/co-occurrence-less seed
- * just yields no rail.
+ * Guarded vector-rail fetch: a throw hides the rail upstream. The throw is
+ * REPORTED through `onError` (the error banner) before degrading so a real
+ * engine fault is user-visible; an empty result is a normal value (resolves,
+ * never throws) and is NOT reported — a cold/co-occurrence-less seed just
+ * yields no rail.
  */
 async function safeResults(
 	run: () => Promise<{ results: SearchResult[] }>,
+	onError: (err: unknown) => void,
 ): Promise<SearchResult[]> {
 	try {
 		return (await run()).results;
 	} catch (err) {
-		console.warn("rail fetch failed; rendering empty", err);
+		onError(err);
 		return [];
 	}
 }
@@ -129,74 +136,100 @@ export function Storefront() {
 		[t],
 	);
 
+	// A degraded rail's fault lands in the same banner as every other engine
+	// error — surfaced, retryable, and never page-crashing.
+	const reportRailError = useCallback(
+		(err: unknown) => setError(toErrorMessage(err)),
+		[toErrorMessage],
+	);
+
 	const refreshRails = useCallback(async () => {
 		setPersonalizing(true);
 		try {
 			const specs = homeRails(strategyMap.current);
 			setRails(
-				await Promise.all(specs.map((s) => loadRail(s.strategy, s.label))),
+				await Promise.all(
+					specs.map((s) => loadRail(s.strategy, s.label, reportRailError)),
+				),
 			);
 		} catch (err) {
 			setError(toErrorMessage(err));
 		} finally {
 			setPersonalizing(false);
 		}
-	}, [toErrorMessage]);
+	}, [toErrorMessage, reportRailError]);
 
-	const loadPdpRails = useCallback(async (product: Product) => {
-		const map = strategyMap.current;
-		const similarLabel = map.similar_items?.label ?? "Similar items";
-		const becauseLabel = map.because_viewed?.label ?? "Because you viewed this";
-		// Co-occurrence rails (FBT first, also-bought second) — seed-driven, so a
-		// cold/co-occurrence-less seed yields empty results and the rail is hidden.
-		const [fbtSpec, alsoBoughtSpec] = coBuyRails(map);
-		const [fbt, alsoBought, similarItems, because, trending] =
-			await Promise.all([
-				safeResults(() =>
-					recommendStrategy("frequently_bought_together", {
-						seed: product.id,
-						limit: RAIL_LIMIT,
-					}),
-				),
-				safeResults(() =>
-					recommendStrategy("also_bought", {
-						seed: product.id,
-						limit: RAIL_LIMIT,
-					}),
-				),
-				safeResults(() => similar(product.id, { limit: RAIL_LIMIT })),
-				safeResults(() =>
-					recommendStrategy("because_viewed", {
-						seed: product.id,
-						limit: RAIL_LIMIT,
-					}),
-				),
-				safeResults(() => recommendStrategy("trending", { limit: RAIL_LIMIT })),
+	const loadPdpRails = useCallback(
+		async (product: Product) => {
+			const map = strategyMap.current;
+			const similarLabel = map.similar_items?.label ?? "Similar items";
+			const becauseLabel =
+				map.because_viewed?.label ?? "Because you viewed this";
+			// Co-occurrence rails (FBT first, also-bought second) — seed-driven, so a
+			// cold/co-occurrence-less seed yields empty results and the rail is hidden.
+			const [fbtSpec, alsoBoughtSpec] = coBuyRails(map);
+			const [fbt, alsoBought, similarItems, because, trending] =
+				await Promise.all([
+					safeResults(
+						() =>
+							recommendStrategy("frequently_bought_together", {
+								seed: product.id,
+								limit: RAIL_LIMIT,
+							}),
+						reportRailError,
+					),
+					safeResults(
+						() =>
+							recommendStrategy("also_bought", {
+								seed: product.id,
+								limit: RAIL_LIMIT,
+							}),
+						reportRailError,
+					),
+					safeResults(
+						() => similar(product.id, { limit: RAIL_LIMIT }),
+						reportRailError,
+					),
+					safeResults(
+						() =>
+							recommendStrategy("because_viewed", {
+								seed: product.id,
+								limit: RAIL_LIMIT,
+							}),
+						reportRailError,
+					),
+					safeResults(
+						() => recommendStrategy("trending", { limit: RAIL_LIMIT }),
+						reportRailError,
+					),
+				]);
+			setPdpRails([
+				// "Frequently bought together" sits high, just below the hero.
+				{
+					key: "frequently_bought_together",
+					label: fbtSpec?.label ?? "Frequently bought together",
+					results: fbt,
+				},
+				{ key: "similar_items", label: similarLabel, results: similarItems },
+				// "Customers who bought this also bought" below the similar rail.
+				{
+					key: "also_bought",
+					label:
+						alsoBoughtSpec?.label ?? "Customers who bought this also bought",
+					results: alsoBought,
+				},
+				{ key: "because_viewed", label: becauseLabel, results: because },
+				{
+					key: "trending_category",
+					label: trendingInCategoryLabel(product),
+					results: trending.filter(
+						(r) => r.product.category === product.category,
+					),
+				},
 			]);
-		setPdpRails([
-			// "Frequently bought together" sits high, just below the hero.
-			{
-				key: "frequently_bought_together",
-				label: fbtSpec?.label ?? "Frequently bought together",
-				results: fbt,
-			},
-			{ key: "similar_items", label: similarLabel, results: similarItems },
-			// "Customers who bought this also bought" below the similar rail.
-			{
-				key: "also_bought",
-				label: alsoBoughtSpec?.label ?? "Customers who bought this also bought",
-				results: alsoBought,
-			},
-			{ key: "because_viewed", label: becauseLabel, results: because },
-			{
-				key: "trending_category",
-				label: trendingInCategoryLabel(product),
-				results: trending.filter(
-					(r) => r.product.category === product.category,
-				),
-			},
-		]);
-	}, []);
+		},
+		[reportRailError],
+	);
 
 	const loadGrid = useCallback(async () => {
 		const seq = gridRequest.current + 1;
