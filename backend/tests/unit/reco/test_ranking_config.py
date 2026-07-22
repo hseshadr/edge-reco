@@ -15,7 +15,6 @@ from edgereco.reco.ranking_config import (
     RankingConfig,
     ScoringWeights,
 )
-from edgereco.reco.signals import INTERACTION_WEIGHTS
 
 
 def test_default_scoring_weights_match_legacy_constants() -> None:
@@ -70,13 +69,33 @@ def test_committed_default_config_still_validates() -> None:
     assert RankingConfig.model_validate_json(payload) == DEFAULT_RANKING_CONFIG
 
 
+# The historical hardcoded affinity bumps (once ``reco.signals.INTERACTION_WEIGHTS``,
+# now retired). Pinned literally so the default config cannot drift from the values
+# every committed bundle and parity fixture was produced with.
+_LEGACY_INTERACTION_WEIGHTS: dict[str, dict[str, float]] = {
+    "click": {"category": 0.10, "tag": 0.05, "brand": 0.08},
+    "view": {"category": 0.02, "tag": 0.01, "brand": 0.02},
+    "favorite": {"category": 0.20, "tag": 0.10, "brand": 0.15},
+    "cart": {"category": 0.25, "tag": 0.12, "brand": 0.20},
+}
+
+
 def test_default_interaction_weights_match_legacy_constants() -> None:
     iw = DEFAULT_RANKING_CONFIG.interaction_weights
-    for event_type, legacy in INTERACTION_WEIGHTS.items():
+    for event_type, legacy in _LEGACY_INTERACTION_WEIGHTS.items():
         graded = getattr(iw, event_type)
         assert graded.category == legacy["category"]
         assert graded.tag == legacy["tag"]
         assert graded.brand == legacy["brand"]
+
+
+def test_for_event_dispatches_to_the_matching_graded_signal() -> None:
+    """``for_event`` mirrors the TS tier's ``weights[eventType]`` lookup exactly."""
+    iw = DEFAULT_RANKING_CONFIG.interaction_weights
+    assert iw.for_event("click") is iw.click
+    assert iw.for_event("view") is iw.view
+    assert iw.for_event("favorite") is iw.favorite
+    assert iw.for_event("cart") is iw.cart
 
 
 def test_default_schema_version_is_three() -> None:
