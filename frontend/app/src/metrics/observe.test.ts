@@ -52,6 +52,15 @@ describe("countBackendCalls", () => {
 		expect(countBackendCalls(entries, OPTS)).toBe(0);
 	});
 
+	it("DOES count a remote host's /images/ path — the local rule must not mask it", () => {
+		// The security property behind the "0 backend calls" headline: only the app's
+		// OWN origin may claim the /images/ shortcut. A third-party backend that simply
+		// happens to serve an /images/ path must still be counted, or an exfiltration
+		// call could hide behind an image-shaped URL and the strip would read a lie.
+		const entries = [entry("https://api.evil.com/images/leak?d=1", 150)];
+		expect(countBackendCalls(entries, OPTS)).toBe(1);
+	});
+
 	it("does NOT count the optional uplink beacon", () => {
 		const entries = [entry("https://events.example.com/events", 150)];
 		expect(countBackendCalls(entries, OPTS)).toBe(0);
