@@ -39,6 +39,7 @@ describe("RailStack", () => {
 			<RailStack
 				rails={[rail("for_you", "Recommended for you", [])]}
 				onPick={vi.fn()}
+				onResetTaste={vi.fn()}
 				personalizing={false}
 				signalCount={0}
 			/>,
@@ -54,6 +55,7 @@ describe("RailStack", () => {
 					rail("trending", "Trending now", []),
 				]}
 				onPick={vi.fn()}
+				onResetTaste={vi.fn()}
 				personalizing={false}
 				signalCount={0}
 			/>,
@@ -74,12 +76,13 @@ describe("RailStack", () => {
 					rail("trending", "Trending now", [makeResult("B1", "Beta")]),
 				]}
 				onPick={vi.fn()}
+				onResetTaste={vi.fn()}
 				personalizing={false}
 				signalCount={5}
 			/>,
 		);
 		// The clicks badge (signalCount) renders exactly once — on For You only.
-		const badge = screen.getByTitle("5 signals captured this session");
+		const badge = screen.getByTitle("5 signals — saved only in this browser");
 		expect(badge).toHaveTextContent("5");
 	});
 
@@ -90,6 +93,7 @@ describe("RailStack", () => {
 					rail("for_you", "Recommended for you", [makeResult("A1", "Alpha")]),
 				]}
 				onPick={vi.fn()}
+				onResetTaste={vi.fn()}
 				personalizing={true}
 				signalCount={0}
 			/>,
@@ -105,6 +109,7 @@ describe("RailStack", () => {
 					rail("mystery", "Mystery rail", [makeResult("C1", "Gamma")]),
 				]}
 				onPick={vi.fn()}
+				onResetTaste={vi.fn()}
 				personalizing={false}
 				signalCount={0}
 			/>,

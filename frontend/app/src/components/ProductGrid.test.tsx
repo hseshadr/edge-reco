@@ -62,6 +62,13 @@ describe("ProductGrid", () => {
 		expect(screen.getByText(/Nothing here yet/i)).toBeInTheDocument();
 	});
 
+	it("exposes the grid title as the page's h1 (browse/search have no other h1)", () => {
+		renderGrid();
+		expect(
+			screen.getByRole("heading", { level: 1, name: "Browse" }),
+		).toBeInTheDocument();
+	});
+
 	it("renders a card per product with a pluralized count", () => {
 		const { container } = renderGrid({
 			products: [makeProduct("P1", "Mug"), makeProduct("P2", "Lamp")],

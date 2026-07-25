@@ -18,8 +18,8 @@ from pydantic import BaseModel
 from edgereco.catalog.models import EventType, InteractionEvent, Product
 from edgereco.catalog.preprocessor import normalize_score
 
-# Per-event-type weight toward GLOBAL popularity (distinct from
-# ``reco.signals.INTERACTION_WEIGHTS``, which drives per-session affinity).
+# Per-event-type weight toward GLOBAL popularity (distinct from the bundle-carried
+# ``RankingConfig.interaction_weights``, which drives per-session affinity).
 # Higher-intent signals (cart, favorite) count for more than a passive view.
 ENGAGEMENT_WEIGHTS: dict[EventType, float] = {
     "click": 1.0,

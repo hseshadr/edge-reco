@@ -12,8 +12,11 @@
 //   cart      every press (repeated intent = repeated signal)
 //   view      once per product per session (ambient dwell impressions)
 //
-// Caps are per-tab-session module state ON PURPOSE: they share the engine
-// SessionProfile's lifetime, so a refresh honestly resets both together.
+// Caps are in-memory module state and share the taste profile's lifetime:
+// "Reset taste" clears profile + durable log + caps together (resetSignalCaps).
+// A reload re-arms the caps while the profile replays from the durable taste
+// log (signals/tasteLog.ts) — re-signaling a replayed product is harmless
+// because affinity bumps saturate at 1.0 per key, so the effect is bounded.
 
 import { sendEvent } from "../api/client";
 import type { EventType, Product } from "../api/types";
@@ -29,11 +32,20 @@ const favoriteEmitted = new Set<string>();
 const viewEmitted = new Set<string>();
 let cartHonestyShown = false;
 
-/** Test seam: a real session resets by reloading the tab. */
-export function __resetSignalsForTests(): void {
+/**
+ * Re-arm the once-per-session budgets. Production caller: the storefront's
+ * "Reset taste" affordance — after the profile and durable log are wiped, the
+ * same product may legitimately signal again.
+ */
+export function resetSignalCaps(): void {
 	favoriteEmitted.clear();
 	viewEmitted.clear();
 	cartHonestyShown = false;
+}
+
+/** Test seam alias: unit tests reset the module state between cases. */
+export function __resetSignalsForTests(): void {
+	resetSignalCaps();
 }
 
 function isCapped(eventType: EventType, product: Product): boolean {

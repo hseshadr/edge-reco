@@ -4,8 +4,11 @@ import { useTranslation } from "react-i18next";
 import { resolveBundleBaseUrl } from "../api/bundleUrl";
 import {
 	browse,
+	catalog,
 	catalogInfo,
 	recommendStrategy,
+	replayedSignalCount,
+	resetSession,
 	search,
 	similar,
 	strategies,
@@ -13,7 +16,7 @@ import {
 import type { EventType, Product, SearchResult, Strategy } from "../api/types";
 import { startMetricsObservers } from "../metrics/observe";
 import { record } from "../metrics/store";
-import { emitInteraction } from "../signals/emit";
+import { emitInteraction, resetSignalCaps } from "../signals/emit";
 import { useDwellViews } from "../signals/useDwellViews";
 import { useDebounced } from "../useDebounced";
 import { Header } from "./Header";
@@ -43,36 +46,71 @@ interface GridView {
 /** Home shows the grid + stacked rails; product shows the PDP for one item. */
 type View = { kind: "browse" } | { kind: "product"; product: Product };
 
+/** The PDP hash route ("#/p/<productId>"); any other hash means browse. */
+const PDP_HASH = /^#\/p\/(.+)$/;
+
+/**
+ * Resolve the product a location hash points at, or null for the browse view.
+ * Hash-based (not path-based) on purpose: a static host serves index.html for
+ * every reload/deep link with zero server routing config, keeping the app
+ * fully backend-free and offline-capable.
+ */
+function productFromHash(hash: string): Product | null {
+	const id = PDP_HASH.exec(hash)?.[1];
+	if (id === undefined) {
+		return null;
+	}
+	const decoded = decodeURIComponent(id);
+	return catalog().find((product) => product.id === decoded) ?? null;
+}
+
+/** True when the current history entry is a PDP entry this app pushed. */
+function isAppPdpEntry(): boolean {
+	const state: unknown = window.history.state;
+	return (
+		typeof state === "object" &&
+		state !== null &&
+		(state as { nimbusPdp?: unknown }).nimbusPdp === true
+	);
+}
+
 /**
  * Empty results for a rail spec the engine returned nothing for (degrade). An
- * engine throw is LOGGED before we degrade so a real fault (e.g. a fail-closed
- * malformed-bundle error) stays visible in the console — we keep the empty-rail
- * UX so one bad rail never crashes the page. A legitimately-empty co-occurrence
- * rail resolves with `results: []` and never lands here, so it isn't logged.
+ * engine throw is REPORTED through `onError` (the app's error banner) before we
+ * degrade, so a real fault (e.g. a fail-closed malformed-bundle error) is
+ * user-visible — while the empty-rail UX means one bad rail never crashes the
+ * page. A legitimately-empty co-occurrence rail resolves with `results: []`
+ * and never lands here, so it isn't reported.
  */
-async function loadRail(strategy: string, label: string): Promise<RailData> {
+async function loadRail(
+	strategy: string,
+	label: string,
+	onError: (err: unknown) => void,
+): Promise<RailData> {
 	try {
 		const res = await recommendStrategy(strategy, { limit: RAIL_LIMIT });
 		return { spec: { strategy, label }, results: res.results };
 	} catch (err) {
-		console.warn(`rail "${strategy}" failed; rendering empty`, err);
+		onError(err);
 		return { spec: { strategy, label }, results: [] };
 	}
 }
 
 /**
- * Guarded vector-rail fetch: a throw hides the rail upstream. The throw is LOGGED
- * before degrading so a real engine fault is visible; an empty result is a normal
- * value (resolves, never throws) and is NOT logged — a cold/co-occurrence-less seed
- * just yields no rail.
+ * Guarded vector-rail fetch: a throw hides the rail upstream. The throw is
+ * REPORTED through `onError` (the error banner) before degrading so a real
+ * engine fault is user-visible; an empty result is a normal value (resolves,
+ * never throws) and is NOT reported — a cold/co-occurrence-less seed just
+ * yields no rail.
  */
 async function safeResults(
 	run: () => Promise<{ results: SearchResult[] }>,
+	onError: (err: unknown) => void,
 ): Promise<SearchResult[]> {
 	try {
 		return (await run()).results;
 	} catch (err) {
-		console.warn("rail fetch failed; rendering empty", err);
+		onError(err);
 		return [];
 	}
 }
@@ -82,8 +120,10 @@ async function safeResults(
  * data effects run against a ready in-tab engine — there is no network here:
  * search/recommend/browse run in-tab, and a click folds into the in-tab session
  * profile so the For-You rail re-ranks immediately (the demo's hero loop).
- * Clicking a product also opens a state-based PDP (no router) seeded with that
- * product's vector rails.
+ * Clicking a product also opens the PDP seeded with that product's vector
+ * rails, pushing a `#/p/<id>` hash entry (no router library) so the browser's
+ * Back stays in-app and a reload restores the view — while the taste profile
+ * itself survives reloads via the durable in-browser log (signals/tasteLog.ts).
  */
 export function Storefront() {
 	const { t } = useTranslation("storefront");
@@ -107,7 +147,11 @@ export function Storefront() {
 	// Explicit signals (click | favorite | cart) counted app-side: the engine's
 	// parity-locked clickCount only counts clicks, and the badge + cold-start
 	// gate must also register favorites/carts. Ambient views never count here.
-	const [sessionSignals, setSessionSignals] = useState(0);
+	// Starts at the count bootstrap replayed from the durable taste log, so the
+	// badge stays honest across a reload (taste persisted ⇒ badge persists).
+	const [sessionSignals, setSessionSignals] = useState(() =>
+		replayedSignalCount(),
+	);
 	const [cartCount, setCartCount] = useState(0);
 	const [favoritedIds, setFavoritedIds] = useState<ReadonlySet<string>>(
 		new Set(),
@@ -129,74 +173,100 @@ export function Storefront() {
 		[t],
 	);
 
+	// A degraded rail's fault lands in the same banner as every other engine
+	// error — surfaced, retryable, and never page-crashing.
+	const reportRailError = useCallback(
+		(err: unknown) => setError(toErrorMessage(err)),
+		[toErrorMessage],
+	);
+
 	const refreshRails = useCallback(async () => {
 		setPersonalizing(true);
 		try {
 			const specs = homeRails(strategyMap.current);
 			setRails(
-				await Promise.all(specs.map((s) => loadRail(s.strategy, s.label))),
+				await Promise.all(
+					specs.map((s) => loadRail(s.strategy, s.label, reportRailError)),
+				),
 			);
 		} catch (err) {
 			setError(toErrorMessage(err));
 		} finally {
 			setPersonalizing(false);
 		}
-	}, [toErrorMessage]);
+	}, [toErrorMessage, reportRailError]);
 
-	const loadPdpRails = useCallback(async (product: Product) => {
-		const map = strategyMap.current;
-		const similarLabel = map.similar_items?.label ?? "Similar items";
-		const becauseLabel = map.because_viewed?.label ?? "Because you viewed this";
-		// Co-occurrence rails (FBT first, also-bought second) — seed-driven, so a
-		// cold/co-occurrence-less seed yields empty results and the rail is hidden.
-		const [fbtSpec, alsoBoughtSpec] = coBuyRails(map);
-		const [fbt, alsoBought, similarItems, because, trending] =
-			await Promise.all([
-				safeResults(() =>
-					recommendStrategy("frequently_bought_together", {
-						seed: product.id,
-						limit: RAIL_LIMIT,
-					}),
-				),
-				safeResults(() =>
-					recommendStrategy("also_bought", {
-						seed: product.id,
-						limit: RAIL_LIMIT,
-					}),
-				),
-				safeResults(() => similar(product.id, { limit: RAIL_LIMIT })),
-				safeResults(() =>
-					recommendStrategy("because_viewed", {
-						seed: product.id,
-						limit: RAIL_LIMIT,
-					}),
-				),
-				safeResults(() => recommendStrategy("trending", { limit: RAIL_LIMIT })),
+	const loadPdpRails = useCallback(
+		async (product: Product) => {
+			const map = strategyMap.current;
+			const similarLabel = map.similar_items?.label ?? "Similar items";
+			const becauseLabel =
+				map.because_viewed?.label ?? "Because you viewed this";
+			// Co-occurrence rails (FBT first, also-bought second) — seed-driven, so a
+			// cold/co-occurrence-less seed yields empty results and the rail is hidden.
+			const [fbtSpec, alsoBoughtSpec] = coBuyRails(map);
+			const [fbt, alsoBought, similarItems, because, trending] =
+				await Promise.all([
+					safeResults(
+						() =>
+							recommendStrategy("frequently_bought_together", {
+								seed: product.id,
+								limit: RAIL_LIMIT,
+							}),
+						reportRailError,
+					),
+					safeResults(
+						() =>
+							recommendStrategy("also_bought", {
+								seed: product.id,
+								limit: RAIL_LIMIT,
+							}),
+						reportRailError,
+					),
+					safeResults(
+						() => similar(product.id, { limit: RAIL_LIMIT }),
+						reportRailError,
+					),
+					safeResults(
+						() =>
+							recommendStrategy("because_viewed", {
+								seed: product.id,
+								limit: RAIL_LIMIT,
+							}),
+						reportRailError,
+					),
+					safeResults(
+						() => recommendStrategy("trending", { limit: RAIL_LIMIT }),
+						reportRailError,
+					),
+				]);
+			setPdpRails([
+				// "Frequently bought together" sits high, just below the hero.
+				{
+					key: "frequently_bought_together",
+					label: fbtSpec?.label ?? "Frequently bought together",
+					results: fbt,
+				},
+				{ key: "similar_items", label: similarLabel, results: similarItems },
+				// "Customers who bought this also bought" below the similar rail.
+				{
+					key: "also_bought",
+					label:
+						alsoBoughtSpec?.label ?? "Customers who bought this also bought",
+					results: alsoBought,
+				},
+				{ key: "because_viewed", label: becauseLabel, results: because },
+				{
+					key: "trending_category",
+					label: trendingInCategoryLabel(product),
+					results: trending.filter(
+						(r) => r.product.category === product.category,
+					),
+				},
 			]);
-		setPdpRails([
-			// "Frequently bought together" sits high, just below the hero.
-			{
-				key: "frequently_bought_together",
-				label: fbtSpec?.label ?? "Frequently bought together",
-				results: fbt,
-			},
-			{ key: "similar_items", label: similarLabel, results: similarItems },
-			// "Customers who bought this also bought" below the similar rail.
-			{
-				key: "also_bought",
-				label: alsoBoughtSpec?.label ?? "Customers who bought this also bought",
-				results: alsoBought,
-			},
-			{ key: "because_viewed", label: becauseLabel, results: because },
-			{
-				key: "trending_category",
-				label: trendingInCategoryLabel(product),
-				results: trending.filter(
-					(r) => r.product.category === product.category,
-				),
-			},
-		]);
-	}, []);
+		},
+		[reportRailError],
+	);
 
 	const loadGrid = useCallback(async () => {
 		const seq = gridRequest.current + 1;
@@ -268,20 +338,92 @@ export function Storefront() {
 		[refreshRails, flashToast, toErrorMessage],
 	);
 
+	// Open the PDP view. `pushEntry` distinguishes a user navigation (push a
+	// real history entry so the browser's Back stays in-app) from a restore
+	// (deep link / popstate, where the entry already exists).
+	const openProduct = useCallback(
+		(product: Product, pushEntry: boolean) => {
+			setPdpRails([]);
+			setView({ kind: "product", product });
+			if (pushEntry) {
+				window.history.pushState(
+					{ nimbusPdp: true },
+					"",
+					`#/p/${encodeURIComponent(product.id)}`,
+				);
+			}
+			window.scrollTo({ top: 0 });
+			void loadPdpRails(product);
+		},
+		[loadPdpRails],
+	);
+
 	// A pick records the click (so For You keeps learning + last_viewed is set)
 	// AND opens the PDP seeded with this product's vector rails.
 	const onPick = useCallback(
 		async (product: Product) => {
 			await emitExplicit("click", product);
-			setPdpRails([]);
-			setView({ kind: "product", product });
-			window.scrollTo({ top: 0 });
-			void loadPdpRails(product);
+			openProduct(product, true);
 		},
-		[emitExplicit, loadPdpRails],
+		[emitExplicit, openProduct],
 	);
 
-	const onBack = useCallback(() => setView({ kind: "browse" }), []);
+	// The browser's Back/Forward stays in-app: derive the view from the hash.
+	// No document unload happens, so the live profile (and the rails) survive.
+	useEffect(() => {
+		const onPopState = () => {
+			const product = productFromHash(window.location.hash);
+			if (product === null) {
+				setView({ kind: "browse" });
+			} else {
+				openProduct(product, false);
+			}
+		};
+		window.addEventListener("popstate", onPopState);
+		return () => window.removeEventListener("popstate", onPopState);
+	}, [openProduct]);
+
+	// Reload/deep-link restore: a #/p/<id> hash at mount reopens that PDP.
+	// The taste itself was already replayed from the durable log by bootstrap;
+	// restoring a view is not an interaction, so nothing is emitted here.
+	const restoredFromHash = useRef(false);
+	useEffect(() => {
+		if (restoredFromHash.current) {
+			return;
+		}
+		restoredFromHash.current = true;
+		const product = productFromHash(window.location.hash);
+		if (product !== null) {
+			openProduct(product, false);
+		}
+	}, [openProduct]);
+
+	const onBack = useCallback(() => {
+		// A PDP entry we pushed pops via real history (Back/Forward symmetric);
+		// a deep-linked PDP (first entry, nothing of ours to pop) swaps to
+		// browse in place so Back never exits the app unexpectedly.
+		if (isAppPdpEntry()) {
+			window.history.back();
+		} else {
+			setView({ kind: "browse" });
+			window.history.replaceState(null, "", "#/");
+		}
+	}, []);
+
+	// Clear the durable taste log + live profile + signal caps, then re-rank
+	// the rails against the now-empty profile (back to the popularity baseline).
+	const onResetTaste = useCallback(async () => {
+		try {
+			await resetSession();
+			resetSignalCaps();
+			setSessionSignals(0);
+			setFavoritedIds(new Set());
+			flashToast(t("rail.tasteReset"));
+			await refreshRails();
+		} catch (err) {
+			setError(toErrorMessage(err));
+		}
+	}, [flashToast, refreshRails, t, toErrorMessage]);
 
 	const onFavorite = useCallback(
 		async (product: Product) => {
@@ -312,11 +454,19 @@ export function Storefront() {
 	);
 	const registerDwell = useDwellViews(onDwell);
 
-	const onSelectCategory = useCallback((category: string | null) => {
-		setQuery("");
-		setActiveCategory(category);
-		setView({ kind: "browse" });
-	}, []);
+	const onSelectCategory = useCallback(
+		(category: string | null) => {
+			setQuery("");
+			setActiveCategory(category);
+			if (view.kind === "product") {
+				// Leaving the PDP forward (not via Back): land a browse entry so
+				// the hash matches the view and Back still returns to the PDP.
+				window.history.pushState(null, "", "#/");
+			}
+			setView({ kind: "browse" });
+		},
+		[view.kind],
+	);
 
 	// When a search query is active, surface its results at the TOP of the shop —
 	// a labelled "Results for …" cue plus the grid, pinned right under the search
@@ -339,6 +489,7 @@ export function Storefront() {
 			onPick={onPick}
 			personalizing={personalizing}
 			signalCount={sessionSignals}
+			onResetTaste={onResetTaste}
 		/>
 	);
 	const productGrid = (
@@ -368,7 +519,14 @@ export function Storefront() {
 
 			<MetricsStrip />
 
-			<main className="shop">
+			{/* Browse gets a modifier: its grid (the page h1) precedes the rails in
+			    DOM order for a sound heading outline, while CSS `order` keeps the
+			    visual stack (rails above grid) unchanged. */}
+			<main
+				className={
+					view.kind === "browse" && !isSearching ? "shop shop--browse" : "shop"
+				}
+			>
 				{error !== null && (
 					<div className="banner banner--error" role="alert">
 						<div className="banner__title">{t("banner.title")}</div>
@@ -403,8 +561,8 @@ export function Storefront() {
 					</>
 				) : (
 					<>
-						{railStack}
 						{productGrid}
+						{railStack}
 					</>
 				)}
 			</main>

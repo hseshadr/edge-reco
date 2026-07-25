@@ -33,6 +33,7 @@ import {
 } from "./poolSelection";
 import {
 	DEFAULT_RANKING_CONFIG,
+	type InteractionWeights,
 	type RankingConfig,
 	type Strategy,
 } from "./rankingConfig";
@@ -111,6 +112,14 @@ export interface SearchEngine {
 	 * this to render the available rails and their human-facing titles.
 	 */
 	strategies(): Record<string, Strategy>;
+	/**
+	 * The per-event-type affinity bumps from the synced config. The app's
+	 * sendEvent fold (and its boot-time replay) MUST use these — not the typed
+	 * defaults — so a republished bundle retunes the in-tab fold exactly like
+	 * the backend /events fold. Falls back to the typed defaults only for a
+	 * bundle that predates ranking_config.json (parseRankingConfig handles that).
+	 */
+	interactionWeights(): InteractionWeights;
 }
 
 function hydrateFused(
@@ -160,6 +169,10 @@ class HybridSearchEngine implements SearchEngine {
 
 	public strategies(): Record<string, Strategy> {
 		return this.#config.strategies ?? {};
+	}
+
+	public interactionWeights(): InteractionWeights {
+		return this.#config.interaction_weights;
 	}
 
 	public async search(

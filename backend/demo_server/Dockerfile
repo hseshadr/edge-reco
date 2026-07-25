@@ -14,7 +14,7 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /app
 
-# Resolve the release-tagged edge-proc/shared-libs-python sources before copying
+# Resolve the release-tagged edge-proc/edgeproc-core sources before copying
 # application code, preserving Docker's dependency cache without local siblings.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen --no-install-project

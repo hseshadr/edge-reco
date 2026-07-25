@@ -15,6 +15,7 @@ from starlette.datastructures import State
 from edgereco.api.deps import Container, ServiceContainer, get_session_id
 from edgereco.api.models import EngagementExport, EventsResponse
 from edgereco.catalog.models import EventType, InteractionEvent, Product, SessionProfile
+from edgereco.reco.ranking_config import InteractionWeights
 from edgereco.reco.retrain import aggregate_engagement
 from edgereco.reco.signals import apply_interaction
 
@@ -106,7 +107,9 @@ def _ingest_event(container: ServiceContainer, session: str, event: InteractionE
     """Fold one event into the session + buffer; return True if its product is unknown."""
     product = container.by_id.get(event.product_id)
     if product is not None:
-        container.sessions.update(session, _updater(product, event.event_type))
+        # The bundle-carried interaction weights drive the fold: republish -> retune.
+        weights = container.ranking_config.interaction_weights
+        container.sessions.update(session, _updater(product, event.event_type, weights))
     container.events.append(event)
     return product is None
 
@@ -138,8 +141,10 @@ def export_events(container: Container) -> EngagementExport:
     return EngagementExport(total_events=len(events), stats=list(stats.values()))
 
 
-def _updater(product: Product, event_type: EventType) -> Callable[[SessionProfile], SessionProfile]:
+def _updater(
+    product: Product, event_type: EventType, weights: InteractionWeights
+) -> Callable[[SessionProfile], SessionProfile]:
     def update(profile: SessionProfile) -> SessionProfile:
-        return apply_interaction(profile, product, event_type)
+        return apply_interaction(profile, product, event_type, weights=weights)
 
     return update

@@ -3,7 +3,69 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.13.0] — 2026-07-21
+
+### Added
+- **Durable on-device taste (still 0 backend calls)**: every folded interaction
+  (click / favorite / cart / dwell-view) now appends to an append-only JSONL
+  taste log in the browser's OPFS (`taste/events.jsonl`) through one storage
+  seam (`src/signals/tasteLog.ts`) — versioned no-PII envelopes
+  `{v, ts, type, productId, sessionId}`, rolling window of the newest 500
+  events, atomic `createWritable` swaps, and per-line fail-soft parsing so a
+  torn tail record can never poison boot (a corrupt line is skipped and the
+  next append rewrites a clean file). Boot replays the log through the SAME
+  fold used live (`buildProfile`), so a full reload keeps "Recommended for
+  you" personalized and restores the For-You badge count. A failing storage
+  layer degrades to the old session-only behavior, never a crash.
+- **In-app PDP history**: opening a product pushes a `#/p/<id>` hash entry (no
+  router library; static-host and offline safe), so the browser's Back button
+  returns to browsing IN the app via `popstate` instead of unloading the
+  document, and a reload or deep link on a PDP URL restores that product view
+  without re-emitting a click.
+- **"Reset taste" affordance** next to the For-You signal badge: wipes the
+  durable log, the live profile, and the once-per-session signal caps, then
+  re-ranks the rails back to the popularity baseline — with copy that tells
+  the truth: activity is stored only in this browser, never sent to a server.
+  The badge tooltip now reads "saved only in this browser", and the
+  security/privacy contract documents the log's contents, 500-event retention,
+  and both erasure paths (Reset taste / Clear site data).
+- **Four Playwright property guards** (`tests/e2e/persistent-taste.spec.ts`,
+  real Chromium + real OPFS): clicks re-rank the rail; a FULL RELOAD retains
+  badge + personalization via replay (red-proven: disabling main-thread OPFS
+  fails it 0-vs-3); browser Back from the PDP stays in-app with taste intact;
+  Reset taste returns the rail to the settled baseline and survives a reload
+  as empty.
+
+### Fixed
+- **The in-tab fold now honors bundle-supplied `interaction_weights`**: the
+  browser `sendEvent` fold (and the new boot replay) passes the synced
+  bundle's `ranking_config.json` weights to `applyInteraction` — mirroring the
+  backend `/events` fold contract — instead of silently using the typed
+  defaults, so republishing retuned weights retunes the in-browser hero loop
+  too. The engine now exposes `SearchEngine.interactionWeights()`, and a
+  retuned-bundle test (click weights zeroed) pins the contract.
+
+## [0.12.0] — 2026-07-21
+
+### Fixed
+- **Small signal-family text now holds WCAG-AA 4.5:1**: `.metrics-strip__value`
+  (14px metric values) and `.card__pick` (12px hover cue) render with the
+  existing `--signal-ink` token (4.89:1 on `--paper`, 5.18:1 on `--paper-raise`)
+  instead of the hot `--signal` (3.07:1 / 3.25:1). `theme.contrast.test.ts` now
+  measures those two rules' resolved tokens as a property, so a future palette
+  tweak below 4.5:1 fails with the measured ratio.
+- **Sound heading outline on home/browse**: the product grid — owner of the
+  single page `<h1>` — now precedes the rail `<h2>`s in DOM order, with a
+  `.shop--browse` flex-`order` rule keeping the visual stack (rails above grid)
+  unchanged. Guarded by a Storefront mount test on document positions.
+- **The hybrid parity fixture generator replays `/search`'s real scoring**:
+  `scripts/gen_hybrid_fixture.py` called the retrieval-less `rerank()` while the
+  route (and the browser engine the fixture arbitrates) blend normalized RRF
+  retrieval via `rerank_search()`. The weekly parity workflow's red on
+  `hybrid_parity.json` was this script drift — the committed fixture was correct
+  all along, and the fixed script regenerates it byte-for-byte. Pinned by a
+  model-free regression test. `embedding_parity.json` refreshed with CI-exact
+  bytes (float-only drift, ids/order intact, max delta 1.4e-07).
 
 ### Added
 - **Measured release contract for the real browser path**: the C1 Chromium gate now
@@ -68,6 +130,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the Node parity path (test-time HF fetch) is untouched.
 
 ### Changed
+- **`edgeproc-core` now installs from PyPI** (`>=0.2.1`, locked to the registry
+  release): the retired `shared-libs-python` git pin is gone from
+  `[tool.uv.sources]` and `uv.lock` (zero git refs for it remain), and the
+  `edge-proc` pin moved to `d88af07` (same v0.1.5 line, src-identical), the
+  first rev whose own sources consume edgeproc-core from PyPI. Docs, SEO pages,
+  and type-checker paths updated for the repo rename
+  (`shared-libs-python` → `edgeproc-core`).
+- **`@edgeproc/browser` public surface trimmed** (0.5.0): `EMBEDDING_MODEL` and
+  `DEFAULT_RANKING_CONFIG` are engine-internal again — the model id is wired
+  inside `createEmbedder` and the runtime reads ranking config from the signed
+  bundle; no consumer imported either. `EMBEDDING_DIM` and the config *types*
+  remain exported.
 - **Search reranking preserves query relevance**: the normalized BM25/vector RRF
   signal contributes a measured 0.20 relevance component before session-aware
   product signals. Cross-tier parity and a real-model regression prevent a popular
@@ -479,7 +553,7 @@ export — so a cold visitor sees an honest, runnable, properly-credited demo.
 
 ## [0.3.0] — 2026-05-29
 
-Northstar hardening: full test pyramid wired into CI, modern dependencies, and a
+Hardening: full test pyramid wired into CI, modern dependencies, and a
 discoverable config surface — so the repo is not just clear but provably works
 end-to-end on a cold clone.
 

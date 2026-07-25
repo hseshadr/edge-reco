@@ -86,7 +86,7 @@ Create a Pages project (Cloudflare → Workers & Pages → Create → Pages → 
 | Root directory | `frontend` |
 | Build command | `pnpm -F frontend run build:pages` |
 | Build output directory | `app/dist` |
-| Node version | from `frontend/.node-version` (22) |
+| Node version | from `frontend/.nvmrc` (24.16.0) — the single pin CI, the audit workflow, the deploy build, and the local gate all install |
 
 No build environment variables are required: `build:pages` defaults to `VITE_BASE=/`
 (apex root) and `VITE_BUNDLE_BASE_URL=bundle` (the same-origin copy), and leaves

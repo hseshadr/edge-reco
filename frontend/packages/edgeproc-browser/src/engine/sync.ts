@@ -169,7 +169,6 @@ async function fetchPointer(
 
 function isRollback(active: VersionPointer, incoming: VersionPointer): boolean {
 	if (active.sequence === undefined) return false;
-	if (incoming.sequence === undefined) return true;
 	if (incoming.sequence !== active.sequence) {
 		return incoming.sequence < active.sequence;
 	}

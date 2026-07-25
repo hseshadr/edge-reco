@@ -13,7 +13,10 @@
 # edge port (http://localhost:8081), NOT the in-network `edge` hostname.
 
 # ---- stage 1: build the static bundle ----
-FROM node:24-slim AS build
+# Exact tag, kept in lockstep with frontend/.nvmrc (24.16.0) — the one Node pin
+# CI, security-audit, deploy, and the local gate all install. A floating
+# `node:24-slim` would drift off that pin silently.
+FROM node:24.16.0-slim AS build
 
 # corepack ships with Node; it activates the pnpm version pinned in
 # package.json's "packageManager" field.
@@ -49,7 +52,7 @@ RUN pnpm -F frontend run build
 # ---- stage 2: serve the static dist/ ----
 # `serve` is a tiny zero-config static server; -s rewrites unknown routes to
 # index.html (SPA). Listens on 5174 to match the dev origin.
-FROM node:24-slim AS serve
+FROM node:24.16.0-slim AS serve
 
 WORKDIR /app
 RUN npm install -g serve@14

@@ -16,8 +16,8 @@ from typing import Final
 
 import numpy as np
 from edgeproc.localvec.faiss_index import FaissVectorIndex
+from edgeproc_core.vector_mgmt.core.types import IndexConfig, VectorEmbedding
 from numpy.typing import NDArray
-from shared_libs_python.vector_mgmt.core.types import IndexConfig, VectorEmbedding
 
 _INDEX_NAME = "edgereco"
 

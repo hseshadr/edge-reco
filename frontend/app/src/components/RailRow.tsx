@@ -19,6 +19,11 @@ interface RailRowProps {
 	personalizing?: boolean;
 	/** Optional session-signal count badge (the For-You hero-loop counter). */
 	signalCount?: number;
+	/**
+	 * Optional "Reset taste" affordance next to the signal badge: clears the
+	 * durable in-browser activity log + live profile (wired by Storefront).
+	 */
+	onResetTaste?: () => void;
 }
 
 /**
@@ -58,6 +63,7 @@ export function RailRow({
 	tagline,
 	personalizing = false,
 	signalCount,
+	onResetTaste,
 }: RailRowProps) {
 	const { t } = useTranslation("storefront");
 	const headingId = `rail-${slug(railId)}`;
@@ -81,13 +87,27 @@ export function RailRow({
 						</div>
 					)}
 				</div>
-				{signalCount !== undefined && (
-					<span
-						className="clicks-badge"
-						title={t("rail.signals", { n: signalCount })}
-					>
-						{signalCount}
-					</span>
+				{(signalCount !== undefined || onResetTaste !== undefined) && (
+					<div className="rail__taste">
+						{signalCount !== undefined && (
+							<span
+								className="clicks-badge"
+								title={t("rail.signals", { n: signalCount })}
+							>
+								{signalCount}
+							</span>
+						)}
+						{onResetTaste !== undefined && (
+							<button
+								type="button"
+								className="rail__reset"
+								onClick={onResetTaste}
+								title={t("rail.resetTasteHint")}
+							>
+								{t("rail.resetTaste")}
+							</button>
+						)}
+					</div>
 				)}
 			</div>
 

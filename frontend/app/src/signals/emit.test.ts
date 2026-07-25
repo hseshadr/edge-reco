@@ -7,7 +7,11 @@ const { sendEvent } = vi.hoisted(() => ({
 vi.mock("../api/client", () => ({ sendEvent }));
 
 import type { Product } from "../api/types";
-import { __resetSignalsForTests, emitInteraction } from "./emit";
+import {
+	__resetSignalsForTests,
+	emitInteraction,
+	resetSignalCaps,
+} from "./emit";
 
 function makeProduct(id: string, overrides: Partial<Product> = {}): Product {
 	return {
@@ -90,5 +94,19 @@ describe("emitInteraction rules", () => {
 		expect(first).toEqual({ emitted: true, message: null });
 		expect(repeat).toEqual({ emitted: false, message: null });
 		expect(sendEvent).toHaveBeenCalledTimes(1);
+	});
+
+	it("resetSignalCaps re-arms the once-per-session budgets (the Reset-taste path)", async () => {
+		const p = makeProduct("P1");
+		await emitInteraction("favorite", p);
+		await emitInteraction("view", p);
+		expect((await emitInteraction("favorite", p)).emitted).toBe(false);
+
+		resetSignalCaps();
+
+		// After a taste reset the same product can signal again — the caps
+		// share the (now cleared) profile's lifetime, not the tab's.
+		expect((await emitInteraction("favorite", p)).emitted).toBe(true);
+		expect((await emitInteraction("view", p)).emitted).toBe(true);
 	});
 });

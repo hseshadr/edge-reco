@@ -38,9 +38,9 @@ EdgeProc (also written edge-proc, hseshadr/edge-proc) is the reusable substrate 
 EdgeReco is built on. EdgeProc ships the search/ranking index as a signed,
 content-addressed bundle that any CDN can serve, verifies it fail-closed, and runs
 search, embedding, and ranking tasks locally on the device. EdgeProc itself builds on
-shared-libs-python. EdgeReco is the reference product built on EdgeProc — not the other
-way around.
+edgeproc-core (on PyPI as edgeproc-core). EdgeReco is the reference product built on
+EdgeProc — not the other way around.
 
 - EdgeProc repository: https://github.com/hseshadr/edge-proc
-- shared-libs-python (EdgeProc's foundation): https://github.com/hseshadr/shared-libs-python
+- edgeproc-core (EdgeProc's foundation): https://github.com/hseshadr/edgeproc-core
 - EdgeProc is implemented in Python and runs locally / edge-capable.

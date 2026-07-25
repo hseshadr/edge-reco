@@ -14,7 +14,7 @@ third-party requests. This document separates those facts from the optional coll
 |---|---|---|---|
 | Browser app origin | Reviewed static JS, public key, model and WASM | CSP limits code/data connections to self; no third-party fonts, model, runtime, or query API | A first-load compromise of the app origin can replace both JS and its key. Bundle signing does not cure a compromised application origin. |
 | Catalog CDN / bundle bytes | Ed25519 public key shipped with the app | Signed pointer, manifest and chunk hashes verify before promotion; malformed ranking/vector/co-occurrence data fails closed | A previously valid signed release can be replayed unless the deployment layer enforces freshness. Do not expose the signing private key to CI or Docker. |
-| Browser device | OPFS, CacheStorage and in-memory profile | Catalog/model caches contain public artifacts; search and recommendation use local Workers with 60 s engine and 300 s first-embed deadlines | Anyone with device/browser-profile access can inspect public catalog artifacts and the optional local event queue. |
+| Browser device | OPFS, CacheStorage and in-memory profile | Catalog/model caches contain public artifacts; search and recommendation use local Workers with 60 s engine and 300 s first-embed deadlines; the taste log keeps at most 500 no-PII interaction records in OPFS | Anyone with device/browser-profile access can inspect public catalog artifacts, the local taste log (product IDs + event types only), and the optional local event queue. |
 | Optional event collector | Explicit `VITE_EVENTS_URL` and operator-set bearer token | Batches ≤1,000; session IDs ≤200 chars; event ring ≤10,000; sessions ≤10,000 and expire after 1 hour idle | The demo permits an intentionally open collector when `EDGERECO_EVENTS_TOKEN` is unset. Never expose that shape to an untrusted network. |
 | Production deploy | GitHub CI SHA and scoped Cloudflare credentials | Missing secrets fail red; Cloudflare must report the exact successful commit; `www` must permanently redirect to the apex | DNS/Cloudflare settings are external state and still require post-deploy verification and rollback drills. |
 
@@ -29,16 +29,18 @@ boundary; no integrity error falls back to unverified data.
 | Data | Default hosted demo | Storage / retention | Network egress |
 |---|---|---|---|
 | Search text | Processed in the embedder/search Workers | Memory for the active operation; not persisted by EdgeReco | None after bundle/model sync |
-| Click, view, favorite, cart | Folded into the in-tab session profile | Memory only; reload resets it | None (`VITE_EVENTS_URL` is unset) |
+| Click, view, favorite, cart | Folded into the in-tab session profile | In-browser OPFS taste log (`taste/events.jsonl`): product ID, event type, timestamp, random browser session ID — no PII; rolling window of the newest 500 events; replayed locally on boot to rebuild the profile; erased by the in-app "Reset taste" control or by clearing site data | None (`VITE_EVENTS_URL` is unset) |
 | Catalog, embeddings, model, WASM, public key | Public release artifacts | OPFS, service-worker/transformers caches, HTTP cache | Same-origin sync/download only |
 | Product images | Public Amazon media URLs remain in the research dataset but are not loaded | Local category/title placeholder only; a deployment may supply release-owned root-relative assets | None in the shipped app |
 | Optional flywheel events | Product ID, event type, timestamp, random browser session ID | Queue capped at 500 in `localStorage` until acknowledged; collector ring capped at 10,000; session profile expires after 1 hour idle | Only to the explicitly configured `VITE_EVENTS_URL` |
 | API-server search | Query and random/header session ID | Session profile in bounded memory | Client-to-API request; normal access logs may contain the URL query and must be governed by the operator |
 
 There are no prompts, LLM providers, user embeddings, account records, backups, or
-personal-data exports in this repository. Clearing site data removes OPFS/CacheStorage,
-the optional queue, and the persisted optional-uplink session ID. The default demo's
-disabled uplink is a no-op and does not create that ID or queue.
+personal-data exports in this repository. Clearing site data removes OPFS/CacheStorage
+(including the taste log), the optional queue, and the persisted session ID; the
+in-app "Reset taste" control erases the taste log and live profile without touching
+the cached catalog/model. The default demo's disabled uplink is a no-op and does not
+create a queue.
 
 ## Operator requirements
 

@@ -134,8 +134,11 @@ the same rule engine.
   client we adopt its _shape_ as a clean envelope. The real payoff is a backend
   emitting it verbatim.
 
-Design spec: `project-ideas/docs/superpowers/specs/2026-07-13-canonical-errors-design.md`.
-Optional starter catalog: `project-ideas/errors-registry.json`.
+The optional starter catalog ships in this package as `starterPack`
+(`src/starter-pack.ts`): the 18 universal codes (`ai.*`, `net.*`, `bundle.*`,
+`config.*`, `internal.*`). Spread it into your own registration —
+`defineErrors({ ...starterPack, ...own })` — or leave it out and define every
+code yourself.
 
 ## Develop
 

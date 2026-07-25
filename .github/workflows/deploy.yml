@@ -76,7 +76,13 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: frontend/.node-version # 22 — the Cloudflare Pages target
+          # THE one Node pin (frontend/.nvmrc) — the SAME build CI tests on.
+          # This previously read a separate `.node-version` (22) while CI ran 24,
+          # so the artifact deployed to edge-reco.com was built on a runtime
+          # nothing tested against. Pages serves this build as static assets and
+          # runs no Node itself, so the build runtime is ours to choose — and the
+          # only defensible choice is the one the tests ran on.
+          node-version-file: frontend/.nvmrc
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 

@@ -7,6 +7,6 @@
   "extraPaths": [
     "src",
     "../../edge-proc",
-    "../../shared-libs-python"
+    "../../edgeproc-core"
   ]
 }

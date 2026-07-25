@@ -11,20 +11,20 @@ Goal: clone the repo, gate both subprojects, then run the headline demo (Nimbus,
 
 ## Clone and go
 
-Clone **just this repo** — that's all you need. The Python backend declares its
-substrate dependencies ([`edge-proc`](https://github.com/hseshadr/edge-proc) and
-[`shared-libs-python`](https://github.com/hseshadr/shared-libs-python)) as git
-sources pinned to release tags, so `uv sync` pulls them from public GitHub
-automatically (neither is on PyPI):
+Clone **just this repo** — that's all you need. The Python backend pulls
+[`edgeproc-core`](https://github.com/hseshadr/edgeproc-core) from PyPI
+(`edgeproc-core>=0.2.1`) and declares [`edge-proc`](https://github.com/hseshadr/edge-proc)
+as a git source pinned to a full commit SHA, so `uv sync` resolves everything
+automatically:
 
 ```bash
 git clone https://github.com/hseshadr/edge-reco
-cd edge-reco/backend && uv sync     # pulls edge-proc + shared-libs-python from GitHub
+cd edge-reco/backend && uv sync     # edgeproc-core from PyPI, edge-proc from GitHub
 ```
 
 > **Co-developing the substrate?** If you want to hack on edge-proc or
-> shared-libs-python alongside edge-reco, clone the three repos side-by-side and
-> switch the git sources to local path sources — uncomment the two `path = ...`
+> edgeproc-core alongside edge-reco, clone the three repos side-by-side and
+> switch to local path sources — uncomment the two `path = ...`
 > lines in `backend/pyproject.toml`'s `[tool.uv.sources]` (the comments there
 > document the exact swap). This is the *optional* co-developer path; the default
 > above needs none of it.
@@ -33,7 +33,7 @@ cd edge-reco/backend && uv sync     # pulls edge-proc + shared-libs-python from 
 > ~/dev/oss/
 > ├── edge-reco/
 > ├── edge-proc/
-> └── shared-libs-python/
+> └── edgeproc-core/
 > ```
 
 ## 1. Backend gate (Python)
@@ -45,7 +45,7 @@ uv run pytest --cov=edgereco --cov-fail-under=90    # full suite + coverage gate
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src
-uv run xenon --max-absolute B --max-modules B --max-average A src    # complexity gate
+uv run xenon --max-absolute A --max-modules A --max-average A src    # complexity gate
 ```
 
 If all five are green, the Python tier is healthy. (Or run them as one task:
@@ -61,6 +61,7 @@ the `torch>=2.12.1` floor; the `--ignore-vuln` flag has been dropped.))
 ```bash
 cd ../frontend
 pnpm install                                    # resolves the whole workspace
+node app/scripts/download-model.mjs             # one-time: sha256-pinned local embedding model (the parity tests embed with it; CI fetches it the same way)
 pnpm -r run lint                                # biome on app + package
 pnpm -r run typecheck                           # tsc -b on both
 pnpm -r run test                                # vitest on both
@@ -101,7 +102,7 @@ page — click **Launch the live demo** to watch the boot screen step through:
 2. *Reassembling the index* — into OPFS.
 3. *Loading the model* — transformers.js fetches `Xenova/all-MiniLM-L6-v2`.
 
-Then the 720-product Amazon storefront (12 categories, 60 products each). Click a few products in one category: the "Recommended for you" rail visibly re-ranks toward that category, **no network round trip per click**. The home page also stacks *Trending* and *New arrivals* rails; click into any product to open its state-based product page (no router) with *Similar items*, *Because you viewed*, *Customers also bought*, and *Frequently bought together* — all seven rails are named strategies carried in the signed bundle (`ranking_config.json` + `cooccurrence.json`), computed in-tab. Stop `origin` + `edge` and reload: the bundle is in OPFS and the model is cached, so it keeps working offline.
+Then the 720-product Amazon storefront (12 categories, 60 products each). Click a few products in one category: the "Recommended for you" rail visibly re-ranks toward that category, **no network round trip per click**. The home page also stacks *Trending* and *New arrivals* rails; click into any product to open its product page (a `#/p/<id>` history entry — browser Back stays in the app) with *Similar items*, *Because you viewed*, *Customers also bought*, and *Frequently bought together* — all seven rails are named strategies carried in the signed bundle (`ranking_config.json` + `cooccurrence.json`), computed in-tab. Your taste survives a reload too: interactions land in a small on-device log (OPFS, product ids only, newest 500) that replays through the same fold at boot — press **Reset taste** next to the For-You badge to clear it. Stop `origin` + `edge` and reload: the bundle is in OPFS and the model is cached, so it keeps working offline — personalization included.
 
 ## 4. Iterate on the SPA locally
 
@@ -129,12 +130,19 @@ uv run edgereco build-catalog examples/source/catalog.csv /tmp/cache/products.js
 # Build the FAISS index (reads /tmp/cache/products.jsonl, writes /tmp/staging/)
 uv run edgereco index /tmp/cache /tmp/staging
 
-# Sign + publish a content-addressed bundle origin (reuse the pinned signing key)
-uv run edgereco bundle /tmp/staging examples/catalog examples/keys/private.key \
+# Sign + publish a content-addressed bundle origin. The demo's signing key is
+# deliberately not committed (only its public half, examples/keys/public.key, is),
+# so generate your own ed25519 pair once:
+uv run edgeproc keygen --out /tmp/keys
+
+uv run edgereco bundle /tmp/staging /tmp/origin /tmp/keys/private.key \
     --catalog-id amazon-demo --version v1 --product-count 720 --embedding-count 720
 ```
 
 Drop the origin behind any static HTTP server / CDN and point the SPA at it (`VITE_BUNDLE_BASE_URL` at build time).
+Because the browser verifies fail-closed against a **pinned** key, publishing your own
+origin also means pinning your `public.key` in the SPA (`frontend/app/public/public.key`;
+the API-server path reads `EDGERECO_VERIFY_KEY_PATH`).
 
 To regenerate `examples/source/catalog.csv` itself — a balanced 12-category subset of
 a real Amazon dataset — run the streaming curation script (memory-bounded; never

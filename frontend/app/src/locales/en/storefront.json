@@ -74,7 +74,10 @@
 		"taglineTrending": "by popularity",
 		"taglineNewArrivals": "freshest first",
 		"taglineDefault": "in-tab ranking",
-		"signals": "{{n}} signals captured this session",
+		"signals": "{{n}} signals — saved only in this browser",
+		"resetTaste": "Reset taste",
+		"resetTasteHint": "Clear your taste profile — your activity is stored only in this browser, never sent to a server",
+		"tasteReset": "Taste reset — your activity is stored only in this browser, and it’s now cleared",
 		"scrollable": "{{label}}, scrollable",
 		"why": "why?",
 		"hide": "hide"

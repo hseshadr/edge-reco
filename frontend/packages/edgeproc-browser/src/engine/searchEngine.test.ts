@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import parityFixture from "./__fixtures__/search_parity.json" with {
 	type: "json",
 };
+import { EMBEDDING_DIM, type Embedder } from "./embedder";
 import { catalogFetch, latestBytes } from "./fixtures";
 import { MemoryCacheStore } from "./memoryStore";
-import { __searchVectorForParity } from "./searchEngine";
+import { DEFAULT_RANKING_CONFIG, type RankingConfig } from "./rankingConfig";
+import { __searchVectorForParity, createSearchEngine } from "./searchEngine";
 import { materializeFile, syncIndex } from "./sync";
 import type { IndexManifest, Verify, VersionPointer } from "./types";
 import type { VectorIndexFiles } from "./vectorIndex";
@@ -108,5 +110,24 @@ describe("createSearchEngine real-bundle parity", () => {
 		expect(typeof top?.product.title).toBe("string");
 		// C2b has no session reranker yet -> no score_components.
 		expect(top?.score_components).toBeNull();
+	});
+});
+
+describe("interactionWeights accessor", () => {
+	it("exposes the bundle config's interaction_weights (the app fold must use them)", async () => {
+		const files = await syncedFiles();
+		const retunedWeights = {
+			...DEFAULT_RANKING_CONFIG.interaction_weights,
+			click: { category: 0.9, tag: 0.8, brand: 0.7 },
+		};
+		const retuned: RankingConfig = {
+			...DEFAULT_RANKING_CONFIG,
+			interaction_weights: retunedWeights,
+		};
+		const stubEmbedder: Embedder = {
+			embed: () => Promise.resolve(new Float32Array(EMBEDDING_DIM)),
+		};
+		const engine = await createSearchEngine(files, stubEmbedder, retuned);
+		expect(engine.interactionWeights()).toEqual(retunedWeights);
 	});
 });

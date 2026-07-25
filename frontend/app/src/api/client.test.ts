@@ -8,6 +8,7 @@ import {
 	EMBEDDING_DIM,
 	type Embedder,
 	type EnginePort,
+	type RankingConfig,
 	type SyncResult,
 } from "@edgeproc/browser";
 import {
@@ -21,6 +22,11 @@ import { catalogFetch } from "@edgeproc/browser/testing/fixtures";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getSnapshot } from "../metrics/store";
 import {
+	__setTasteLogBackendForTests,
+	readTasteEvents,
+	type TasteLogBackend,
+} from "../signals/tasteLog";
+import {
 	__setRuntimeForTests,
 	bootstrap,
 	browse,
@@ -28,6 +34,8 @@ import {
 	catalogInfo,
 	recommend,
 	recommendStrategy,
+	replayedSignalCount,
+	resetSession,
 	search,
 	sendEvent,
 	similar,
@@ -257,5 +265,216 @@ describe("backend-free data layer", () => {
 		await similar(seed.id, { limit: 3 });
 		const { recommendMs } = getSnapshot();
 		expect(recommendMs).toBeGreaterThanOrEqual(0);
+	});
+});
+
+/**
+ * A fake sync Worker over the real bundle whose ranking_config.json is retuned
+ * in-flight — the unit-test analogue of a maintainer republishing a bundle with
+ * different weights (backend tests/integration/test_events_retune.py).
+ */
+function retunedEnginePort(
+	mutate: (config: RankingConfig) => RankingConfig,
+): EnginePort {
+	const base = fakeEnginePort();
+	return {
+		sync: (...args: Parameters<EnginePort["sync"]>) => base.sync(...args),
+		async readFile(path: string): Promise<Uint8Array> {
+			const bytes = await base.readFile(path);
+			if (path !== "ranking_config.json") {
+				return bytes;
+			}
+			const config = JSON.parse(DECODER.decode(bytes)) as RankingConfig;
+			return new TextEncoder().encode(JSON.stringify(mutate(config)));
+		},
+	};
+}
+
+/** Zero out one scoring weight on the top-level weights AND every strategy. */
+function withZeroRepetitionPenalty(config: RankingConfig): RankingConfig {
+	const strategies = Object.fromEntries(
+		Object.entries(config.strategies ?? {}).map(([name, strategy]) => [
+			name,
+			{
+				...strategy,
+				weights: { ...strategy.weights, repetition_penalty: 0 },
+			},
+		]),
+	);
+	return {
+		...config,
+		scoring_weights: { ...config.scoring_weights, repetition_penalty: 0 },
+		strategies,
+	};
+}
+
+describe("bundle-supplied interaction weights drive the in-tab fold", () => {
+	// Mirror of the backend events.py contract: the fold reads the SIGNED
+	// BUNDLE's interaction_weights, not the typed defaults. The retuned bundle
+	// zeroes the click affinity bumps (and the repetition penalty, so
+	// recently-viewed bookkeeping cannot re-rank either) — clicks must then
+	// leave the for_you rail EXACTLY as cold. A fold that ignores the bundle
+	// and uses DEFAULT_RANKING_CONFIG re-ranks the rail and fails this test.
+	it("a bundle that zeroes click weights leaves for_you unmoved by clicks", async () => {
+		__setRuntimeForTests({
+			spawnEngine: () =>
+				retunedEnginePort((config) =>
+					withZeroRepetitionPenalty({
+						...config,
+						interaction_weights: {
+							...config.interaction_weights,
+							click: { category: 0, tag: 0, brand: 0 },
+						},
+					}),
+				),
+			makeEmbedder: () => stubEmbedder,
+		});
+		await bootstrap();
+
+		const cold = await recommendStrategy("for_you", { limit: 10 });
+		const coldOrder = cold.results.map((r) => r.product.id).join(",");
+		const target = cold.results[0]?.product as Product;
+		const sameCategory = catalog()
+			.filter((p) => p.category === target.category)
+			.slice(0, 3);
+		for (const product of sameCategory) {
+			await sendEvent({
+				event_type: "click",
+				product_id: product.id,
+				timestamp: new Date().toISOString(),
+			});
+		}
+
+		const warm = await recommendStrategy("for_you", { limit: 10 });
+		// The clicks DID fold (the click counter moved) …
+		expect(warm.session_clicks).toBe(3);
+		// … but the bundle's zeroed click weights mean zero affinity: the rail
+		// must not move. (DEFAULT weights would bump category/tag/brand and
+		// re-rank — the exact latent bug this test pins.)
+		expect(warm.results.map((r) => r.product.id).join(",")).toBe(coldOrder);
+	});
+});
+
+/** In-memory taste-log backend: the durable-storage stand-in for these tests. */
+function memoryTasteBackend(): TasteLogBackend {
+	let text: string | null = null;
+	return {
+		read: () => Promise.resolve(text),
+		write: (next: string) => {
+			text = next;
+			return Promise.resolve();
+		},
+		remove: () => {
+			text = null;
+			return Promise.resolve();
+		},
+	};
+}
+
+const freshDeps = () => ({
+	spawnEngine: () => fakeEnginePort(),
+	makeEmbedder: () => stubEmbedder,
+});
+
+/** Click 3 same-category products (the standard warm-up used across this file). */
+async function clickThreeSameCategory(): Promise<Product[]> {
+	const cold = await recommendStrategy("for_you", { limit: 10 });
+	const target = cold.results[0]?.product as Product;
+	const sameCategory = catalog()
+		.filter((p) => p.category === target.category)
+		.slice(0, 3);
+	for (const product of sameCategory) {
+		await sendEvent({
+			event_type: "click",
+			product_id: product.id,
+			timestamp: new Date().toISOString(),
+		});
+	}
+	return sameCategory;
+}
+
+describe("durable taste: replay on boot, reset, replayed count", () => {
+	beforeEach(() => {
+		localStorage.clear();
+		__setTasteLogBackendForTests(memoryTasteBackend());
+		__setRuntimeForTests(freshDeps());
+	});
+
+	afterEach(() => {
+		__setTasteLogBackendForTests(undefined);
+	});
+
+	it("replays the persisted log through the SAME fold on a fresh boot", async () => {
+		await bootstrap();
+		await clickThreeSameCategory();
+		const warm = await recommendStrategy("for_you", { limit: 10 });
+		expect(warm.session_clicks).toBe(3);
+		const warmOrder = warm.results.map((r) => r.product.id).join(",");
+
+		// "Reload": a brand-new client over the SAME durable log.
+		__setRuntimeForTests(freshDeps());
+		await bootstrap();
+		const replayed = await recommendStrategy("for_you", { limit: 10 });
+
+		// Deterministic replay: same events + same fold ⇒ same profile ⇒ the
+		// exact same personalized rail, not merely "some" personalization.
+		expect(replayed.session_clicks).toBe(3);
+		expect(replayed.results.map((r) => r.product.id).join(",")).toBe(warmOrder);
+	});
+
+	it("does not log events for unknown product ids (mirrors the fold's skip)", async () => {
+		await bootstrap();
+		await sendEvent({
+			event_type: "click",
+			product_id: "does-not-exist",
+			timestamp: new Date().toISOString(),
+		});
+		expect(await readTasteEvents()).toEqual([]);
+	});
+
+	it("resetSession clears the profile AND the durable log", async () => {
+		await bootstrap();
+		await clickThreeSameCategory();
+		await resetSession();
+
+		expect(
+			(await recommendStrategy("for_you", { limit: 5 })).session_clicks,
+		).toBe(0);
+		expect(await readTasteEvents()).toEqual([]);
+
+		// A fresh boot after reset stays cold — nothing left to replay.
+		__setRuntimeForTests(freshDeps());
+		await bootstrap();
+		expect(
+			(await recommendStrategy("for_you", { limit: 5 })).session_clicks,
+		).toBe(0);
+		expect(replayedSignalCount()).toBe(0);
+	});
+
+	it("replayedSignalCount counts replayed explicit signals, not ambient views", async () => {
+		await bootstrap();
+		const products = catalog().slice(0, 3);
+		const events = [
+			{ event_type: "click", product_id: products[0]?.id },
+			{ event_type: "favorite", product_id: products[1]?.id },
+			{ event_type: "cart", product_id: products[2]?.id },
+			{ event_type: "view", product_id: products[0]?.id },
+			{ event_type: "click", product_id: "does-not-exist" },
+		] as const;
+		for (const event of events) {
+			await sendEvent({
+				event_type: event.event_type,
+				product_id: event.product_id as string,
+				timestamp: new Date().toISOString(),
+			});
+		}
+		// The live session did not replay anything.
+		expect(replayedSignalCount()).toBe(0);
+
+		// After a "reload", the badge restores the 3 explicit signals: the view
+		// is ambient (never counted) and the unknown id was never logged.
+		__setRuntimeForTests(freshDeps());
+		await bootstrap();
+		expect(replayedSignalCount()).toBe(3);
 	});
 });
