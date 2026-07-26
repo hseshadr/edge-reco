@@ -71,15 +71,23 @@ jobs:
   # Golden parity fixtures must be REPRODUCIBLE from the committed bundle: if a
   # Python-side ranking change lands without regenerating them, the browser-parity
   # guarantee silently rots — the TS suite keeps passing against yesterday's truth.
-  # This job replays the documented regen flow (scripts/gen_*_fixture.py + biome)
-  # for the three MODEL-FREE fixtures — search, cooccurrence, strategy read only
-  # committed bundle bytes, no ML model — and fails on any byte drift. The two
-  # model-dependent fixtures (embedding, hybrid) need the MiniLM download and their
-  # floats are torch-stack sensitive, so they are checked on a weekly schedule
-  # instead (.github/workflows/parity-fixtures.yml). If this job goes red with
-  # float-only, low-order-digit diffs (no id/order changes), that is platform float
-  # drift, not logic rot: take the uploaded artifact, verify the frontend gate is
-  # green against it, and commit the refresh deliberately.
+  # This job replays scripts/gen_*_fixture.py for the three MODEL-FREE fixtures
+  # (search, cooccurrence, strategy read only committed bundle bytes, no ML model)
+  # and compares the result to the committed baseline. The two model-dependent
+  # fixtures (embedding, hybrid) need the MiniLM download, so they are checked on a
+  # weekly schedule instead (.github/workflows/parity-fixtures.yml).
+  #
+  # The comparison is TOLERANCE-AWARE, not byte-exact (scripts/compare_parity_fixtures.py):
+  # floats get math.isclose(rel_tol=1e-6, abs_tol=1e-12); ids, ordering, counts,
+  # array lengths, key sets and types are compared EXACTLY. `git diff --exit-code`
+  # used to sit here and went red intermittently on ~1e-7 relative wobble in score
+  # values — a different BLAS thread count / SIMD path on the runner, never a
+  # ranking change — which was papered over once by re-committing the fixtures.
+  #
+  # How to read a red run now: sub-tolerance float drift no longer reaches you at
+  # all, so a failure means something real moved. The report names the exact JSON
+  # path, both values, and why. Fix the code or regenerate deliberately — do NOT
+  # widen the tolerance to make it green.
   parity-freshness:
     runs-on: ubuntu-latest
     steps:
@@ -99,32 +107,24 @@ jobs:
           uv run python scripts/gen_search_fixture.py
           uv run python scripts/gen_cooccurrence_fixture.py
           uv run python scripts/gen_strategy_fixture.py
-      # Biome settles the JSON exactly like the documented regen flow, so the diff
-      # below compares fixture CONTENT, never formatter reflow.
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          package_json_file: frontend/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: Install workspace
-        working-directory: frontend
-        run: pnpm install --frozen-lockfile
-      - name: Settle fixture formatting (biome, same as the documented flow)
-        working-directory: frontend/packages/edgeproc-browser
+      # The regen scripts rewrite the fixtures IN PLACE, so the baseline to compare
+      # against is the committed content: `git show HEAD:<path>` (always
+      # repo-root-relative, whatever the working directory) into a temp dir. No
+      # pnpm/biome step is needed any more — the comparison parses JSON, so
+      # formatter reflow cannot produce a false positive the way it could under
+      # `git diff`.
+      - name: Compare regenerated fixtures to the committed baseline (float tolerance)
+        working-directory: backend
         run: |
-          pnpm exec biome check --write \
-            src/engine/__fixtures__/search_parity.json \
-            src/engine/__fixtures__/cooccurrence_parity.json \
-            src/engine/__fixtures__/strategy_parity.json
-      - name: Fail on fixture drift (regenerate + commit them with your change)
-        run: |
-          git diff --exit-code -- \
-            frontend/packages/edgeproc-browser/src/engine/__fixtures__/search_parity.json \
-            frontend/packages/edgeproc-browser/src/engine/__fixtures__/cooccurrence_parity.json \
-            frontend/packages/edgeproc-browser/src/engine/__fixtures__/strategy_parity.json
+          fixtures=frontend/packages/edgeproc-browser/src/engine/__fixtures__
+          baseline="$(mktemp -d)"
+          for name in search_parity cooccurrence_parity strategy_parity; do
+            git show "HEAD:$fixtures/$name.json" > "$baseline/$name.json"
+          done
+          uv run python scripts/compare_parity_fixtures.py \
+            --pair "$baseline/search_parity.json" "../$fixtures/search_parity.json" \
+            --pair "$baseline/cooccurrence_parity.json" "../$fixtures/cooccurrence_parity.json" \
+            --pair "$baseline/strategy_parity.json" "../$fixtures/strategy_parity.json"
       - name: Upload regenerated fixtures on drift
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
