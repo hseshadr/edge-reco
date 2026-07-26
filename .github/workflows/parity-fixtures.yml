@@ -2,17 +2,23 @@
 # the per-PR gate (ci.yml `parity-freshness`) deliberately skips: embedding_parity
 # and hybrid_parity re-encode text with the MiniLM model, so regenerating them
 # needs the model download and their floats are sensitive to the resolved
-# torch/sentence-transformers stack. A fresh environment can legally differ from
-# the committed bytes in low-order digits, or flip near-tie orderings through
-# RRF rank quantization.
+# torch/sentence-transformers stack.
+#
+# The comparison is TOLERANCE-AWARE, not byte-exact (scripts/compare_parity_fixtures.py):
+# floats get math.isclose(rel_tol=1e-6, abs_tol=1e-12); ids, ordering, counts, array
+# lengths, key sets and types are compared EXACTLY. That is deliberate — a fresh
+# environment can legally differ from the committed bytes in low-order digits, and
+# `git diff --exit-code` used to sit here and turn that legal difference into a red
+# run. Sub-tolerance drift is now absorbed instead of being triaged by a human.
 #
 # How to read a red run:
-#   - Only low-order float digits changed (ids and their order intact): environment
-#     refresh drift. Take the uploaded artifact, run the frontend gate against it
-#     (the TS engine parity suite is the arbiter), and commit the refresh
-#     deliberately if it stays green.
-#   - Result ids or their ORDER changed: real ranking drift on the Python side.
-#     Treat it like a failing test, not a chore.
+#   - Float values outside tolerance (>1e-6 relative): a genuine numeric change, not
+#     platform noise. Treat it like a failing test — find what moved.
+#   - Result ids or their ORDER changed (including an RRF near-tie flip): real
+#     ranking drift on the Python side. Same — a failing test, not a chore.
+#   In both cases the report names the exact JSON path and both values, and the
+#   regenerated fixtures are uploaded as an artifact. Never widen the tolerance to
+#   make this green.
 #
 # All run: steps use static commands only — no untrusted ${{ github.event.* }}
 # input is interpolated anywhere. All uses: refs are pinned to full commit SHAs
@@ -56,30 +62,26 @@ jobs:
           uv run python scripts/gen_strategy_fixture.py
           uv run python scripts/gen_embedding_fixture.py
           uv run python scripts/gen_hybrid_fixture.py
-      # Biome settles the JSON exactly like the documented regen flow, so the diff
-      # below compares fixture CONTENT, never formatter reflow.
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          package_json_file: frontend/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: Install workspace
-        working-directory: frontend
-        run: pnpm install --frozen-lockfile
-      - name: Settle fixture formatting (biome, same as the documented flow)
-        working-directory: frontend/packages/edgeproc-browser
+      # The regen scripts rewrite the fixtures IN PLACE, so the baseline to compare
+      # against is the committed content: `git show HEAD:<path>` (always
+      # repo-root-relative, whatever the working directory) into a temp dir. No
+      # pnpm/biome step is needed any more — the comparison parses JSON, so
+      # formatter reflow cannot produce a false positive the way it could under
+      # `git diff`.
+      - name: Compare regenerated fixtures to the committed baseline (float tolerance)
+        working-directory: backend
         run: |
-          pnpm exec biome check --write \
-            src/engine/__fixtures__/search_parity.json \
-            src/engine/__fixtures__/cooccurrence_parity.json \
-            src/engine/__fixtures__/strategy_parity.json \
-            src/engine/__fixtures__/embedding_parity.json \
-            src/engine/__fixtures__/hybrid_parity.json
-      - name: Fail on any fixture drift
-        run: git diff --exit-code -- frontend/packages/edgeproc-browser/src/engine/__fixtures__/
+          fixtures=frontend/packages/edgeproc-browser/src/engine/__fixtures__
+          baseline="$(mktemp -d)"
+          for name in search_parity cooccurrence_parity strategy_parity embedding_parity hybrid_parity; do
+            git show "HEAD:$fixtures/$name.json" > "$baseline/$name.json"
+          done
+          uv run python scripts/compare_parity_fixtures.py \
+            --pair "$baseline/search_parity.json" "../$fixtures/search_parity.json" \
+            --pair "$baseline/cooccurrence_parity.json" "../$fixtures/cooccurrence_parity.json" \
+            --pair "$baseline/strategy_parity.json" "../$fixtures/strategy_parity.json" \
+            --pair "$baseline/embedding_parity.json" "../$fixtures/embedding_parity.json" \
+            --pair "$baseline/hybrid_parity.json" "../$fixtures/hybrid_parity.json"
       - name: Upload regenerated fixtures on drift
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

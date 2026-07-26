@@ -160,6 +160,12 @@ exclude = ["../.deps", "demo_server"]  # sibling checkouts only present in CI; d
 select = ["E", "F", "W", "I", "B", "SIM", "UP", "N", "S", "A", "C4", "PT", "RUF", "ANN401"]
 ignore = ["S101"]  # allow assert in tests
 
+[tool.ruff.lint.isort]
+# `scripts/` is repo code, not a dependency: it sits beside src/ rather than under
+# it, so isort's src-path heuristic would otherwise file `from scripts.… import …`
+# (tests/unit/test_compare_parity_fixtures.py) under third-party.
+known-first-party = ["scripts"]
+
 [tool.coverage.run]
 source = ["edgereco"]
 omit = ["tests/*"]
@@ -171,10 +177,15 @@ show_missing = true
 [tool.poe.tasks]
 fmt-check = "ruff format --check ."
 lint = "ruff check ."
-typecheck = "mypy src"
+# `src` plus scripts/compare_parity_fixtures.py — that script is a CI GATE component
+# (both parity workflows fail the build on its exit code), so it is held to the same
+# bar as shipped source. The remaining scripts/ files are one-shot generators that do
+# not yet clear it; they are named individually as they are cleaned up rather than
+# exempted wholesale.
+typecheck = "mypy src scripts/compare_parity_fixtures.py"
 # Complexity gate: A/A/A per house standard §2 — every block, module, and the
 # average must hold Radon rank A.
-complexity = "xenon --max-absolute A --max-modules A --max-average A src"
+complexity = "xenon --max-absolute A --max-modules A --max-average A src scripts/compare_parity_fixtures.py"
 # Dependency vulnerability scan (network-dependent — hits the PyPI advisory DB).
 # Runs in its own "Security audit" workflow (.github/workflows/security-audit.yml),
 # which goes honestly RED on any finding, so the main CI gate stays meaningful for
