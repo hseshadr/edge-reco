@@ -56,12 +56,44 @@ minimumReleaseAge: 1440
 #     workbox-build>@apideck/better-ajv-errors>ajv>fast-uri; no direct dependency
 #     exists to bump instead. Bounded `<4` — a minimal security bump within the
 #     patched 3.x line, not an unrelated major upgrade.
+#   postcss: floor raised to >=8.5.18 for GHSA-r28c-9q8g-f849 (path traversal in
+#     previous-source-map auto-loading via `sourceMappingURL`, leaking arbitrary
+#     .map files; vulnerable <=8.5.17, patched >=8.5.18). Pulled in transitively
+#     only through vite (app>vite>postcss and the vitest/@vitejs/plugin-react
+#     copies of the same vite), which declares `postcss: ^8.5.x` — so there is no
+#     direct dependency to bump instead. Bounded `<9` — a floor inside the
+#     patched 8.x line, not a major upgrade.
+#   brace-expansion: floor raised to >=5.0.8 for GHSA-mh99-v99m-4gvg (DoS —
+#     unbounded expansion length crashes the process with OOM; vulnerable <=5.0.7,
+#     patched >=5.0.8). The advisory has ONE vulnerable range spanning every major
+#     (`<= 5.0.7`) and ONE fix (5.0.8) — upstream shipped no 1.x/2.x/3.x/4.x
+#     backport, so every resolution must land on 5.0.8. `filelist` below is what
+#     makes that possible; see the note there.
+#   filelist: floor raised to >=2.0.2 — required to make the brace-expansion floor
+#     above *viable*, not an independent upgrade. Two paths resolved a vulnerable
+#     brace-expansion:
+#       app>vite-plugin-pwa>workbox-build>glob>minimatch@10.2.5>brace-expansion 5.0.7
+#       …>ejs>jake>filelist@1.0.6>minimatch@5.1.9>brace-expansion 2.1.2
+#     The first bumps cleanly (minimatch 10.2.5 declares `^5.0.5`). The second does
+#     NOT: minimatch@5.1.9 declares `brace-expansion: ^2.0.1` and consumes it as a
+#     callable CJS default (`expand(pattern)`), while 5.x exports named bindings
+#     (`exports.expand`, `__esModule: true`). Forcing 5.0.8 there throws
+#     `TypeError: expand is not a function` at minimatch.js:119 — verified locally.
+#     Upstream already solved this: filelist@2.0.2 depends on `minimatch: ^10.2.1`,
+#     which is on the brace-expansion 5.x line. Raising filelist drops minimatch@5.1.9
+#     from the graph entirely, leaving one brace-expansion (5.0.8) that every consumer
+#     can actually use. filelist 2.x is still CJS (`main: index.js`) so jake@10.9.4's
+#     `require('filelist')` is unaffected; jake itself moved to `filelist: ^2.0.2` in
+#     jake@12, confirming the API is compatible. Bounded `<3`.
 overrides:
   adm-zip: "0.6.0"
   undici: ">=7.28.0 <8"
   protobufjs: ">=7.6.5 <8"
   sharp: "^0.35.0"
   fast-uri: ">=3.1.4 <4"
+  postcss: ">=8.5.18 <9"
+  brace-expansion: ">=5.0.8 <6"
+  filelist: ">=2.0.2 <3"
 
 # pnpm v11 does not run a dependency's build/postinstall scripts unless it is
 # explicitly allowlisted here (replaces v10's onlyBuiltDependencies). These are
