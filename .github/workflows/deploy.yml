@@ -38,13 +38,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Only auto-deploy when the triggering CI run succeeded on a PUSH TO THIS
+  # REPO's main; a manual dispatch is a pass-through.
+  #
+  # `head_branch == 'main'` is NOT a trust boundary on its own: a fork's default
+  # branch is also called `main`, and a fork-PR run reports that name here. This
+  # job checks out `workflow_run.head_sha` with CLOUDFLARE_API_TOKEN in scope, so
+  # a branch-name-only gate would run fork-authored code (`pnpm install` alone
+  # executes it) holding the Cloudflare credential that fronts every site in this
+  # portfolio. Pin the triggering run to this repository AND to a push. Mirrors
+  # hseshadr/ci .github/workflows/cloudflare-pages-deploy.yml.
+  # Property-tested (both polarities) in
+  # backend/tests/unit/test_deploy_fork_guard.py.
   deploy:
     name: Build + deploy to Cloudflare Pages
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main')
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     env:
       EXPECTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
