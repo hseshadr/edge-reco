@@ -31,8 +31,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/edgeproc-errors
       '@hpcc-js/wasm-zstd':
-        specifier: ^1.13.5
-        version: 1.13.5
+        specifier: ^1.15.0
+        version: 1.15.0
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0(@types/node@26.1.1)
@@ -110,8 +110,8 @@ importers:
   packages/edgeproc-browser:
     dependencies:
       '@hpcc-js/wasm-zstd':
-        specifier: ^1.13.5
-        version: 1.13.5
+        specifier: ^1.15.0
+        version: 1.15.0
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0(@types/node@26.1.1)
@@ -811,8 +811,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@hpcc-js/wasm-zstd@1.13.5':
-    resolution: {integrity: sha512-YHMrsXiTdTWNL7KSbA3UqVI1gB4cmi8SVPXQn8/eZlOafJhdyDA1HJ2cMCQKMRu4XV0FUv/Z6g9+ApWP3ioSwQ==}
+  '@hpcc-js/wasm-zstd@1.15.0':
+    resolution: {integrity: sha512-WjcnbecP+iWNzg/njGoUmQ64DNyadGuEnpNy3a151xqasIHThzZMNuGO2xk3vMwyQ3iYbDU7Z29ntXj4aPolQg==}
 
   '@huggingface/jinja@0.5.9':
     resolution: {integrity: sha512-uWTG+l3VJRsl7EXxYizuL3P+cCPoc3cRqbWWRcQN0FhejRfbdq0RNhCmbY/YDtnTcz9icdLYuLDjsnz4d8JMuw==}
@@ -3837,7 +3837,7 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@hpcc-js/wasm-zstd@1.13.5': {}
+  '@hpcc-js/wasm-zstd@1.15.0': {}
 
   '@huggingface/jinja@0.5.9': {}
 
