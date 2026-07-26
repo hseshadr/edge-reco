@@ -22,6 +22,7 @@ const OPTS: ObserveOptions = {
 	readyAt: READY_AT,
 	edgeOrigin: "https://cdn.example.com",
 	eventsUrl: "https://events.example.com/events",
+	appOrigin: "http://localhost:4173",
 };
 
 function entry(name: string, startTime: number) {
@@ -42,6 +43,22 @@ describe("countBackendCalls", () => {
 	it("does NOT count product images", () => {
 		const entries = [entry("https://m.media-amazon.com/images/I/abc.jpg", 150)];
 		expect(countBackendCalls(entries, OPTS)).toBe(0);
+	});
+
+	it("does NOT count same-origin /images/ local product assets", () => {
+		// Baked-in bundle images served same-origin (/images/<id>.svg) are static
+		// assets, not backend calls — the honest "0 after sync" headline must hold.
+		const entries = [entry("http://localhost:4173/images/P1.svg", 150)];
+		expect(countBackendCalls(entries, OPTS)).toBe(0);
+	});
+
+	it("DOES count a remote host's /images/ path — the local rule must not mask it", () => {
+		// The security property behind the "0 backend calls" headline: only the app's
+		// OWN origin may claim the /images/ shortcut. A third-party backend that simply
+		// happens to serve an /images/ path must still be counted, or an exfiltration
+		// call could hide behind an image-shaped URL and the strip would read a lie.
+		const entries = [entry("https://api.evil.com/images/leak?d=1", 150)];
+		expect(countBackendCalls(entries, OPTS)).toBe(1);
 	});
 
 	it("does NOT count the optional uplink beacon", () => {

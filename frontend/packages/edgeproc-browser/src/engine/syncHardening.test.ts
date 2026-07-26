@@ -215,7 +215,9 @@ describe("bounded sync resources", () => {
 	});
 
 	it("rejects an excessive file count before fetching chunks", async () => {
-		const files = Array.from({ length: 257 }, (_, index) => ({
+		// One past the MAX_SYNC_FILES cap (1024): the file-count guard must fire
+		// before any chunk fetch. Kept in lock-step with the cap in sync.ts.
+		const files = Array.from({ length: 1025 }, (_, index) => ({
 			path: `f-${index}`,
 			file_type: null,
 			size: 0,

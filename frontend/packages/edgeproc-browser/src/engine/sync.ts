@@ -35,7 +35,11 @@ const MAX_POINTER_BYTES = 16 * 1024;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_COMPRESSED_CHUNK_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_FETCH_BYTES = 256 * 1024 * 1024;
-const MAX_SYNC_FILES = 256;
+// The signed bundle now ships one license-clean product image (images/<id>.svg)
+// per catalog product alongside the core index files, so a 720-product demo
+// carries ~728 files. This cap gives bounded headroom over that while remaining
+// a real DoS guard; aggregate byte/chunk ceilings below still bound total work.
+const MAX_SYNC_FILES = 1024;
 const MAX_CHUNK_REFS = 8192;
 const MAX_DISTINCT_CHUNKS = 4096;
 const MAX_FILE_BYTES = 256 * 1024 * 1024;

@@ -21,6 +21,8 @@ export interface ObserveOptions {
 	readonly edgeOrigin: string;
 	/** The optional analytics uplink URL (VITE_EVENTS_URL); may be undefined. */
 	readonly eventsUrl?: string | null | undefined;
+	/** The app's own origin; same-origin /images/ assets are not backend calls. */
+	readonly appOrigin?: string | null | undefined;
 }
 
 /** The slice of a PerformanceResourceTiming the counter actually reads. */
@@ -73,6 +75,7 @@ export function countBackendCalls(
 		const bucket = classifyResource(entry.name, {
 			edgeOrigin: opts.edgeOrigin,
 			eventsUrl: opts.eventsUrl ?? null,
+			appOrigin: opts.appOrigin ?? null,
 		});
 		if (bucket === "edge" || bucket === "other") {
 			count += 1;

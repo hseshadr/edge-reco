@@ -3,10 +3,15 @@
 Materializes the current signed bundle into a staging dir, drops in the current
 ``DEFAULT_RANKING_CONFIG`` (so a config retune — e.g. Phase-2's strategy map, Phase-3's
 co-occurrence strategies — flows into the seed bundle) plus the seed ``cooccurrence.json``
-computed from the committed demo session log, and republishes. ``products.jsonl`` and
-the prebuilt ``vector/`` are carried verbatim, so only ``ranking_config.json`` +
-``cooccurrence.json`` content + the manifest/chunk layout change; the catalog and FAISS
-index stay byte-identical.
+computed from the committed demo session log, and republishes.
+
+Each product also gets a deterministic, license-clean SVG card
+(``edgereco.catalog.product_image``) written both INTO the signed bundle as
+``images/<id>.svg`` (covered by the signature) and out to ``frontend/app/public/images/``
+so the SPA serves it same-origin — no remote CDN image ever leaks a visitor's IP. Every
+product's ``image_url`` in ``products.jsonl`` is rewritten to the root-relative
+``/images/<id>.svg`` the browser trusts. The prebuilt ``vector/`` is carried verbatim
+(embeddings depend on text, not on ``image_url``), so the FAISS index stays byte-identical.
 
 Run from backend/ (regenerate the demo sessions first if they changed)::
 
@@ -30,6 +35,12 @@ from pathlib import Path
 
 import zstandard as zstd
 
+from edgereco.catalog.models import Product
+from edgereco.catalog.product_image import (
+    generate_product_image,
+    image_relpath,
+    local_image_url,
+)
 from edgereco.catalog.publish import publish_bundle
 from edgereco.reco.cooccurrence import (
     CooccurrenceMatrix,
@@ -43,6 +54,7 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 CATALOG = BACKEND_ROOT / "examples" / "catalog"
 DEMO_SESSIONS = BACKEND_ROOT / "examples" / "source" / "demo_sessions.jsonl"
 KEY = BACKEND_ROOT / "examples" / "keys" / "private.key"
+PUBLIC_IMAGES = BACKEND_ROOT.parent / "frontend" / "app" / "public" / "images"
 CATALOG_ID = "amazon-demo"
 VERSION = "v1"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -64,10 +76,9 @@ def _materialize(path: str) -> bytes:
 
 
 def _stage(staging: Path) -> int:
-    """Materialize products + vector verbatim into ``staging``; return product count."""
+    """Materialize vector verbatim; render local images + rewrite products; return count."""
     (staging / "vector").mkdir(parents=True, exist_ok=True)
-    products = _materialize("products.jsonl")
-    (staging / "products.jsonl").write_bytes(products)
+    count = _stage_products_and_images(staging, _materialize("products.jsonl"))
     for name in ("embeddings.f32", "index.faiss", "state.json"):
         (staging / "vector" / name).write_bytes(_materialize(f"vector/{name}"))
     # Drop in the CURRENT default ranking config (carries the Phase-2/3 strategy map).
@@ -78,7 +89,34 @@ def _stage(staging: Path) -> int:
     (staging / "cooccurrence.json").write_text(
         _seed_cooccurrence().model_dump_json(), encoding="utf-8"
     )
-    return len([line for line in products.splitlines() if line.strip()])
+    return count
+
+
+def _stage_products_and_images(staging: Path, raw: bytes) -> int:
+    """Render a local SVG card per product, rewrite ``image_url``, stage products.jsonl."""
+    lines = [line for line in raw.decode("utf-8").splitlines() if line.strip()]
+    _reset_public_images()
+    (staging / "images").mkdir(parents=True, exist_ok=True)
+    rewritten = [_stage_one(staging, line) for line in lines]
+    (staging / "products.jsonl").write_bytes(("\n".join(rewritten) + "\n").encode("utf-8"))
+    return len(lines)
+
+
+def _stage_one(staging: Path, line: str) -> str:
+    """Emit ``images/<id>.svg`` (bundle + public) and return the line with a local url."""
+    product = Product.model_validate_json(line)
+    svg = generate_product_image(product).encode("utf-8")
+    (staging / image_relpath(product.id)).write_bytes(svg)
+    (PUBLIC_IMAGES / f"{product.id}.svg").write_bytes(svg)
+    record = json.loads(line)
+    record["image_url"] = local_image_url(product.id)
+    return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+
+
+def _reset_public_images() -> None:
+    """Clear + recreate ``frontend/app/public/images`` so a removed product leaves no orphan."""
+    shutil.rmtree(PUBLIC_IMAGES, ignore_errors=True)
+    PUBLIC_IMAGES.mkdir(parents=True, exist_ok=True)
 
 
 def _seed_cooccurrence() -> CooccurrenceMatrix:
