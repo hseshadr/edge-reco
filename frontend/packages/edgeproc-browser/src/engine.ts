@@ -20,6 +20,16 @@ export { SignatureError, sha256Hex, verifyEd25519 } from "./engine/crypto";
 // --- the default byte fetcher + its network-unreachable sentinel ---
 export { fetchBytes, NetworkError } from "./engine/fetchBytes";
 export { MemoryCacheStore } from "./engine/memoryStore";
+// --- the Worker network sentinel: a Worker's own resource timeline is invisible
+// to the window, so each Worker publishes what it fetches for the tab to count ---
+export {
+	installNetworkSentinel,
+	isNetworkSentinelReport,
+	NETWORK_SENTINEL_CHANNEL,
+	NETWORK_SENTINEL_REPORT_KIND,
+	type NetworkSentinelReport,
+	type SentinelEntry,
+} from "./engine/networkSentinel";
 // --- content-addressed stores: OPFS for production, in-memory for tests ---
 export { OpfsCacheStore } from "./engine/opfsStore";
 // --- the main<->worker postMessage wire contract ---

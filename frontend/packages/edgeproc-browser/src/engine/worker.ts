@@ -6,6 +6,7 @@
 
 import { verifyEd25519 } from "./crypto";
 import { fetchBytes } from "./fetchBytes";
+import { installNetworkSentinel } from "./networkSentinel";
 import { OpfsCacheStore } from "./opfsStore";
 import type {
 	EngineRequest,
@@ -17,6 +18,10 @@ import { materializeFile, syncIndex } from "./sync";
 import type { IndexManifest, VersionPointer } from "./types";
 
 const DECODER = new TextDecoder();
+
+// This Worker fetches the signed bundle, so its traffic must be visible to the
+// tab's network counter — the window cannot see a Worker's resource timeline.
+installNetworkSentinel("engine-worker");
 
 let storePromise: Promise<OpfsCacheStore> | null = null;
 let activeManifest: IndexManifest | null = null;
