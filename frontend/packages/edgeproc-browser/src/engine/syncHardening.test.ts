@@ -189,29 +189,34 @@ describe("anti-rollback fails closed", () => {
 	}
 
 	it("refuses a replay when the cached counter is present but unparseable", async () => {
-		// v2/sequence 5 is live; then the durable counter is corrupted to a
-		// non-integer (a tampered or truncated cache entry). `undefined` is the
-		// legacy-migration case; a PRESENT but unparseable counter is not — it
-		// proves nothing, so the older v1 pointer must still be refused.
-		const newer = await originFor(
-			emptyManifest({ version: "v2" }),
+		// Sequence 5 of v1 is live; the durable counter is then corrupted to a
+		// non-integer — a tampered or truncated cache entry. An ABSENT counter is
+		// the legacy-migration case and the version decides it; a PRESENT but
+		// unparseable one is not. Here the version cannot decide either (same
+		// release string, DIFFERENT manifest), so the only thing standing between
+		// the client and the older bundle is refusing to read a corrupt counter as
+		// proof. Isolated on purpose: nothing else in the guard can refuse this.
+		const live = await originFor(
+			emptyManifest({ version: "v1" }),
 			new Map(),
 			5,
 		);
-		const older = await originFor(
-			emptyManifest({ version: "v1" }),
+		const replayed = await originFor(
+			emptyManifest({ version: "v1", metadata: { build: "older" } }),
 			new Map(),
 			4,
 		);
 		const store = new MemoryCacheStore();
-		await syncIndex({ ...newer, baseUrl: "/o", store, verify: passVerify });
+		await syncIndex({ ...live, baseUrl: "/o", store, verify: passVerify });
 		await store.promote({
-			...newer.pointer,
+			...live.pointer,
 			sequence: null,
 		} as unknown as VersionPointer);
 
-		await expect(replay(store, older)).rejects.toBeInstanceOf(RollbackError);
-		expect((await store.readActive())?.version).toBe("v2");
+		await expect(replay(store, replayed)).rejects.toBeInstanceOf(RollbackError);
+		expect((await store.readActive())?.manifest_hash).toBe(
+			live.pointer.manifest_hash,
+		);
 	});
 
 	it("refuses a counter-less active whose version cannot prove freshness", async () => {
