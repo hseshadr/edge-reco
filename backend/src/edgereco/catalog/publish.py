@@ -200,16 +200,30 @@ def _localize_product_images(staging_dir: Path) -> None:
     (``ProductImage.isLocalImage``) and production ships ``img-src 'self' data:``, so
     a bundle carrying third-party CDN urls shows NO product image — and would leak
     every visitor's IP to that CDN if it did. Localizing here, in the producer, means
-    every publisher gets that property, not just the demo rebuild script.
+    every publisher gets a catalog whose urls are servable and cards that are inside
+    the signature, not just the demo rebuild script.
+
+    SCOPE: this guarantees the cards EXIST and are signed. Serving them is still the
+    deployer's step — the SPA fetches ``/images/<id>.svg`` from the static origin, and
+    only ``scripts/rebuild_example_bundle.py`` currently mirrors them there (into
+    ``frontend/app/public/images``). A third-party publisher must copy the bundle's
+    ``images/`` to its own static root.
 
     Idempotent: the url is derived from the product id, and the renderer is
     deterministic, so republishing an already-localized catalog is a no-op bytewise.
+
+    Note the ``images`` DIR is symlink-checked as well as each card. ``O_NOFOLLOW``
+    only guards the FINAL path component, and ``mkdir(exist_ok=True)`` accepts a
+    symlink that already points at a directory — so without this check a planted
+    ``images -> /somewhere`` would redirect every card write out of the staging tree.
     """
     products_path = staging_dir / "products.jsonl"
     _refuse_symlink(products_path, staging_dir)
     rewritten, cards = localize_catalog(products_path.read_text(encoding="utf-8"))
     _write_json_no_follow(products_path, rewritten)
-    (staging_dir / "images").mkdir(exist_ok=True)
+    images_dir = staging_dir / "images"
+    _refuse_symlink(images_dir, staging_dir)
+    images_dir.mkdir(exist_ok=True)
     for relpath, svg in cards.items():
         _write_bytes_no_follow(staging_dir / relpath, svg)
 

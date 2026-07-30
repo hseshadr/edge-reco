@@ -63,7 +63,15 @@ export function previewCsp(
 	if (origin === null) {
 		return csp;
 	}
-	return csp.replace(/connect-src ([^;]+)/u, `connect-src $1 ${origin}`);
+	// A replacer FUNCTION, not a replacement string: "$&", "$`" and "$'" are special
+	// inside a replacement string and a `$` survives URL origin parsing, so a string
+	// here would let the origin rewrite the policy around it. Case-insensitive to
+	// match the header-name lookup above — a `Connect-Src` spelling would otherwise
+	// make this silently no-op.
+	return csp.replace(
+		/connect-src ([^;]+)/iu,
+		(_match, sources: string) => `connect-src ${sources} ${origin}`,
+	);
 }
 
 /** The origin of an absolute bundle base url; `null` when app-relative (production). */

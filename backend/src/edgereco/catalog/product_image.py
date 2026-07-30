@@ -75,10 +75,17 @@ def localize_catalog(raw: str) -> tuple[str, dict[str, bytes]]:
     Deterministic AND idempotent: an already-localized catalog re-renders to the
     same bytes (the url is derived from the product id, never from its old value),
     so republishing never moves the bundle hash.
+
+    Splits on ``\\n`` ONLY — never ``str.splitlines()``. ``ensure_ascii=False`` emits
+    U+2028, U+2029 and U+0085 raw, and ``splitlines`` treats all three as line
+    terminators: one of them in any product field and the producer would write a
+    catalog it cannot re-read, breaking the idempotency claimed above. ``\\n`` is
+    also exactly what the browser consumer splits on, so the two agree by
+    construction rather than by luck.
     """
     cards: dict[str, bytes] = {}
     lines: list[str] = []
-    for line in raw.splitlines():
+    for line in raw.split("\n"):
         if not line.strip():
             continue
         rewritten, relpath, svg = _localize_line(line)

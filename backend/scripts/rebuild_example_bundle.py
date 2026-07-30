@@ -99,7 +99,9 @@ def _stage_products_and_images(staging: Path, raw: bytes) -> int:
     for relpath, svg in cards.items():
         (PUBLIC_IMAGES / Path(relpath).name).write_bytes(svg)
     (staging / "products.jsonl").write_bytes(rewritten.encode("utf-8"))
-    return len(cards)
+    # Count RECORDS, not cards: `cards` is keyed by product id, so a duplicate id
+    # would silently under-report product_count into catalog_meta.json.
+    return len([line for line in rewritten.split("\n") if line.strip()])
 
 
 def _reset_public_images() -> None:

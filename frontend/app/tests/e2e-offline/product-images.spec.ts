@@ -23,13 +23,23 @@ import { expect, test } from "@playwright/test";
 const PRODUCT_CARD = "main article.card button.card__overlay";
 const CARD_IMAGE = "main article.card img.pimg";
 
-/** Cross the launch gate and wait for the storefront to mount (real model). */
-async function launch(page: import("@playwright/test").Page): Promise<void> {
-	await page.goto("/");
+/**
+ * Cross the launch gate and wait for the storefront to mount (real model).
+ *
+ * Returns the navigation response so the caller can assert on the REAL production
+ * headers. There is exactly ONE `goto` in this spec on purpose: a second one re-runs
+ * `addInitScript`, which would reset the violation buffer and silently discard
+ * everything the first load recorded during boot.
+ */
+async function launch(
+	page: import("@playwright/test").Page,
+): Promise<import("@playwright/test").Response | null> {
+	const response = await page.goto("/");
 	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
 	await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
 		timeout: 240_000,
 	});
+	return response;
 }
 
 test("a product card renders a visible image under the production CSP", async ({
@@ -48,15 +58,14 @@ test("a product card renders a visible image under the production CSP", async ({
 		});
 	});
 
+	const response = await launch(page);
+
 	// GUARD THE GUARD: if preview ever stops serving the production CSP this spec
 	// would silently degrade into a no-CSP test that can no longer fail.
-	const response = await page.goto("/");
 	expect(
 		response?.headers()["content-security-policy"],
 		"vite preview must serve the production CSP (previewProdCspPlugin)",
 	).toContain("img-src 'self' data:");
-
-	await launch(page);
 
 	const image = page.locator(CARD_IMAGE).first();
 
