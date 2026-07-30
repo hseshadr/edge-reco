@@ -163,6 +163,106 @@ describe("signed monotonic pointer contract", () => {
 	});
 });
 
+/**
+ * Anti-rollback must be a PROOF of freshness, not the absence of disproof.
+ *
+ * Every case below is a REAL rollback driven through `syncIndex`: a validly
+ * signed but stale `/latest` is replayed at a client whose durable pointer can
+ * no longer prove how fresh it is. The guard used to answer "cannot compare"
+ * with "then it is not a rollback" and promote the stale bundle — fail-OPEN,
+ * the same defect class already fixed in edge-proc's `cas.py`. Proof must come
+ * from a monotonic counter or a comparable version; neither speaking is a
+ * refusal.
+ */
+describe("anti-rollback fails closed", () => {
+	/** Replay `stale`'s signed pointer at a store already holding `active`. */
+	function replay(
+		store: MemoryCacheStore,
+		stale: SyntheticOrigin,
+	): Promise<unknown> {
+		return syncIndex({
+			baseUrl: "/o",
+			store,
+			fetchBytes: stale.fetchBytes,
+			verify: passVerify,
+		});
+	}
+
+	it("refuses a replay when the cached counter is present but unparseable", async () => {
+		// v2/sequence 5 is live; then the durable counter is corrupted to a
+		// non-integer (a tampered or truncated cache entry). `undefined` is the
+		// legacy-migration case; a PRESENT but unparseable counter is not — it
+		// proves nothing, so the older v1 pointer must still be refused.
+		const newer = await originFor(
+			emptyManifest({ version: "v2" }),
+			new Map(),
+			5,
+		);
+		const older = await originFor(
+			emptyManifest({ version: "v1" }),
+			new Map(),
+			4,
+		);
+		const store = new MemoryCacheStore();
+		await syncIndex({ ...newer, baseUrl: "/o", store, verify: passVerify });
+		await store.promote({
+			...newer.pointer,
+			sequence: null,
+		} as unknown as VersionPointer);
+
+		await expect(replay(store, older)).rejects.toBeInstanceOf(RollbackError);
+		expect((await store.readActive())?.version).toBe("v2");
+	});
+
+	it("refuses a counter-less active whose version cannot prove freshness", async () => {
+		// The literal finding: an UNPARSEABLE version used to bypass the check
+		// instead of failing it. With no counter to compare and "nightly" not a
+		// comparable release, nothing proves the incoming pointer is fresher.
+		const origin = await originFor(emptyManifest({ version: "v1" }));
+		const store = new MemoryCacheStore();
+		await store.promote({
+			manifest_hash: "b".repeat(64),
+			version: "nightly",
+			signature: "legacy-signature",
+		} as unknown as VersionPointer);
+
+		await expect(replay(store, origin)).rejects.toBeInstanceOf(RollbackError);
+		expect((await store.readActive())?.version).toBe("nightly");
+	});
+
+	it("refuses an equal-version fork of a counter-less active pointer", async () => {
+		// Equal versions prove freshness only for the SAME manifest. A different
+		// manifest at the same version is an equivocating fork, and with no
+		// counter there is nothing left to decide it.
+		const origin = await originFor(emptyManifest({ version: "v1" }));
+		const store = new MemoryCacheStore();
+		await store.promote({
+			manifest_hash: "c".repeat(64),
+			version: "v1",
+			signature: "legacy-signature",
+		} as unknown as VersionPointer);
+
+		await expect(replay(store, origin)).rejects.toBeInstanceOf(RollbackError);
+		expect((await store.readActive())?.manifest_hash).toBe("c".repeat(64));
+	});
+
+	it("still promotes a provably fresher release over a counter-less active", async () => {
+		// The fail-closed rule must not brick the legacy upgrade path: a
+		// comparable, strictly newer version is proof, so v2 lands.
+		const origin = await originFor(emptyManifest({ version: "v2" }));
+		const store = new MemoryCacheStore();
+		await store.promote({
+			manifest_hash: "d".repeat(64),
+			version: "v1",
+			signature: "legacy-signature",
+		} as unknown as VersionPointer);
+
+		await syncIndex({ ...origin, baseUrl: "/o", store, verify: passVerify });
+
+		expect((await store.readActive())?.version).toBe("v2");
+	});
+});
+
 describe("bounded sync resources", () => {
 	it("uses parallel chunk workers without exceeding eight in flight", async () => {
 		const zstd = await Zstd.load();

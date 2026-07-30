@@ -167,17 +167,106 @@ async function fetchPointer(
 	return pointer;
 }
 
-function isRollback(active: VersionPointer, incoming: VersionPointer): boolean {
-	if (active.sequence === undefined) return false;
-	if (incoming.sequence !== active.sequence) {
-		return incoming.sequence < active.sequence;
+// ---- Anti-rollback: proof of freshness, never absence of disproof ----------
+//
+// A validly signed but STALE `/latest` (a replayed old pointer) must not
+// downgrade a client that already promoted a newer bundle. Two comparisons can
+// supply the proof — a monotonic counter, or a comparable version — and the
+// durable active pointer they are read from is untrusted (it survives in OPFS
+// across sessions and can be corrupted or tampered with). So each comparison
+// answers with what it actually PROVED, and a promote nothing proved is
+// refused. Answering "cannot compare" with "then it is not a rollback" is the
+// fail-OPEN defect this mirrors out of edge-proc's `cas.py`.
+
+/** What ONE freshness comparison proved. */
+type Freshness = "fresh" | "stale" | "undecidable";
+
+/** Optional leading `v`, then dot-separated non-negative integers — and
+ * nothing else. A date, a git sha or a pre-release suffix is NOT comparable
+ * and must not be guessed at. */
+const RELEASE = /^v?\d+(?:\.\d+)*$/u;
+const MAX_VERSION_CHARS = 200;
+
+const STALE_SEQUENCE =
+	"refusing rollback: sequence is not fresher than the active pointer's";
+const STALE_VERSION =
+	"refusing rollback: version is older than the active pointer's";
+const UNPROVABLE =
+	"refusing rollback: neither a monotonic sequence nor a comparable version proves the incoming pointer is fresher";
+
+function parseRelease(version: unknown): readonly number[] | null {
+	if (
+		typeof version !== "string" ||
+		version.length > MAX_VERSION_CHARS ||
+		!RELEASE.test(version)
+	) {
+		return null;
 	}
-	return !(
-		incoming.manifest_hash === active.manifest_hash &&
-		incoming.version === active.version &&
-		(incoming.bundle_id ?? null) === (active.bundle_id ?? null) &&
-		(incoming.channel ?? null) === (active.channel ?? null)
+	return version.replace(/^v/u, "").split(".").map(Number);
+}
+
+function compareRelease(a: readonly number[], b: readonly number[]): number {
+	for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+		const difference = (a[index] ?? 0) - (b[index] ?? 0);
+		if (difference !== 0) return difference;
+	}
+	return 0;
+}
+
+function sameIdentity(a: VersionPointer, b: VersionPointer): boolean {
+	return (
+		a.manifest_hash === b.manifest_hash &&
+		a.version === b.version &&
+		(a.bundle_id ?? null) === (b.bundle_id ?? null) &&
+		(a.channel ?? null) === (b.channel ?? null)
 	);
+}
+
+/** Monotonic-counter verdict. An active counter that is absent (a pre-sequence
+ * store) or unparseable (a corrupted one) has no counter state to compare, so
+ * it decides nothing and the version is left to speak. */
+function sequenceFreshness(
+	incoming: VersionPointer,
+	active: VersionPointer,
+): Freshness {
+	const counter = active.sequence;
+	if (!Number.isSafeInteger(counter) || counter < 0) return "undecidable";
+	if (incoming.sequence > counter) return "fresh";
+	if (incoming.sequence < counter) return "stale";
+	// Equal counters: re-promoting the SAME identity is idempotent, anything
+	// else is a publisher equivocating at one sequence.
+	return sameIdentity(incoming, active) ? "fresh" : "stale";
+}
+
+/** Release-version verdict; an unparseable version on either side proves
+ * nothing. Equal versions prove freshness only for the same manifest — an
+ * equal-version fork says nothing about which side is newer. */
+function versionFreshness(
+	incoming: VersionPointer,
+	active: VersionPointer,
+): Freshness {
+	const here = parseRelease(incoming.version);
+	const there = parseRelease(active.version);
+	if (here === null || there === null) return "undecidable";
+	const order = compareRelease(here, there);
+	if (order < 0) return "stale";
+	if (order > 0) return "fresh";
+	return incoming.manifest_hash === active.manifest_hash
+		? "fresh"
+		: "undecidable";
+}
+
+/** Why `incoming` may not replace `active` — or null when it provably may. */
+function downgradeReason(
+	incoming: VersionPointer,
+	active: VersionPointer,
+): string | null {
+	const sequence = sequenceFreshness(incoming, active);
+	if (sequence === "stale") return STALE_SEQUENCE;
+	const version = versionFreshness(incoming, active);
+	if (version === "stale") return STALE_VERSION;
+	if (sequence === "fresh" || version === "fresh") return null;
+	return UNPROVABLE;
 }
 
 function assertExpectedIdentity(pointer: VersionPointer, args: SyncArgs): void {
@@ -510,10 +599,9 @@ export async function syncIndex(args: SyncArgs): Promise<SyncResult> {
 	}
 	assertExpectedIdentity(pointer, args);
 	const active = await store.readActive();
-	if (active !== null && isRollback(active, pointer)) {
-		throw new RollbackError(
-			`refusing sequence ${pointer.sequence} over active sequence ${String(active.sequence)}`,
-		);
+	const refusal = active === null ? null : downgradeReason(pointer, active);
+	if (refusal !== null) {
+		throw new RollbackError(refusal);
 	}
 	const manifest = await fetchManifest(baseUrl, pointer, fetchBytes, store);
 	const { missing, reused } = await missingChunks(manifest, store);

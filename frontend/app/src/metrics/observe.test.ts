@@ -3,12 +3,17 @@
 // directly: edge/other count, image/uplink don't, pre-readyAt entries are
 // ignored, and unparseable URLs fall through to "other" (i.e. counted).
 
+import {
+	NETWORK_SENTINEL_REPORT_KIND,
+	type NetworkSentinelReport,
+} from "@edgeproc/browser/engine";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	countBackendCalls,
 	type ObserveOptions,
 	startMetricsObservers,
 	toResourceEntries,
+	toWindowEntries,
 } from "./observe";
 import { record } from "./store";
 
@@ -240,6 +245,173 @@ describe("startMetricsObservers", () => {
 		expect(FakeObserver.instances).toHaveLength(0);
 		// No heap sample is fabricated when performance.memory is missing.
 		expect(vi.mocked(record)).not.toHaveBeenCalled();
+		expect(() => stop()).not.toThrow();
+	});
+});
+
+// `toWindowEntries` rebases a Worker's report onto THIS context's timeline.
+// Every context has its own `timeOrigin`, so a Worker's raw `startTime` is
+// meaningless here — reports travel on the shared epoch clock and land back on
+// `performance.now()` time, which is what `readyAt` is measured in.
+describe("toWindowEntries", () => {
+	const TIME_ORIGIN = 1_700_000_000_000;
+
+	it("rebases epoch timestamps onto this context's timeline", () => {
+		const raw = [
+			{
+				name: "https://api.foo.com/infer",
+				startedAtEpochMs: TIME_ORIGIN + 900,
+			},
+		];
+		expect(toWindowEntries(raw, TIME_ORIGIN)).toEqual([
+			{ name: "https://api.foo.com/infer", startTime: 900 },
+		]);
+	});
+
+	it("drops malformed entries instead of throwing", () => {
+		const raw = [
+			null,
+			"nope",
+			{ name: 1, startedAtEpochMs: TIME_ORIGIN },
+			{ name: "https://ok.com/a" },
+			{ name: "https://ok.com/b", startedAtEpochMs: TIME_ORIGIN + 5 },
+		];
+		expect(() => toWindowEntries(raw, TIME_ORIGIN)).not.toThrow();
+		expect(toWindowEntries(raw, TIME_ORIGIN)).toEqual([
+			{ name: "https://ok.com/b", startTime: 5 },
+		]);
+	});
+});
+
+// THE blind spot this whole seam exists to close. A Worker's fetches never
+// appear in the window's resource timeline, so with an EMPTY window timeline
+// the counter must still reach 1 from the Worker's report alone. If this can
+// pass while the sentinel reader is gone, the counter is measuring the shape of
+// the claim rather than the claim.
+class ReaderChannel {
+	static instances: ReaderChannel[] = [];
+	onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+	readonly name: string;
+	close = vi.fn();
+	constructor(name: string) {
+		this.name = name;
+		ReaderChannel.instances.push(this);
+	}
+	deliver(data: unknown): void {
+		this.onmessage?.({ data } as MessageEvent<unknown>);
+	}
+}
+
+function workerReport(entries: readonly unknown[]): NetworkSentinelReport {
+	return {
+		kind: NETWORK_SENTINEL_REPORT_KIND,
+		context: "embedder-worker",
+		entries: entries as NetworkSentinelReport["entries"],
+	};
+}
+
+describe("startMetricsObservers — Worker traffic", () => {
+	const TIME_ORIGIN = 1_700_000_000_000;
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		FakeObserver.instances = [];
+		ReaderChannel.instances = [];
+		vi.mocked(record).mockReset();
+		vi.stubGlobal("PerformanceObserver", FakeObserver);
+		vi.stubGlobal("BroadcastChannel", ReaderChannel);
+		vi.spyOn(performance, "timeOrigin", "get").mockReturnValue(TIME_ORIGIN);
+		// The window sees NOTHING — exactly the real situation for Worker traffic.
+		vi.spyOn(performance, "getEntriesByType").mockReturnValue([]);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	it("counts a backend call a Worker made, invisible to the window", () => {
+		const stop = startMetricsObservers(LIVE_OPTS);
+		FakeObserver.instances[0]?.flush();
+		expect(vi.mocked(record)).toHaveBeenCalledWith({ backendCalls: 0 });
+
+		ReaderChannel.instances[0]?.deliver(
+			workerReport([
+				{
+					name: "https://api.evil.com/exfil?q=user-query",
+					startedAtEpochMs: TIME_ORIGIN + 500,
+				},
+			]),
+		);
+
+		expect(vi.mocked(record)).toHaveBeenLastCalledWith({ backendCalls: 1 });
+		stop();
+		expect(ReaderChannel.instances[0]?.close).toHaveBeenCalledOnce();
+	});
+
+	it("replaces a Worker's slice rather than accumulating across reports", () => {
+		// Each report is that context's FULL current view, so re-reporting the
+		// same request must not double-count it.
+		startMetricsObservers(LIVE_OPTS);
+		const entry = {
+			name: "https://api.evil.com/exfil",
+			startedAtEpochMs: TIME_ORIGIN + 500,
+		};
+		const channel = ReaderChannel.instances[0];
+
+		channel?.deliver(workerReport([entry]));
+		channel?.deliver(workerReport([entry]));
+
+		expect(vi.mocked(record)).toHaveBeenLastCalledWith({ backendCalls: 1 });
+	});
+
+	it("sums distinct contexts and still excludes non-backend traffic", () => {
+		startMetricsObservers(LIVE_OPTS);
+		const channel = ReaderChannel.instances[0];
+
+		channel?.deliver({
+			kind: NETWORK_SENTINEL_REPORT_KIND,
+			context: "engine-worker",
+			entries: [
+				{
+					name: "https://cdn.example.com/chunk",
+					startedAtEpochMs: TIME_ORIGIN + 10,
+				},
+			],
+		});
+		channel?.deliver(
+			workerReport([
+				{
+					name: "https://api.foo.com/infer",
+					startedAtEpochMs: TIME_ORIGIN + 20,
+				},
+				{
+					name: "https://m.media-amazon.com/x.jpg",
+					startedAtEpochMs: TIME_ORIGIN + 30,
+				},
+			]),
+		);
+
+		expect(vi.mocked(record)).toHaveBeenLastCalledWith({ backendCalls: 2 });
+	});
+
+	it("ignores a message that is not a sentinel report", () => {
+		startMetricsObservers(LIVE_OPTS);
+		vi.mocked(record).mockClear();
+
+		ReaderChannel.instances[0]?.deliver({ kind: "something-else" });
+		ReaderChannel.instances[0]?.deliver("hello");
+
+		expect(vi.mocked(record)).not.toHaveBeenCalled();
+	});
+
+	it("degrades silently without BroadcastChannel", () => {
+		vi.stubGlobal("BroadcastChannel", undefined);
+
+		const stop = startMetricsObservers(LIVE_OPTS);
+
+		expect(ReaderChannel.instances).toHaveLength(0);
 		expect(() => stop()).not.toThrow();
 	});
 });

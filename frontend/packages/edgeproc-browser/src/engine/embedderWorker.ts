@@ -6,6 +6,11 @@
 /// <reference lib="webworker" />
 
 import { createEmbedder, type Embedder } from "./embedder";
+import { installNetworkSentinel } from "./networkSentinel";
+
+// The embedder Worker outlives boot and owns the model transport, so it is the
+// live context a "no network after sync" counter must be able to see into.
+installNetworkSentinel("embedder-worker");
 
 /** A request to embed one query string, correlated by id. */
 export interface EmbedRequest {
