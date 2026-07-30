@@ -59,6 +59,17 @@ export function catalogMetaChunkHash(): string {
 	return hash;
 }
 
+/**
+ * Every (hash, signed uncompressed size) pair in the committed bundle manifest,
+ * so a test can assert a property across the WHOLE bundle rather than one chunk.
+ */
+export function signedChunkRefs(): ReadonlyArray<{
+	readonly hash: string;
+	readonly size: number;
+}> {
+	return activeManifest().files.flatMap((file) => file.chunks);
+}
+
 /** Signed uncompressed byte length for {@link catalogMetaChunkHash}. */
 export function catalogMetaChunkSize(): number {
 	const meta = activeManifest().files.find(
