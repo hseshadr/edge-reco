@@ -40,6 +40,7 @@ from edgeproc.bundles.publish import build_bundle
 from edgeproc.bundles.signing import Ed25519Signer
 from pydantic import BaseModel
 
+from edgereco.catalog.product_image import localize_catalog
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
 from edgereco.reco.score_receipt import (
@@ -118,6 +119,7 @@ def publish_bundle(
         schema_version=CURRENT_META_SCHEMA,
     )
     _write_json_no_follow(staging_dir / _META_NAME, meta.model_dump_json())
+    _localize_product_images(staging_dir)
     _ensure_ranking_config(staging_dir, require_present=require_feature_files)
     _ensure_cooccurrence(staging_dir, require_present=require_feature_files)
     _write_ranking_receipt(staging_dir, private_key_path)
@@ -191,21 +193,43 @@ def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) ->
     _write_json_no_follow(cooc_path, CooccurrenceMatrix().model_dump_json())
 
 
-def _write_json_no_follow(path: Path, payload: str) -> None:
-    """Write ``payload`` to ``path`` refusing to follow a symlink at the final component.
+def _localize_product_images(staging_dir: Path) -> None:
+    """Bake a local card per product and point every ``image_url`` at it.
 
-    The producer unconditionally (re)writes its staging JSON — ``catalog_meta.json``
-    every publish, plus ``ranking_config.json`` / ``cooccurrence.json`` when defaulting.
-    Plain ``Path.write_text`` FOLLOWS a pre-planted symlink at that path and would clobber
-    whatever it targets: an arbitrary host-file WRITE-through (the mirror of the read-side
-    guard below). ``O_NOFOLLOW`` makes ``os.open`` fail with ``ELOOP`` on a symlink, so the
-    write can never be redirected; fail closed with a clear ``ValueError``. A real file at
-    the same path is created/truncated exactly as ``write_text`` would — only a symlink is
+    The storefront renders an ``<img>`` only for a root-relative, same-origin url
+    (``ProductImage.isLocalImage``) and production ships ``img-src 'self' data:``, so
+    a bundle carrying third-party CDN urls shows NO product image — and would leak
+    every visitor's IP to that CDN if it did. Localizing here, in the producer, means
+    every publisher gets that property, not just the demo rebuild script.
+
+    Idempotent: the url is derived from the product id, and the renderer is
+    deterministic, so republishing an already-localized catalog is a no-op bytewise.
+    """
+    products_path = staging_dir / "products.jsonl"
+    _refuse_symlink(products_path, staging_dir)
+    rewritten, cards = localize_catalog(products_path.read_text(encoding="utf-8"))
+    _write_json_no_follow(products_path, rewritten)
+    (staging_dir / "images").mkdir(exist_ok=True)
+    for relpath, svg in cards.items():
+        _write_bytes_no_follow(staging_dir / relpath, svg)
+
+
+def _open_no_follow(path: Path) -> int:
+    """Open ``path`` for writing, refusing to follow a symlink at the final component.
+
+    The producer unconditionally (re)writes its staging files — ``catalog_meta.json``
+    every publish, plus ``ranking_config.json`` / ``cooccurrence.json`` when defaulting
+    and the localized ``products.jsonl`` / ``images/*.svg``. Plain ``Path.write_text``
+    FOLLOWS a pre-planted symlink at that path and would clobber whatever it targets: an
+    arbitrary host-file WRITE-through (the mirror of the read-side guard below).
+    ``O_NOFOLLOW`` makes ``os.open`` fail with ``ELOOP`` on a symlink, so the write can
+    never be redirected; fail closed with a clear ``ValueError``. A real file at the same
+    path is created/truncated exactly as ``write_text`` would — only a symlink is
     refused. Portable: a platform without the flag yields ``0`` (a no-op bit).
     """
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(path, flags, 0o644)
+        return os.open(path, flags, 0o644)
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             raise ValueError(
@@ -213,7 +237,17 @@ def _write_json_no_follow(path: Path, payload: str) -> None:
                 "planted symlink would redirect the producer's write to an arbitrary file"
             ) from exc
         raise
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+
+
+def _write_json_no_follow(path: Path, payload: str) -> None:
+    """Write text to ``path`` through the symlink-refusing open."""
+    with os.fdopen(_open_no_follow(path), "w", encoding="utf-8") as handle:
+        handle.write(payload)
+
+
+def _write_bytes_no_follow(path: Path, payload: bytes) -> None:
+    """Write bytes to ``path`` through the symlink-refusing open."""
+    with os.fdopen(_open_no_follow(path), "wb") as handle:
         handle.write(payload)
 
 

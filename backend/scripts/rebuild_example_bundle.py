@@ -6,11 +6,12 @@ co-occurrence strategies — flows into the seed bundle) plus the seed ``cooccur
 computed from the committed demo session log, and republishes.
 
 Each product also gets a deterministic, license-clean SVG card
-(``edgereco.catalog.product_image``) written both INTO the signed bundle as
-``images/<id>.svg`` (covered by the signature) and out to ``frontend/app/public/images/``
-so the SPA serves it same-origin — no remote CDN image ever leaks a visitor's IP. Every
-product's ``image_url`` in ``products.jsonl`` is rewritten to the root-relative
-``/images/<id>.svg`` the browser trusts. The prebuilt ``vector/`` is carried verbatim
+(``edgereco.catalog.product_image``). ``publish_bundle`` owns that step for EVERY
+publisher — it writes ``images/<id>.svg`` into the signed bundle and rewrites each
+product's ``image_url`` to the root-relative ``/images/<id>.svg`` the browser trusts.
+This script only additionally mirrors the same cards out to
+``frontend/app/public/images/`` so the SPA serves them same-origin — no remote CDN
+image ever leaks a visitor's IP. The prebuilt ``vector/`` is carried verbatim
 (embeddings depend on text, not on ``image_url``), so the FAISS index stays byte-identical.
 
 Run from backend/ (regenerate the demo sessions first if they changed)::
@@ -35,12 +36,7 @@ from pathlib import Path
 
 import zstandard as zstd
 
-from edgereco.catalog.models import Product
-from edgereco.catalog.product_image import (
-    generate_product_image,
-    image_relpath,
-    local_image_url,
-)
+from edgereco.catalog.product_image import localize_catalog
 from edgereco.catalog.publish import publish_bundle
 from edgereco.reco.cooccurrence import (
     CooccurrenceMatrix,
@@ -93,24 +89,17 @@ def _stage(staging: Path) -> int:
 
 
 def _stage_products_and_images(staging: Path, raw: bytes) -> int:
-    """Render a local SVG card per product, rewrite ``image_url``, stage products.jsonl."""
-    lines = [line for line in raw.decode("utf-8").splitlines() if line.strip()]
+    """Stage products.jsonl and mirror each product's card into the SPA's public dir.
+
+    ``publish_bundle`` performs the same localization for the SIGNED bundle; this
+    mirror is what the static origin actually serves at ``/images/<id>.svg``.
+    """
+    rewritten, cards = localize_catalog(raw.decode("utf-8"))
     _reset_public_images()
-    (staging / "images").mkdir(parents=True, exist_ok=True)
-    rewritten = [_stage_one(staging, line) for line in lines]
-    (staging / "products.jsonl").write_bytes(("\n".join(rewritten) + "\n").encode("utf-8"))
-    return len(lines)
-
-
-def _stage_one(staging: Path, line: str) -> str:
-    """Emit ``images/<id>.svg`` (bundle + public) and return the line with a local url."""
-    product = Product.model_validate_json(line)
-    svg = generate_product_image(product).encode("utf-8")
-    (staging / image_relpath(product.id)).write_bytes(svg)
-    (PUBLIC_IMAGES / f"{product.id}.svg").write_bytes(svg)
-    record = json.loads(line)
-    record["image_url"] = local_image_url(product.id)
-    return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    for relpath, svg in cards.items():
+        (PUBLIC_IMAGES / Path(relpath).name).write_bytes(svg)
+    (staging / "products.jsonl").write_bytes(rewritten.encode("utf-8"))
+    return len(cards)
 
 
 def _reset_public_images() -> None:

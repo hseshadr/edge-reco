@@ -7,14 +7,16 @@ product is rendered here as a small, tasteful SVG card derived purely from the
 product's own fields. Same catalog in -> byte-identical SVGs out (no timestamps,
 no randomness), so the bundle hash stays stable.
 
-Seam: ``generate_product_image`` is the single, swappable renderer. A future
-license-clean *raster* localizer can replace it behind this exact signature
-without touching the publish or serve paths.
+Seam: ``generate_product_image`` is the single, swappable renderer, and
+``localize_catalog`` is the single place a catalog's images become local. A
+future license-clean *raster* localizer can replace the renderer behind this
+exact signature without touching the publish or serve paths.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from xml.sax.saxutils import escape, quoteattr
 
@@ -54,6 +56,35 @@ def image_relpath(product_id: str) -> str:
 def local_image_url(product_id: str) -> str:
     """Root-relative same-origin URL the SPA renders (passes ``isLocalImage``)."""
     return f"/images/{_require_safe_id(product_id)}.svg"
+
+
+def _localize_line(line: str) -> tuple[str, str, bytes]:
+    """One catalog line -> (rewritten line, card relpath, card bytes)."""
+    product = Product.model_validate_json(line)
+    record = json.loads(line)
+    record["image_url"] = local_image_url(product.id)
+    rewritten = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    svg = generate_product_image(product).encode("utf-8")
+    return rewritten, image_relpath(product.id), svg
+
+
+def localize_catalog(raw: str) -> tuple[str, dict[str, bytes]]:
+    """Point every product's ``image_url`` at a local card and render those cards.
+
+    Returns the rewritten ``products.jsonl`` text plus ``{bundle relpath: svg bytes}``.
+    Deterministic AND idempotent: an already-localized catalog re-renders to the
+    same bytes (the url is derived from the product id, never from its old value),
+    so republishing never moves the bundle hash.
+    """
+    cards: dict[str, bytes] = {}
+    lines: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        rewritten, relpath, svg = _localize_line(line)
+        lines.append(rewritten)
+        cards[relpath] = svg
+    return ("\n".join(lines) + "\n" if lines else ""), cards
 
 
 def _gradient(category: str) -> tuple[str, str]:
