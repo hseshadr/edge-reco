@@ -50,15 +50,17 @@ export function cspFromHeadersFile(headersFileContent: string): string {
  * the sync path, and `connect-src 'self'` would block it — a harness artifact, not
  * a product defect. So an ABSOLUTE bundle origin is added to `connect-src` only.
  *
- * Every other directive — `img-src 'self' data:` above all, the one that decides
- * whether a product card can render — is served verbatim, so the guard it provides
- * is never weakened by this allowance.
+ * `img-src` is NOT adjusted here — that directive belongs to the catalog's image mode,
+ * so `widenImgSrc` is passed in by the caller (`imageCsp.mjs`, the same function the
+ * production build applies to `dist/_headers`). Preview and production therefore derive
+ * the policy from one implementation instead of drifting apart.
  */
 export function previewCsp(
 	headersFileContent: string,
 	bundleBaseUrl: string | undefined,
+	widenImgSrc: (csp: string) => string = (csp) => csp,
 ): string {
-	const csp = cspFromHeadersFile(headersFileContent);
+	const csp = widenImgSrc(cspFromHeadersFile(headersFileContent));
 	const origin = absoluteOrigin(bundleBaseUrl);
 	if (origin === null) {
 		return csp;

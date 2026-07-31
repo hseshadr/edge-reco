@@ -24,6 +24,7 @@ from edgeproc.bundles.signing import (
 from edgeproc.bundles.sync import materialize_file, sync_index
 from typer.testing import CliRunner
 
+from edgereco.catalog.product_image import ImageMode
 from edgereco.catalog.publish import BUNDLE_FILES, CURRENT_META_SCHEMA, publish_bundle
 from edgereco.cli import app
 from edgereco.reco.cooccurrence import CooccurrenceMatrix, Neighbor
@@ -113,6 +114,247 @@ def test_produces_consumable_signed_origin(tmp_path: Path) -> None:
         "images/P1.svg",
     } == {entry.path for entry in manifest.files}
     assert meta["catalog_id"] == "amazon-demo"
+
+
+def test_republish_at_the_same_sequence_with_new_content_is_a_client_rollback(
+    tmp_path: Path,
+) -> None:
+    """Republishing changed content at an UNCHANGED sequence bricks existing clients.
+
+    A synced client refuses an incoming pointer whose sequence EQUALS its stored one
+    but whose manifest hash differs — that shape is a publisher equivocating at a single
+    sequence, so ``sync.ts`` calls it a rollback and throws
+    ``refusing sequence N over active sequence N``. Promotion only ever moves the
+    sequence UP, so a client bricked that way can never recover on its own.
+
+    This pins the publisher side of that contract: content change MUST come with a
+    sequence bump. It is the exact defect that stranded returning visitors on
+    edge-reco.com after the bundle was rebuilt in place at sequence 1.
+    """
+    private, _ = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    def publish(products: str, sequence: int, origin: Path) -> VersionPointer:
+        staging = _staging(tmp_path / f"s{sequence}{origin.name}")
+        (staging / "products.jsonl").write_text(products, encoding="utf-8")
+        publish_bundle(
+            staging_dir=staging,
+            origin_dir=origin,
+            private_key_path=key_path,
+            catalog_id="amazon-demo",
+            version="v1",
+            embedding_model="m",
+            embedding_dim=384,
+            embedding_count=1,
+            product_count=1,
+            sequence=sequence,
+        )
+        return VersionPointer.model_validate_json((origin / "latest").read_bytes())
+
+    first = publish(_PRODUCTS, 1, tmp_path / "o1")
+    changed = publish(
+        '{"id":"P1","title":"Widget MK2","category":"Electronics"}\n', 1, tmp_path / "o2"
+    )
+
+    # Same sequence, different identity == the shape a client refuses.
+    assert changed.sequence == first.sequence
+    assert changed.manifest_hash != first.manifest_hash
+
+    # The supported fix is a strictly greater sequence, which promotes cleanly.
+    bumped = publish(
+        '{"id":"P1","title":"Widget MK2","category":"Electronics"}\n', 2, tmp_path / "o3"
+    )
+    assert bumped.sequence > first.sequence
+
+
+_REMOTE_PRODUCTS = (
+    '{"id":"P1","title":"Widget","category":"Electronics",'
+    '"image_url":"https://m.media-amazon.com/images/I/71abc.jpg"}\n'
+)
+
+
+def test_remote_mode_leaves_the_catalog_urls_untouched(tmp_path: Path) -> None:
+    """In REMOTE mode the producer must NOT rewrite ``image_url``.
+
+    Path A serves the third-party photo directly, which only works if the raw CDN url
+    survives publish AND the deployed CSP lists that host. Rewriting it to a local
+    card here is exactly what would make the mode look broken (placeholders forever),
+    so the no-rewrite is the property under test.
+    """
+    staging = _staging(tmp_path)
+    (staging / "products.jsonl").write_text(_REMOTE_PRODUCTS, encoding="utf-8")
+    origin = tmp_path / "origin"
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="amazon-demo",
+        version="v1",
+        embedding_model="m",
+        embedding_dim=384,
+        embedding_count=1,
+        product_count=1,
+        image_mode=ImageMode.REMOTE,
+    )
+
+    cache = FilesystemCacheStore(tmp_path / "cache")
+    sync_index(
+        base_url=str(origin),
+        store=cache,
+        adapter=FilesystemAdapter(),
+        verifier=Ed25519Verifier(public),
+    )
+    manifest = _active_manifest(cache)
+    record = json.loads(materialize_file(cache, manifest, "products.jsonl").decode("utf-8"))
+
+    assert record["image_url"] == "https://m.media-amazon.com/images/I/71abc.jpg"
+    # And no placeholder card was invented for a product that renders remotely.
+    assert not any(entry.path.startswith("images/") for entry in manifest.files)
+
+
+def test_local_mode_is_the_default(tmp_path: Path) -> None:
+    """Omitting the switch must give the PRIVACY-preserving mode.
+
+    The storefront's headline claim is that nothing leaves the browser; a remote photo
+    request on page load hands every visitor's IP to a third party. So the safe mode is
+    the one you get by default, and REMOTE has to be asked for explicitly.
+    """
+    staging = _staging(tmp_path)
+    (staging / "products.jsonl").write_text(_REMOTE_PRODUCTS, encoding="utf-8")
+    origin = tmp_path / "origin"
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    publish_bundle(  # no image_mode argument
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="amazon-demo",
+        version="v1",
+        embedding_model="m",
+        embedding_dim=384,
+        embedding_count=1,
+        product_count=1,
+    )
+
+    cache = FilesystemCacheStore(tmp_path / "cache")
+    sync_index(
+        base_url=str(origin),
+        store=cache,
+        adapter=FilesystemAdapter(),
+        verifier=Ed25519Verifier(public),
+    )
+    manifest = _active_manifest(cache)
+    record = json.loads(materialize_file(cache, manifest, "products.jsonl").decode("utf-8"))
+    assert record["image_url"] == "/images/P1.svg"
+
+
+def test_publish_prefers_a_staged_real_photo_over_the_generated_card(tmp_path: Path) -> None:
+    """A REAL product photo staged by the build must survive publish and own the url.
+
+    The generated SVG card is the FALLBACK, not the default: when the build step has
+    localized an actual product photo into ``images/<id>.<ext>``, the producer must
+    point ``image_url`` at that file and leave its bytes alone — not overwrite it with
+    a placeholder and not emit a competing ``.svg`` for the same product.
+    """
+    staging = _staging(tmp_path)
+    photo = b"\xff\xd8\xff\xe0" + b"real-jpeg-body" * 8  # JPEG magic + body
+    (staging / "images").mkdir()
+    (staging / "images" / "P1.jpg").write_bytes(photo)
+    origin = tmp_path / "origin"
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="amazon-demo",
+        version="v1",
+        embedding_model="m",
+        embedding_dim=384,
+        embedding_count=1,
+        product_count=1,
+    )
+
+    cache = FilesystemCacheStore(tmp_path / "cache")
+    sync_index(
+        base_url=str(origin),
+        store=cache,
+        adapter=FilesystemAdapter(),
+        verifier=Ed25519Verifier(public),
+    )
+    manifest = _active_manifest(cache)
+    record = json.loads(materialize_file(cache, manifest, "products.jsonl").decode("utf-8"))
+    paths = {entry.path for entry in manifest.files}
+
+    assert record["image_url"] == "/images/P1.jpg"
+    assert "images/P1.svg" not in paths, "a placeholder must not shadow the real photo"
+    # The PHOTO BYTES are deliberately NOT in the signed set: `syncIndex` reassembles
+    # and hash-verifies every manifest file on every sync, so signing them would push
+    # ~16 MB onto every visitor for bytes the SPA never reads back out of the bundle
+    # (it loads /images/<id> as ordinary same-origin static assets, lazily).
+    assert "images/P1.jpg" not in paths
+
+
+def test_a_failed_download_falls_back_per_product_not_per_build(tmp_path: Path) -> None:
+    """One product's missing photo must not cost the others theirs.
+
+    The build downloads 720 photos from a third party; some WILL fail. The contract is
+    per-product degradation: whoever got a photo keeps it, whoever did not gets the
+    generated card, and the publish still succeeds. A build-wide failure (or a build
+    that silently drops the un-downloaded products) is the thing this rules out.
+    """
+    staging = _staging(tmp_path)
+    (staging / "products.jsonl").write_text(
+        '{"id":"P1","title":"Has photo","category":"Electronics"}\n'
+        '{"id":"P2","title":"Download failed","category":"Electronics"}\n',
+        encoding="utf-8",
+    )
+    (staging / "images").mkdir()
+    (staging / "images" / "P1.jpg").write_bytes(b"\xff\xd8\xff\xe0photo")  # P2 absent
+    origin = tmp_path / "origin"
+    private, public = generate_keypair()
+    key_path = tmp_path / "private.key"
+    key_path.write_bytes(private.private_bytes_raw())
+
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=origin,
+        private_key_path=key_path,
+        catalog_id="amazon-demo",
+        version="v1",
+        embedding_model="m",
+        embedding_dim=384,
+        embedding_count=2,
+        product_count=2,
+    )
+
+    cache = FilesystemCacheStore(tmp_path / "cache")
+    sync_index(
+        base_url=str(origin),
+        store=cache,
+        adapter=FilesystemAdapter(),
+        verifier=Ed25519Verifier(public),
+    )
+    manifest = _active_manifest(cache)
+    raw = materialize_file(cache, manifest, "products.jsonl").decode("utf-8")
+    urls = {
+        json.loads(line)["id"]: json.loads(line)["image_url"]
+        for line in raw.split("\n")
+        if line.strip()
+    }
+
+    assert urls == {"P1": "/images/P1.jpg", "P2": "/images/P2.svg"}
+    # The fallback card is real, renderable bytes — not an empty placeholder file.
+    assert materialize_file(cache, manifest, "images/P2.svg").startswith(b"<svg")
 
 
 def test_publish_localizes_remote_product_image_urls(tmp_path: Path) -> None:

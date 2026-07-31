@@ -79,12 +79,15 @@ test("a product card renders a visible image under the production CSP", async ({
 	).toBeAttached({ timeout: 30_000 });
 	await image.scrollIntoViewIfNeeded();
 
-	// (1) The bundle points at a release-owned, root-relative card...
+	// (1) The bundle points at a release-owned, root-relative image. In LOCAL mode that
+	// is the downloaded product photo (.jpg/.png/.webp); a product whose download failed
+	// falls back to its generated .svg card. Either way it must be SAME-ORIGIN — an
+	// off-origin url here would mean the localization silently stopped running.
 	const src = await image.getAttribute("src");
 	expect(
 		src,
-		"the bundle must localize image_url to a root-relative card",
-	).toMatch(/^\/images\/[A-Za-z0-9._-]+\.svg$/u);
+		"the bundle must localize image_url to a root-relative image",
+	).toMatch(/^\/images\/[A-Za-z0-9._-]+\.(jpg|png|webp|svg)$/u);
 
 	// (2)+(3) ...and the browser actually decoded pixels from it. `naturalWidth`
 	// is 0 for a 404, a blocked request, or an undecodable body — so this single

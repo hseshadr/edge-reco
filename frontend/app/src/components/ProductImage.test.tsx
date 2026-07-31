@@ -22,6 +22,64 @@ const product: Product = {
 
 afterEach(cleanup);
 
+describe("ProductImage remote (Path A) mode", () => {
+	// A bundle published with EDGERECO_IMAGE_MODE=remote keeps the catalog's own CDN
+	// urls, and the deployment lists those hosts in img-src. The component has to
+	// RENDER them — a CSP that permits the host is useless if `isLocalImage` still
+	// refuses the url, which is exactly how this mode shipped as 54 placeholders.
+	const hosts = ["https://m.media-amazon.com"];
+
+	it("renders an allowlisted remote host when the build enables remote mode", () => {
+		render(<ProductImage product={product} allowedRemoteHosts={hosts} />);
+
+		expect(screen.getByRole("img")).toHaveAttribute(
+			"src",
+			"https://m.media-amazon.com/images/P1.jpg",
+		);
+	});
+
+	it("still refuses a host that is NOT on the allowlist", () => {
+		// The allowlist is the boundary, not "any remote url is fine now".
+		render(
+			<ProductImage
+				product={{ ...product, image_url: "https://evil.example/P1.jpg" }}
+				allowedRemoteHosts={hosts}
+			/>,
+		);
+
+		expect(screen.queryByRole("img")).not.toBeInTheDocument();
+	});
+
+	it("refuses http even on an allowlisted host", () => {
+		render(
+			<ProductImage
+				product={{
+					...product,
+					image_url: "http://m.media-amazon.com/images/P1.jpg",
+				}}
+				allowedRemoteHosts={hosts}
+			/>,
+		);
+
+		expect(screen.queryByRole("img")).not.toBeInTheDocument();
+	});
+
+	it("refuses a lookalike host that merely ends with the allowed one", () => {
+		// `evil-m.media-amazon.com.attacker.test` must not pass a sloppy endsWith check.
+		render(
+			<ProductImage
+				product={{
+					...product,
+					image_url: "https://m.media-amazon.com.attacker.test/P1.jpg",
+				}}
+				allowedRemoteHosts={hosts}
+			/>,
+		);
+
+		expect(screen.queryByRole("img")).not.toBeInTheDocument();
+	});
+});
+
 describe("ProductImage egress boundary", () => {
 	it("uses the editorial placeholder instead of a remote catalog image", () => {
 		render(<ProductImage product={product} />);

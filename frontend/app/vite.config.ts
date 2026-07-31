@@ -7,6 +7,8 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { configDefaults } from "vitest/config";
+// @ts-expect-error -- plain-ESM build script shared with build-pages.mjs (no types).
+import { imgSrcForMode } from "./scripts/imageCsp.mjs";
 import { previewCsp } from "./src/previewHeaders";
 
 // DEV-ONLY: serve the staged onnxruntime-web runtime under /ort/ as raw files.
@@ -68,9 +70,14 @@ function previewProdCspPlugin(): Plugin {
 	return {
 		name: "edgereco:preview-prod-csp",
 		configurePreviewServer(server) {
+			// The SAME `imgSrcForMode` the production build applies to dist/_headers, so
+			// a preview-driven e2e sees the policy the deployment will actually serve.
+			const mode =
+				process.env.EDGERECO_IMAGE_MODE === "remote" ? "remote" : "local";
 			const csp = previewCsp(
 				readFileSync(headersPath, "utf-8"),
 				process.env.VITE_BUNDLE_BASE_URL,
+				(policy: string) => imgSrcForMode(policy, mode),
 			);
 			server.middlewares.use((_req, res, next) => {
 				res.setHeader("Content-Security-Policy", csp);

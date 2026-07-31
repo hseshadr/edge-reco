@@ -40,7 +40,7 @@ from edgeproc.bundles.publish import build_bundle
 from edgeproc.bundles.signing import Ed25519Signer
 from pydantic import BaseModel
 
-from edgereco.catalog.product_image import localize_catalog
+from edgereco.catalog.product_image import ImageMode, localize_catalog
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
 from edgereco.reco.score_receipt import (
@@ -59,6 +59,9 @@ BUNDLE_FILES: Final[tuple[str, ...]] = (
     "cooccurrence.json",
     "images",
 )
+#: Raster extensions a staged REAL photo may carry (mirrors ``image_download``).
+#: ``svg`` is deliberately absent — that is the generated placeholder, not a photo.
+_PHOTO_EXTENSIONS: Final[frozenset[str]] = frozenset({"jpg", "png", "webp"})
 _META_NAME: Final[str] = "catalog_meta.json"
 _RANKING_NAME: Final[str] = "ranking_config.json"
 _COOCCURRENCE_NAME: Final[str] = "cooccurrence.json"
@@ -101,6 +104,7 @@ def publish_bundle(
     product_count: int,
     require_feature_files: bool = False,
     sequence: int = 1,
+    image_mode: ImageMode = ImageMode.LOCAL,
 ) -> None:
     """Write ``catalog_meta.json`` then build the signed origin from the staging dir.
 
@@ -119,7 +123,7 @@ def publish_bundle(
         schema_version=CURRENT_META_SCHEMA,
     )
     _write_json_no_follow(staging_dir / _META_NAME, meta.model_dump_json())
-    _localize_product_images(staging_dir)
+    _localize_product_images(staging_dir, image_mode)
     _ensure_ranking_config(staging_dir, require_present=require_feature_files)
     _ensure_cooccurrence(staging_dir, require_present=require_feature_files)
     _write_ranking_receipt(staging_dir, private_key_path)
@@ -193,8 +197,11 @@ def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) ->
     _write_json_no_follow(cooc_path, CooccurrenceMatrix().model_dump_json())
 
 
-def _localize_product_images(staging_dir: Path) -> None:
+def _localize_product_images(staging_dir: Path, image_mode: ImageMode) -> None:
     """Bake a local card per product and point every ``image_url`` at it.
+
+    In ``ImageMode.REMOTE`` this is a no-op: the catalog keeps its own CDN urls and the
+    deployment is responsible for listing those hosts in ``img-src``.
 
     The storefront renders an ``<img>`` only for a root-relative, same-origin url
     (``ProductImage.isLocalImage``) and production ships ``img-src 'self' data:``, so
@@ -219,13 +226,42 @@ def _localize_product_images(staging_dir: Path) -> None:
     """
     products_path = staging_dir / "products.jsonl"
     _refuse_symlink(products_path, staging_dir)
-    rewritten, cards = localize_catalog(products_path.read_text(encoding="utf-8"))
-    _write_json_no_follow(products_path, rewritten)
     images_dir = staging_dir / "images"
     _refuse_symlink(images_dir, staging_dir)
+    if image_mode is ImageMode.REMOTE:
+        return  # nothing to write: the catalog's own urls ARE the contract here
+    rewritten, cards = localize_catalog(
+        products_path.read_text(encoding="utf-8"), _staged_photos(images_dir), image_mode
+    )
+    _write_json_no_follow(products_path, rewritten)
     images_dir.mkdir(exist_ok=True)
     for relpath, svg in cards.items():
         _write_bytes_no_follow(staging_dir / relpath, svg)
+
+
+def _staged_photos(images_dir: Path) -> dict[str, str]:
+    """Map product id -> extension for every REAL photo the build already localized.
+
+    A staged ``<id>.jpg`` means the download step succeeded for that product, so the
+    producer points its url there and leaves the bytes alone. ``.svg`` is skipped: it
+    is the placeholder this function's caller regenerates, never a real photo.
+    """
+    if not images_dir.is_dir():
+        return {}
+    return {
+        path.stem: path.suffix.lstrip(".").lower()
+        for path in sorted(images_dir.iterdir())
+        if _is_staged_photo(path)
+    }
+
+
+def _is_staged_photo(path: Path) -> bool:
+    """A real, non-symlinked photo file the download step left for the producer."""
+    return (
+        path.is_file()
+        and not path.is_symlink()
+        and path.suffix.lstrip(".").lower() in _PHOTO_EXTENSIONS
+    )
 
 
 def _open_no_follow(path: Path) -> int:
@@ -302,13 +338,27 @@ def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
         _refuse_symlink(path, staging_dir)
         files[name] = path.read_bytes()
     _read_tree(staging_dir, "vector", files)
-    _read_tree(staging_dir, "images", files)
+    _read_tree(staging_dir, "images", files, skip_extensions=_PHOTO_EXTENSIONS)
     return files
 
 
-def _read_tree(staging_dir: Path, subdir: str, files: dict[str, bytes]) -> None:
-    """Read every file under ``staging_dir/subdir`` into ``files`` (symlink-refused)."""
+def _read_tree(
+    staging_dir: Path,
+    subdir: str,
+    files: dict[str, bytes],
+    *,
+    skip_extensions: frozenset[str] = frozenset(),
+) -> None:
+    """Read every file under ``staging_dir/subdir`` into ``files`` (symlink-refused).
+
+    ``skip_extensions`` keeps DOWNLOADED PRODUCT PHOTOS out of the signed set. They are
+    an ORIGIN asset, not bundle payload: `syncIndex` reassembles and hash-verifies every
+    file in the manifest on every sync, so signing ~16 MB of photos would make each
+    visitor download and verify bytes no client ever reads back — the SPA loads
+    ``/images/<id>`` as ordinary static assets, lazily, from the same origin. Excluding
+    them keeps the bundle ~4.6 MB and the "one small signed file" promise intact.
+    """
     for path in sorted((staging_dir / subdir).rglob("*")):
         _refuse_symlink(path, staging_dir)
-        if path.is_file():
+        if path.is_file() and path.suffix.lstrip(".").lower() not in skip_extensions:
             files[path.relative_to(staging_dir).as_posix()] = path.read_bytes()

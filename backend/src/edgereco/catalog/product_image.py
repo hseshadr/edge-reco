@@ -18,9 +18,29 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
+from enum import StrEnum
 from xml.sax.saxutils import escape, quoteattr
 
 from .models import Product
+
+
+class ImageMode(StrEnum):
+    """How a published bundle expects product images to be served.
+
+    ``LOCAL`` (the default) localizes every photo at build time and serves it from our
+    own origin, so the deployed CSP can stay ``img-src 'self' data:`` and a page load
+    makes ZERO third-party requests. ``REMOTE`` keeps the catalog's own CDN urls and
+    requires the deployment to list those hosts in ``img-src`` — cheaper to build, but
+    every visitor's IP reaches that CDN on page load.
+
+    LOCAL is the default deliberately: the storefront's headline claim is that nothing
+    leaves the browser, so the mode that preserves it is the one you get for free.
+    """
+
+    LOCAL = "local"
+    REMOTE = "remote"
+
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 _FONT = "system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
@@ -48,30 +68,50 @@ def _require_safe_id(product_id: str) -> str:
     return product_id
 
 
-def image_relpath(product_id: str) -> str:
+def image_relpath(product_id: str, extension: str = "svg") -> str:
     """Bundle-relative path for a product's card (staged + covered by the signature)."""
-    return f"images/{_require_safe_id(product_id)}.svg"
+    return f"images/{_require_safe_id(product_id)}.{_require_safe_id(extension)}"
 
 
-def local_image_url(product_id: str) -> str:
+def local_image_url(product_id: str, extension: str = "svg") -> str:
     """Root-relative same-origin URL the SPA renders (passes ``isLocalImage``)."""
-    return f"/images/{_require_safe_id(product_id)}.svg"
+    return f"/images/{_require_safe_id(product_id)}.{_require_safe_id(extension)}"
 
 
-def _localize_line(line: str) -> tuple[str, str, bytes]:
-    """One catalog line -> (rewritten line, card relpath, card bytes)."""
+def _localize_line(line: str, staged: Mapping[str, str]) -> tuple[str, str, bytes | None]:
+    """One catalog line -> (rewritten line, card relpath, card bytes or None).
+
+    ``staged`` maps a product id to the extension of a REAL photo the build already
+    localized. For those, the url points at the photo and no bytes are emitted — the
+    file is already on disk and must not be overwritten by a placeholder.
+    """
     product = Product.model_validate_json(line)
     record = json.loads(line)
-    record["image_url"] = local_image_url(product.id)
+    extension = staged.get(product.id)
+    record["image_url"] = local_image_url(product.id, extension or "svg")
     rewritten = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    if extension is not None:
+        return rewritten, image_relpath(product.id, extension), None
     svg = generate_product_image(product).encode("utf-8")
     return rewritten, image_relpath(product.id), svg
 
 
-def localize_catalog(raw: str) -> tuple[str, dict[str, bytes]]:
-    """Point every product's ``image_url`` at a local card and render those cards.
+def localize_catalog(
+    raw: str,
+    staged: Mapping[str, str] | None = None,
+    mode: ImageMode = ImageMode.LOCAL,
+) -> tuple[str, dict[str, bytes]]:
+    """Point every product's ``image_url`` at a local card and render the missing ones.
 
-    Returns the rewritten ``products.jsonl`` text plus ``{bundle relpath: svg bytes}``.
+    ``staged`` maps a product id to the extension of a REAL photo the build already
+    downloaded (``image_download``). Those keep their url and their bytes; every other
+    product falls back to a generated placeholder card. So the real photo is the
+    default and the card is the fallback, per product, with no build-wide failure mode.
+
+    Returns the rewritten ``products.jsonl`` text plus ``{bundle relpath: bytes}`` for
+    the cards this call rendered — staged photos are already on disk and are
+    deliberately absent from that map so nothing overwrites them.
+
     Deterministic AND idempotent: an already-localized catalog re-renders to the
     same bytes (the url is derived from the product id, never from its old value),
     so republishing never moves the bundle hash.
@@ -83,15 +123,23 @@ def localize_catalog(raw: str) -> tuple[str, dict[str, bytes]]:
     also exactly what the browser consumer splits on, so the two agree by
     construction rather than by luck.
     """
+    if mode is ImageMode.REMOTE:
+        # The catalog's own urls ARE the contract in this mode; rewriting them here is
+        # what would silently strand the deployment on placeholders.
+        return raw, {}
+    return _localize_records(raw, staged or {})
+
+
+def _localize_records(raw: str, staged: Mapping[str, str]) -> tuple[str, dict[str, bytes]]:
+    """Rewrite every non-blank record and collect the cards this call had to render."""
     cards: dict[str, bytes] = {}
     lines: list[str] = []
-    for line in raw.split("\n"):
-        if not line.strip():
-            continue
-        rewritten, relpath, svg = _localize_line(line)
+    for line in filter(str.strip, raw.split("\n")):
+        rewritten, relpath, svg = _localize_line(line, staged)
         lines.append(rewritten)
-        cards[relpath] = svg
-    return ("\n".join(lines) + "\n" if lines else ""), cards
+        if svg is not None:
+            cards[relpath] = svg
+    return "".join(f"{line}\n" for line in lines), cards
 
 
 def _gradient(category: str) -> tuple[str, str]:
