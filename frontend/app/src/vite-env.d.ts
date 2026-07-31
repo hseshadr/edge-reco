@@ -10,6 +10,8 @@ interface ImportMetaEnv {
 	 * `api/bundleUrl.resolveBundleBaseUrl`.
 	 */
 	readonly VITE_BUNDLE_BASE_URL: string;
+	/** Space-separated https origins a REMOTE-mode build may load product photos from. */
+	readonly VITE_REMOTE_IMAGE_HOSTS?: string;
 	/**
 	 * Optional "mimicked cloud" collector for the interaction-event uplink
 	 * (the flywheel). UNSET/empty → the uplink is fully disabled and the demo

@@ -40,6 +40,7 @@ from edgeproc.bundles.publish import build_bundle
 from edgeproc.bundles.signing import Ed25519Signer
 from pydantic import BaseModel
 
+from edgereco.catalog.product_image import ImageMode, localize_catalog
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
 from edgereco.reco.score_receipt import (
@@ -58,6 +59,9 @@ BUNDLE_FILES: Final[tuple[str, ...]] = (
     "cooccurrence.json",
     "images",
 )
+#: Raster extensions a staged REAL photo may carry (mirrors ``image_download``).
+#: ``svg`` is deliberately absent — that is the generated placeholder, not a photo.
+_PHOTO_EXTENSIONS: Final[frozenset[str]] = frozenset({"jpg", "png", "webp"})
 _META_NAME: Final[str] = "catalog_meta.json"
 _RANKING_NAME: Final[str] = "ranking_config.json"
 _COOCCURRENCE_NAME: Final[str] = "cooccurrence.json"
@@ -100,6 +104,7 @@ def publish_bundle(
     product_count: int,
     require_feature_files: bool = False,
     sequence: int = 1,
+    image_mode: ImageMode = ImageMode.LOCAL,
 ) -> None:
     """Write ``catalog_meta.json`` then build the signed origin from the staging dir.
 
@@ -118,6 +123,7 @@ def publish_bundle(
         schema_version=CURRENT_META_SCHEMA,
     )
     _write_json_no_follow(staging_dir / _META_NAME, meta.model_dump_json())
+    _localize_product_images(staging_dir, image_mode)
     _ensure_ranking_config(staging_dir, require_present=require_feature_files)
     _ensure_cooccurrence(staging_dir, require_present=require_feature_files)
     _write_ranking_receipt(staging_dir, private_key_path)
@@ -191,21 +197,89 @@ def _ensure_cooccurrence(staging_dir: Path, *, require_present: bool = False) ->
     _write_json_no_follow(cooc_path, CooccurrenceMatrix().model_dump_json())
 
 
-def _write_json_no_follow(path: Path, payload: str) -> None:
-    """Write ``payload`` to ``path`` refusing to follow a symlink at the final component.
+def _localize_product_images(staging_dir: Path, image_mode: ImageMode) -> None:
+    """Bake a local card per product and point every ``image_url`` at it.
 
-    The producer unconditionally (re)writes its staging JSON — ``catalog_meta.json``
-    every publish, plus ``ranking_config.json`` / ``cooccurrence.json`` when defaulting.
-    Plain ``Path.write_text`` FOLLOWS a pre-planted symlink at that path and would clobber
-    whatever it targets: an arbitrary host-file WRITE-through (the mirror of the read-side
-    guard below). ``O_NOFOLLOW`` makes ``os.open`` fail with ``ELOOP`` on a symlink, so the
-    write can never be redirected; fail closed with a clear ``ValueError``. A real file at
-    the same path is created/truncated exactly as ``write_text`` would — only a symlink is
+    In ``ImageMode.REMOTE`` this is a no-op: the catalog keeps its own CDN urls and the
+    deployment is responsible for listing those hosts in ``img-src``.
+
+    The storefront renders an ``<img>`` only for a root-relative, same-origin url
+    (``ProductImage.isLocalImage``) and production ships ``img-src 'self' data:``, so
+    a bundle carrying third-party CDN urls shows NO product image — and would leak
+    every visitor's IP to that CDN if it did. Localizing here, in the producer, means
+    every publisher gets a catalog whose urls are servable and cards that are inside
+    the signature, not just the demo rebuild script.
+
+    SCOPE: this guarantees the cards EXIST and are signed. Serving them is still the
+    deployer's step — the SPA fetches ``/images/<id>.svg`` from the static origin, and
+    only ``scripts/rebuild_example_bundle.py`` currently mirrors them there (into
+    ``frontend/app/public/images``). A third-party publisher must copy the bundle's
+    ``images/`` to its own static root.
+
+    Idempotent: the url is derived from the product id, and the renderer is
+    deterministic, so republishing an already-localized catalog is a no-op bytewise.
+
+    Note the ``images`` DIR is symlink-checked as well as each card. ``O_NOFOLLOW``
+    only guards the FINAL path component, and ``mkdir(exist_ok=True)`` accepts a
+    symlink that already points at a directory — so without this check a planted
+    ``images -> /somewhere`` would redirect every card write out of the staging tree.
+    """
+    products_path = staging_dir / "products.jsonl"
+    _refuse_symlink(products_path, staging_dir)
+    images_dir = staging_dir / "images"
+    _refuse_symlink(images_dir, staging_dir)
+    if image_mode is ImageMode.REMOTE:
+        return  # nothing to write: the catalog's own urls ARE the contract here
+    rewritten, cards = localize_catalog(
+        products_path.read_text(encoding="utf-8"), _staged_photos(images_dir), image_mode
+    )
+    _write_json_no_follow(products_path, rewritten)
+    images_dir.mkdir(exist_ok=True)
+    for relpath, svg in cards.items():
+        _write_bytes_no_follow(staging_dir / relpath, svg)
+
+
+def _staged_photos(images_dir: Path) -> dict[str, str]:
+    """Map product id -> extension for every REAL photo the build already localized.
+
+    A staged ``<id>.jpg`` means the download step succeeded for that product, so the
+    producer points its url there and leaves the bytes alone. ``.svg`` is skipped: it
+    is the placeholder this function's caller regenerates, never a real photo.
+    """
+    if not images_dir.is_dir():
+        return {}
+    return {
+        path.stem: path.suffix.lstrip(".").lower()
+        for path in sorted(images_dir.iterdir())
+        if _is_staged_photo(path)
+    }
+
+
+def _is_staged_photo(path: Path) -> bool:
+    """A real, non-symlinked photo file the download step left for the producer."""
+    return (
+        path.is_file()
+        and not path.is_symlink()
+        and path.suffix.lstrip(".").lower() in _PHOTO_EXTENSIONS
+    )
+
+
+def _open_no_follow(path: Path) -> int:
+    """Open ``path`` for writing, refusing to follow a symlink at the final component.
+
+    The producer unconditionally (re)writes its staging files — ``catalog_meta.json``
+    every publish, plus ``ranking_config.json`` / ``cooccurrence.json`` when defaulting
+    and the localized ``products.jsonl`` / ``images/*.svg``. Plain ``Path.write_text``
+    FOLLOWS a pre-planted symlink at that path and would clobber whatever it targets: an
+    arbitrary host-file WRITE-through (the mirror of the read-side guard below).
+    ``O_NOFOLLOW`` makes ``os.open`` fail with ``ELOOP`` on a symlink, so the write can
+    never be redirected; fail closed with a clear ``ValueError``. A real file at the same
+    path is created/truncated exactly as ``write_text`` would — only a symlink is
     refused. Portable: a platform without the flag yields ``0`` (a no-op bit).
     """
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(path, flags, 0o644)
+        return os.open(path, flags, 0o644)
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             raise ValueError(
@@ -213,7 +287,17 @@ def _write_json_no_follow(path: Path, payload: str) -> None:
                 "planted symlink would redirect the producer's write to an arbitrary file"
             ) from exc
         raise
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+
+
+def _write_json_no_follow(path: Path, payload: str) -> None:
+    """Write text to ``path`` through the symlink-refusing open."""
+    with os.fdopen(_open_no_follow(path), "w", encoding="utf-8") as handle:
+        handle.write(payload)
+
+
+def _write_bytes_no_follow(path: Path, payload: bytes) -> None:
+    """Write bytes to ``path`` through the symlink-refusing open."""
+    with os.fdopen(_open_no_follow(path), "wb") as handle:
         handle.write(payload)
 
 
@@ -254,13 +338,27 @@ def _read_bundle_files(staging_dir: Path) -> dict[str, bytes]:
         _refuse_symlink(path, staging_dir)
         files[name] = path.read_bytes()
     _read_tree(staging_dir, "vector", files)
-    _read_tree(staging_dir, "images", files)
+    _read_tree(staging_dir, "images", files, skip_extensions=_PHOTO_EXTENSIONS)
     return files
 
 
-def _read_tree(staging_dir: Path, subdir: str, files: dict[str, bytes]) -> None:
-    """Read every file under ``staging_dir/subdir`` into ``files`` (symlink-refused)."""
+def _read_tree(
+    staging_dir: Path,
+    subdir: str,
+    files: dict[str, bytes],
+    *,
+    skip_extensions: frozenset[str] = frozenset(),
+) -> None:
+    """Read every file under ``staging_dir/subdir`` into ``files`` (symlink-refused).
+
+    ``skip_extensions`` keeps DOWNLOADED PRODUCT PHOTOS out of the signed set. They are
+    an ORIGIN asset, not bundle payload: `syncIndex` reassembles and hash-verifies every
+    file in the manifest on every sync, so signing ~16 MB of photos would make each
+    visitor download and verify bytes no client ever reads back — the SPA loads
+    ``/images/<id>`` as ordinary static assets, lazily, from the same origin. Excluding
+    them keeps the bundle ~4.6 MB and the "one small signed file" promise intact.
+    """
     for path in sorted((staging_dir / subdir).rglob("*")):
         _refuse_symlink(path, staging_dir)
-        if path.is_file():
+        if path.is_file() and path.suffix.lstrip(".").lower() not in skip_extensions:
             files[path.relative_to(staging_dir).as_posix()] = path.read_bytes()

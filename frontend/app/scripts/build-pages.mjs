@@ -27,6 +27,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { imgSrcForMode, REMOTE_IMAGE_HOSTS } from "./imageCsp.mjs";
+
 const APP_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /** The committed signed bundle this repo ships (latest + manifest/* + chunk/*). */
@@ -50,7 +52,35 @@ export function pagesEnv(env) {
 		// at "/". Forks on a GitHub Pages project subpath override VITE_BASE=/<repo>/.
 		VITE_BASE: env.VITE_BASE ?? "/",
 		VITE_BUNDLE_BASE_URL: env.VITE_BUNDLE_BASE_URL ?? "bundle",
+		// REMOTE mode must widen BOTH the deployed img-src and the component's own
+		// allowlist. Both are derived from REMOTE_IMAGE_HOSTS so they cannot drift:
+		// a CSP that permits the host renders nothing while ProductImage refuses the
+		// url, which is precisely how this mode first shipped as 54 placeholders.
+		VITE_REMOTE_IMAGE_HOSTS:
+			env.EDGERECO_IMAGE_MODE === "remote" ? REMOTE_IMAGE_HOSTS.join(" ") : "",
 	};
+}
+
+/**
+ * Align the SHIPPED `_headers` with the image mode the catalog bundle was published in.
+ *
+ * `EDGERECO_IMAGE_MODE=remote` means the bundle kept the catalog's own CDN urls, so the
+ * deployed `img-src` has to name those hosts or the browser blocks every photo and the
+ * storefront silently shows nothing. `local` (the default) ships the committed strict
+ * policy untouched, because every photo is served from this origin.
+ */
+function applyImageModeCsp(env) {
+	const mode = env.EDGERECO_IMAGE_MODE ?? "local";
+	if (mode !== "local" && mode !== "remote") {
+		die(`EDGERECO_IMAGE_MODE must be "local" or "remote", got ${mode}`);
+	}
+	const headersPath = join(DIST_DIR, "_headers");
+	const before = readFileSync(headersPath, "utf8");
+	const after = imgSrcForMode(before, mode);
+	writeFileSync(headersPath, after, "utf8");
+	process.stdout.write(
+		`>> image mode: ${mode} (img-src ${after === before ? "unchanged" : "widened"})\n`,
+	);
 }
 
 function die(message) {
@@ -115,6 +145,7 @@ function main() {
 		die("bundle copy failed — dist/bundle/latest missing.");
 	}
 	writeBuildIdentity(env);
+	applyImageModeCsp(env);
 	process.stdout.write(
 		`>> Pages dist ready: ${DIST_DIR} (signed bundle copied same-origin to dist/bundle)\n`,
 	);

@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,9 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { configDefaults } from "vitest/config";
+// @ts-expect-error -- plain-ESM build script shared with build-pages.mjs (no types).
+import { imgSrcForMode } from "./scripts/imageCsp.mjs";
+import { previewCsp } from "./src/previewHeaders";
 
 // DEV-ONLY: serve the staged onnxruntime-web runtime under /ort/ as raw files.
 // In production /ort/ is plain static output and its loader module dynamic-
@@ -38,6 +42,46 @@ function serveOrtRuntimeRawInDev(): Plugin {
 					},
 					() => next(),
 				);
+			});
+		},
+	};
+}
+
+// Serve the PRODUCTION Content-Security-Policy under `vite preview`.
+//
+// Cloudflare Pages parses public/_headers in production; plain `vite preview`
+// serves NO headers, so the preview-driven e2e lane (tests/e2e-offline — the one
+// lane that runs the real production build) ran with NO CSP at all. A resource the
+// live policy blocks therefore passed CI green and broke only on edge-reco.com.
+// The storefront's product cards are exactly that shape: `img-src 'self' data:`
+// means an off-origin card url renders nothing in production while preview would
+// happily display it.
+//
+// CSP only: the other _headers entries (HSTS, Cache-Control, …) don't change
+// client-side behavior, and full Pages merge semantics stay Cloudflare's job. NOT
+// applied to `vite dev` — dev injects the react-refresh inline preamble that the
+// production script-src blocks. Parser tested in src/previewHeaders.test.ts.
+function previewProdCspPlugin(): Plugin {
+	const headersPath = join(
+		dirname(fileURLToPath(import.meta.url)),
+		"public",
+		"_headers",
+	);
+	return {
+		name: "edgereco:preview-prod-csp",
+		configurePreviewServer(server) {
+			// The SAME `imgSrcForMode` the production build applies to dist/_headers, so
+			// a preview-driven e2e sees the policy the deployment will actually serve.
+			const mode =
+				process.env.EDGERECO_IMAGE_MODE === "remote" ? "remote" : "local";
+			const csp = previewCsp(
+				readFileSync(headersPath, "utf-8"),
+				process.env.VITE_BUNDLE_BASE_URL,
+				(policy: string) => imgSrcForMode(policy, mode),
+			);
+			server.middlewares.use((_req, res, next) => {
+				res.setHeader("Content-Security-Policy", csp);
+				next();
 			});
 		},
 	};
@@ -117,7 +161,7 @@ const pwa = process.env.VITEST
 
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [react(), serveOrtRuntimeRawInDev(), ...pwa],
+	plugins: [react(), serveOrtRuntimeRawInDev(), previewProdCspPlugin(), ...pwa],
 	base: process.env.VITE_BASE ?? "/",
 	build: {
 		// esbuild's default build target ('modules' ≈ es2020) downlevels native
