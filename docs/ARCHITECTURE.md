@@ -22,13 +22,65 @@ The backend pulls both substrate repos from public GitHub automatically (git sou
 
 ## System context
 
-![system context](diagrams/system-context.svg)
+```mermaid
+flowchart TB
+  subgraph publish["Publish side — Python, runs in CI"]
+    build["edgereco build-catalog → index → bundle<br>FAISS index · BM25 · ranking_config.json"]
+    sign["Sign the latest pointer with Ed25519"]
+  end
+
+  subgraph serve["Static origin behind an edge cache"]
+    origin["latest pointer — short TTL<br>manifest and chunk objects — named by sha256, immutable"]
+  end
+
+  subgraph consumers["Two execution shapes, one engine"]
+    browser["Browser tier — @edgeproc/browser<br>sync worker → OPFS → search and rerank in the tab"]
+    api["FastAPI runtime — edgereco serve<br>same sync, same scoring formula"]
+  end
+
+  build --> sign --> origin
+  origin --> browser
+  origin --> api
+  browser -.->|"optional, off by default"| events["Event collector → edgereco retrain<br>recompute popularity, re-sign, republish"]
+  events -.-> build
+
+  classDef pub fill:#f0e8f8,stroke:#9472b0,color:#171717;
+  classDef cdn fill:#f8f0e8,stroke:#c2925a,color:#171717;
+  classDef local fill:#e8f8e8,stroke:#5fa85f,color:#171717;
+  classDef opt fill:#e8f4f8,stroke:#5b9bbf,color:#171717;
+  class build,sign pub;
+  class origin cdn;
+  class browser,api local;
+  class events opt;
+```
 
 The publisher signs the bundle once. The CDN/edge serves immutable chunks and a short-TTL `latest` pointer. The browser (or the FastAPI runtime) syncs the bundle into OPFS / disk, verifies it against a pinned ed25519 public key, reassembles the FAISS index + product catalog, and runs every query locally. After sync, the runtime is offline-capable.
 
 ## Request lifecycle
 
-![recommendation request flow](diagrams/recommendation-request-flow.svg)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Nimbus UI
+    participant Engine as Engine (same code, both tiers)
+    participant BM25 as BM25 keyword index
+    participant Vec as FAISS vector index
+    participant Session as Session profile (memory only)
+
+    UI->>Engine: search(query) or recommend(strategy, seed)
+    par Retrieve
+        Engine->>BM25: top-k by keyword
+        BM25-->>Engine: ranked ids
+    and
+        Engine->>Vec: top-k by embedding
+        Vec-->>Engine: ranked ids
+    end
+    Engine->>Engine: Fuse — Reciprocal Rank Fusion, k=60
+    Engine->>Session: read category / tag / brand affinity
+    Engine->>Engine: Rerank — personalized_score
+    Engine-->>UI: ranked products + score_components
+    UI->>Session: click / view / favorite / cart
+```
 
 A query goes through three stages, on whichever tier is running it:
 
@@ -119,7 +171,29 @@ Serve-side (when running as API server): `edgereco serve` syncs the signed bundl
 
 `frontend/packages/edgeproc-browser/src/`:
 
-![browser internals](diagrams/browser-internals.svg)
+```mermaid
+flowchart LR
+  app["Nimbus React app<br>frontend/app/"]
+  engine["Engine — engine.ts<br>BM25 + vector → RRF → session rerank"]
+  sync["Sync worker — worker.ts<br>fetch latest, verify Ed25519,<br>diff the manifest, re-check every chunk's sha256"]
+  embed["Embedder worker — embedderWorker.ts<br>transformers.js, all-MiniLM-L6-v2"]
+  opfs[("OPFS bundle cache<br>content-addressed chunks")]
+  profile["Session profile<br>in memory, never persisted"]
+
+  app --> engine
+  engine --> sync
+  engine --> embed
+  sync -->|"atomic promote on success"| opfs
+  opfs --> engine
+  engine <--> profile
+
+  classDef ui fill:#e8f4f8,stroke:#5b9bbf,color:#171717;
+  classDef work fill:#f0e8f8,stroke:#9472b0,color:#171717;
+  classDef store fill:#f8f0e8,stroke:#c2925a,color:#171717;
+  class app,engine ui;
+  class sync,embed work;
+  class opfs,profile store;
+```
 
 - **Sync** — Worker that fetches `/latest`, verifies ed25519 against a SPA-pinned public key, diffs the manifest against the OPFS cache, fetches missing chunks, re-checks every chunk's sha256, atomically promotes the new version.
 - **Embedder** — `Xenova/all-MiniLM-L6-v2` via transformers.js. Parity-tested against the Python encoder at cosine ≥ 0.99.
@@ -201,4 +275,9 @@ requires the exact-SHA and canonical-host checks in `.github/workflows/deploy.ym
 - [`DEPLOY.md`](DEPLOY.md) — backend-free in-browser vs edge-origin shapes.
 - [`SECURITY-PRIVACY.md`](SECURITY-PRIVACY.md) — threat boundaries, data flow,
   egress, retention, and operator requirements.
-- [`diagrams/`](diagrams/) — the rest of the d2 sources (manifest lifecycle, artifact distribution, event uplink, personalization flywheel).
+- [`DEPLOY.md`](DEPLOY.md) — the artifact-distribution and bundle-lifecycle diagrams
+  live there, next to the deployment shapes they describe.
+
+All diagrams in this repo are inline Mermaid. There is no diagram build step and no
+committed image to go stale: GitHub renders the fences natively, and a diagram edit
+shows up as a readable diff in review.

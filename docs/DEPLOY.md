@@ -11,7 +11,22 @@ Both deliver the same scoring; the bundle contract is identical.
 
 ## Shape 1 — Backend-free (the headline demo)
 
-![artifact distribution](diagrams/artifact-distribution-flow.svg)
+```mermaid
+flowchart TB
+  origin["Static origin<br>latest + manifest + chunk objects"]
+  edge["Caddy edge / CDN<br>chunks immutable, latest short-TTL"]
+  spa["Nimbus SPA — static files<br>public key pinned at build time"]
+  verify["Sync + verify<br>Ed25519 on latest, sha256 per chunk<br>any mismatch aborts the load"]
+  opfs[("OPFS<br>content-addressed cache")]
+  tab["Search + recommend in the tab<br>no application backend in the request path"]
+
+  origin --> edge --> spa --> verify --> opfs --> tab
+
+  classDef cdn fill:#f8f0e8,stroke:#c2925a,color:#171717;
+  classDef local fill:#e8f8e8,stroke:#5fa85f,color:#171717;
+  class origin,edge cdn;
+  class spa,verify,opfs,tab local;
+```
 
 Architecture:
 
@@ -231,7 +246,22 @@ For multi-region: stamp the same container in each region; each replica syncs th
 
 ## Bundle lifecycle in production
 
-![manifest lifecycle](diagrams/manifest-lifecycle.svg)
+```mermaid
+flowchart TB
+  ci["Build CI<br>build-catalog → index → bundle"]
+  upload["Upload chunks + manifest<br>immutable, so upload order does not matter"]
+  flip["Flip the latest pointer — last<br>the only thing a client reacts to"]
+  resync["Clients re-sync on the next window<br>fetch only the chunks that changed"]
+
+  ci --> upload --> flip --> resync
+
+  classDef pub fill:#f0e8f8,stroke:#9472b0,color:#171717;
+  classDef cdn fill:#f8f0e8,stroke:#c2925a,color:#171717;
+  classDef local fill:#e8f8e8,stroke:#5fa85f,color:#171717;
+  class ci pub;
+  class upload,flip cdn;
+  class resync local;
+```
 
 Publisher (build CI):
 

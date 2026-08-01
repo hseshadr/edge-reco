@@ -22,10 +22,9 @@ bundle) → both tiers re-sync the new ranking. See `poe demo-flywheel` +
 `poe demo-retrain`.
 
 ## Docs
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture, embeds d2 diagrams
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture, embeds Mermaid diagrams
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run demo
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns
-- [`docs/diagrams/`](docs/diagrams/) — d2 sources + rendered SVGs
 
 ## Stack
 Python 3.13 · Pydantic v2 · Polars · FAISS · sentence-transformers · FastAPI · Typer · pytest-bdd · uv · Ruff · mypy strict · Docker Compose (origin + Caddy edge + app)
@@ -103,7 +102,11 @@ make demo-retrain    # cloud retrain: recompute popularity → re-sign → repub
 - Code review → `pr-review-toolkit:code-reviewer`
 - Docs↔code drift → `docs-sync` skill (code is truth; docs follow)
 
-## Diagrams (D2 + Tala)
-- `direction: down`
-- Pastel fills: `#e8f4f8` blue · `#f0e8f8` purple · `#e8f8e8` green · `#f8f0e8` orange · `#f8e8e8` red
-- Render: `d2 --layout tala <in>.d2 <out>.svg`
+## Diagrams (inline Mermaid)
+- Inline ```` ```mermaid ```` fences in the markdown. No `.d2`, no committed SVG, no
+  render step — GitHub renders the fence natively and a diagram edit diffs in review.
+- Pastel fills via `classDef`: `#e8f4f8` blue · `#f0e8f8` purple · `#e8f8e8` green ·
+  `#f8f0e8` orange · `#f8e8e8` red. Always pair a fill with `color:#171717` so the
+  labels stay legible in GitHub's dark theme.
+- README diagrams get 3–5 boxes, plain-language labels, and real numbers (720 products,
+  1.6 MB, Ed25519). Deep-dive docs may go wider. No jargon a newcomer can't parse.

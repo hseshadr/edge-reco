@@ -6,7 +6,7 @@
     <title>EdgeReco on GitHub — hseshadr/edge-reco (open source)</title>
     <meta
       name="description"
-      content="EdgeReco is open source. Canonical GitHub links for the EdgeReco repository, its maintainer hseshadr, the EdgeProc substrate it is built on, and edgeproc-core."
+      content="EdgeReco is open source. Canonical GitHub links for EdgeReco, the EdgeProc substrate it is built on, edgeproc-core, and the other five public repositories by the same maintainer."
     />
     <link rel="canonical" href="https://edge-reco.com/github" />
     <meta name="robots" content="index,follow" />
@@ -15,7 +15,7 @@
     <meta property="og:title" content="EdgeReco on GitHub | Open-source browser recommendations" />
     <meta
       property="og:description"
-      content="Find the canonical EdgeReco, EdgeProc, and edgeproc-core repositories, plus the maintainer's GitHub profile and the live EdgeReco demo."
+      content="Find the canonical EdgeReco, EdgeProc, and edgeproc-core repositories, the maintainer's other public projects, and the live EdgeReco demo."
     />
     <meta property="og:url" content="https://edge-reco.com/github" />
     <meta property="og:image" content="https://edge-reco.com/og-card.png" />
@@ -26,16 +26,108 @@
     <meta name="twitter:title" content="EdgeReco on GitHub | Open-source browser recommendations" />
     <meta
       name="twitter:description"
-      content="Find the canonical EdgeReco, EdgeProc, and edgeproc-core repositories, plus the maintainer's GitHub profile and the live EdgeReco demo."
+      content="Find the canonical EdgeReco, EdgeProc, and edgeproc-core repositories, the maintainer's other public projects, and the live EdgeReco demo."
     />
     <meta name="twitter:image" content="https://edge-reco.com/og-card.png" />
     <meta name="twitter:image:alt" content="EdgeReco open-source repositories on GitHub" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "@id": "https://edge-reco.com/github#page",
+        "url": "https://edge-reco.com/github",
+        "name": "EdgeReco on GitHub",
+        "description": "Canonical GitHub repositories for EdgeReco and the other public projects by hseshadr.",
+        "isPartOf": { "@id": "https://edge-reco.com/#edgereco" },
+        "about": { "@id": "https://edge-reco.com/#edgereco" },
+        "author": { "@id": "https://github.com/hseshadr#hseshadr" },
+        "mainEntity": {
+          "@type": "ItemList",
+          "name": "Public repositories by hseshadr",
+          "itemListOrder": "https://schema.org/ItemListUnordered",
+          "numberOfItems": 8,
+          "itemListElement": [
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "edge-reco",
+              "codeRepository": "https://github.com/hseshadr/edge-reco",
+              "url": "https://edge-reco.com/",
+              "programmingLanguage": ["TypeScript", "Python"],
+              "sameAs": ["https://github.com/hseshadr/edge-reco", "https://edge-reco.com/"]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "edge-proc",
+              "codeRepository": "https://github.com/hseshadr/edge-proc",
+              "programmingLanguage": "Python",
+              "sameAs": ["https://github.com/hseshadr/edge-proc"]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "edgeproc-core",
+              "codeRepository": "https://github.com/hseshadr/edgeproc-core",
+              "programmingLanguage": "Python",
+              "sameAs": [
+                "https://github.com/hseshadr/edgeproc-core",
+                "https://pypi.org/project/edgeproc-core/"
+              ]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "aml-filter",
+              "codeRepository": "https://github.com/hseshadr/aml-filter",
+              "url": "https://aml-filter.com/",
+              "programmingLanguage": "TypeScript",
+              "sameAs": ["https://github.com/hseshadr/aml-filter", "https://aml-filter.com/"]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "privacy-core",
+              "codeRepository": "https://github.com/hseshadr/privacy-core",
+              "programmingLanguage": "TypeScript",
+              "sameAs": ["https://github.com/hseshadr/privacy-core"]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "assay",
+              "codeRepository": "https://github.com/hseshadr/assay",
+              "programmingLanguage": ["Python", "TypeScript"],
+              "sameAs": [
+                "https://github.com/hseshadr/assay",
+                "https://pypi.org/project/avow/",
+                "https://www.npmjs.com/package/@edgeproc/avow"
+              ]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "almamesh",
+              "codeRepository": "https://github.com/hseshadr/almamesh",
+              "url": "https://almamesh.com/",
+              "programmingLanguage": "Python",
+              "sameAs": ["https://github.com/hseshadr/almamesh", "https://almamesh.com/"]
+            },
+            {
+              "@type": "SoftwareSourceCode",
+              "name": "ci",
+              "codeRepository": "https://github.com/hseshadr/ci",
+              "programmingLanguage": "YAML",
+              "sameAs": ["https://github.com/hseshadr/ci"]
+            }
+          ]
+        }
+      }
+    </script>
     <style>
       body { max-width: 46rem; margin: 2rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; line-height: 1.55; color: #1a1a1a; }
       h1 { margin-bottom: 0.2rem; }
+      h3 { margin-bottom: 0.3rem; }
+      ul.repos { list-style: none; padding: 0; }
+      ul.repos li { margin: 0 0 1rem; }
+      ul.repos a { color: #1a5fb4; }
       footer.entity-nav { margin-top: 2.5rem; padding-top: 1.2rem; border-top: 1px solid #e2e2e2; font-size: 0.85rem; color: #555; }
       footer.entity-nav a { color: #1a5fb4; text-decoration: none; }
       footer.entity-nav a:hover { text-decoration: underline; }
+      footer.entity-nav p { margin: 0.4rem 0; }
     </style>
   </head>
   <body>
@@ -44,16 +136,79 @@
       <p>
         <strong>EdgeReco</strong> is an open-source, browser-first product recommendation
         engine. Its source lives on GitHub at
-        <a href="https://github.com/hseshadr/edge-reco">hseshadr/edge-reco</a>.
+        <a href="https://github.com/hseshadr/edge-reco">hseshadr/edge-reco</a>. Everything
+        below is public, and every repository is maintained by
+        <a href="https://github.com/hseshadr">hseshadr</a>.
       </p>
 
       <section>
-        <h2>Canonical GitHub links</h2>
-        <ul>
-          <li><strong>EdgeReco repository:</strong> <a href="https://github.com/hseshadr/edge-reco">https://github.com/hseshadr/edge-reco</a></li>
-          <li><strong>Maintainer:</strong> <a href="https://github.com/hseshadr">https://github.com/hseshadr</a></li>
-          <li><strong>EdgeProc substrate (EdgeReco is built on it):</strong> <a href="https://github.com/hseshadr/edge-proc">https://github.com/hseshadr/edge-proc</a></li>
-          <li><strong>edgeproc-core (EdgeProc's foundation, on PyPI):</strong> <a href="https://github.com/hseshadr/edgeproc-core">https://github.com/hseshadr/edgeproc-core</a></li>
+        <h2>The EdgeReco stack</h2>
+        <ul class="repos">
+          <li>
+            <a href="https://github.com/hseshadr/edge-reco"><strong>hseshadr/edge-reco</strong></a>
+            — Product search and recommendations that run on the shopper's device: a
+            720-product catalog ships as a 1.6 MB signed, content-addressed bundle, then
+            MiniLM semantic search, rank fusion and session-aware reranking all run in the
+            tab. Zero backend calls after sync. 984 tests.
+          </li>
+          <li>
+            <a href="https://github.com/hseshadr/edge-proc"><strong>hseshadr/edge-proc</strong></a>
+            — Ship a search index to a device as signed, content-addressed bundles:
+            fail-closed Ed25519 verification, FastCDC chunking so the next release
+            downloads only the chunks that changed, then FAISS + BM25 rank fusion locally.
+            Python. 309 tests, 98% coverage. EdgeReco is built on it.
+          </li>
+          <li>
+            <a href="https://github.com/hseshadr/edgeproc-core"><strong>hseshadr/edgeproc-core</strong></a>
+            — Decides which partition a vector belongs in when a vector index is split
+            across tenants, users, or time windows: three routing strategies plus result
+            merge-back, one runtime dependency (pydantic), no index of its own. 243 tests,
+            98% coverage. On PyPI as
+            <a href="https://pypi.org/project/edgeproc-core/">edgeproc-core</a>.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Other repositories by the same maintainer</h2>
+        <ul class="repos">
+          <li>
+            <a href="https://github.com/hseshadr/aml-filter"><strong>hseshadr/aml-filter</strong></a>
+            — Screen a name against 31,566 sanctioned entities — OFAC SDN, EU, UN and UK
+            OFSI — entirely inside your browser tab. Signed watchlist bundles with
+            fail-closed Ed25519 verification, explainable fuzzy matching, and customer
+            records that never leave SQLite-WASM on your own disk. 1,215 tests. Live at
+            <a href="https://aml-filter.com/">aml-filter.com</a>.
+          </li>
+          <li>
+            <a href="https://github.com/hseshadr/privacy-core"><strong>hseshadr/privacy-core</strong></a>
+            — Redact PII in the browser before a prompt ever leaves the machine, then
+            rehydrate the reply locally: 11 entity types, Luhn/SSN/IBAN checksum
+            validation, and a type-checked Egress Guard on the send path. TypeScript. 173
+            tests, 100% coverage.
+          </li>
+          <li>
+            <a href="https://github.com/hseshadr/assay"><strong>hseshadr/assay</strong></a>
+            — Sign a decision record with Ed25519 over RFC 8785 canonical JSON, then
+            verify it offline years later — shipped as avow on PyPI and @edgeproc/avow on
+            npm. 12 shared golden vectors prove Python and TypeScript emit byte-identical
+            signatures. 198 tests, 100% branch coverage.
+          </li>
+          <li>
+            <a href="https://github.com/hseshadr/almamesh"><strong>hseshadr/almamesh</strong></a>
+            — Free Vedic astrology that runs the entire Python engine inside your browser
+            via Pyodide — Skyfield with the DE421 JPL kernel, 19 classical yoga rules, 900
+            engine tests. No account, no server call after first load, works offline.
+            Optional bring-your-own-key AI narration. Live at
+            <a href="https://almamesh.com/">almamesh.com</a>.
+          </li>
+          <li>
+            <a href="https://github.com/hseshadr/ci"><strong>hseshadr/ci</strong></a>
+            — The GitHub Actions the edgeproc repos share instead of each hand-rolling: 7
+            reusable workflows + 5 composite actions for gates, secret scanning, dependency
+            audit, OIDC publish to PyPI/npm, and Pages deploy. Every uses: is SHA-pinned; a
+            scheduled job reports the 29 controls consumers still hand-roll.
+          </li>
         </ul>
       </section>
 
@@ -62,6 +217,7 @@
         <p><strong>Name:</strong> EdgeReco</p>
         <p><strong>Also written as:</strong> Edge-Reco, edge-reco</p>
         <p><strong>Repository:</strong> hseshadr/edge-reco on GitHub</p>
+        <p><strong>Maintainer:</strong> <a href="https://github.com/hseshadr">hseshadr</a></p>
         <p><strong>Category:</strong> open-source browser-first product recommendation engine</p>
         <p><strong>Runtime:</strong> web browser / local-first execution</p>
         <p><strong>Core techniques:</strong> signed, content-addressed catalog bundles verified fail-closed; BM25 keyword search; FAISS vector search; Reciprocal Rank Fusion; session-aware reranking</p>
@@ -69,8 +225,12 @@
       </section>
 
       <section>
-        <h2>Live demo</h2>
-        <p><a href="https://edge-reco.com/">https://edge-reco.com/</a></p>
+        <h2>Live sites</h2>
+        <ul>
+          <li><a href="https://edge-reco.com/">edge-reco.com</a> — the EdgeReco demo storefront (this site).</li>
+          <li><a href="https://aml-filter.com/">aml-filter.com</a> — sanctions screening in the browser tab.</li>
+          <li><a href="https://almamesh.com/">almamesh.com</a> — the Python astrology engine running in the browser via Pyodide.</li>
+        </ul>
       </section>
     </main>
     <footer class="entity-nav">
@@ -79,8 +239,12 @@
         <a href="/">Home (EdgeReco live demo)</a> ·
         <a href="/edgeproc">What is EdgeProc?</a> ·
         <a href="/faq">FAQ</a> ·
-        <a href="https://github.com/hseshadr/edge-reco">hseshadr/edge-reco</a> ·
-        <a href="https://github.com/hseshadr/edge-proc">hseshadr/edge-proc</a>
+        <a href="https://github.com/hseshadr">All repositories (hseshadr)</a>
+      </p>
+      <p>
+        More from the same maintainer:
+        <a href="https://aml-filter.com/">aml-filter.com</a> ·
+        <a href="https://almamesh.com/">almamesh.com</a>
       </p>
     </footer>
   </body>

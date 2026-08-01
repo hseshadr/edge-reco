@@ -19,6 +19,38 @@ const ROUTES = [
 ];
 
 const SOCIAL_ROUTES = ROUTES.filter(({ path }) => path !== "/");
+
+// /github is the only page whose job is to hand crawlers a path to every
+// repository. Google had zero pages indexed for five of these eight because
+// nothing on the open web linked to them — a sitemap alone does not carry
+// authority, an <a href> does. Pin the full set so a future edit cannot quietly
+// drop one back into invisibility.
+const PUBLIC_REPOS = [
+	"edge-reco",
+	"edge-proc",
+	"edgeproc-core",
+	"aml-filter",
+	"privacy-core",
+	"assay",
+	"almamesh",
+	"ci",
+];
+
+// The three live sites are separate domains with no inbound links between them.
+// Every page must reach the other two, or each stays an island.
+const SIBLING_SITES = ["https://aml-filter.com/", "https://almamesh.com/"];
+
+// A Set, deliberately: these assertions must match a whole href, never a
+// substring of one. `"…/hseshadr".includes()`-style checks pass for
+// `https://evil.example/?q=https://github.com/hseshadr`, and CodeQL is right to
+// flag that shape even inside a test.
+function hrefs(document) {
+	return new Set(
+		[...document.querySelectorAll("a[href]")].map((a) =>
+			a.getAttribute("href"),
+		),
+	);
+}
 const AI_CRAWLERS = [
 	"GPTBot",
 	"OAI-SearchBot",
@@ -187,6 +219,59 @@ test("sitemap lists every canonical route with an ISO lastmod date", async () =>
 	for (const { lastmod } of entries) {
 		assert.match(lastmod ?? "", /^\d{4}-\d{2}-\d{2}$/u);
 		assert.ok(!Number.isNaN(Date.parse(lastmod ?? "")));
+	}
+});
+
+test("/github links every public repository with real describing copy", async () => {
+	const document = await htmlDocument("github.html");
+	const links = hrefs(document);
+	for (const repo of PUBLIC_REPOS) {
+		const url = `https://github.com/hseshadr/${repo}`;
+		assert.ok(links.has(url), `/github is missing a link to ${repo}`);
+	}
+	assert.ok(
+		links.has("https://github.com/hseshadr"),
+		"/github is missing the maintainer profile link",
+	);
+
+	// A bare link is weak; the anchor's surrounding copy is what a crawler
+	// weighs. Every repo's list item must carry a sentence, not just a URL.
+	for (const repo of PUBLIC_REPOS) {
+		const anchor = [...document.querySelectorAll("ul.repos a")].find(
+			(a) => a.getAttribute("href") === `https://github.com/hseshadr/${repo}`,
+		);
+		assert.ok(anchor, `${repo} is not listed in a repository list`);
+		const copy = anchor.closest("li").textContent.replace(/\s+/gu, " ").trim();
+		assert.ok(
+			copy.split(" ").length >= 20,
+			`${repo} has only ${copy.split(" ").length} words of describing copy`,
+		);
+	}
+});
+
+test("every crawlable page links out to the sibling sites and the profile", async () => {
+	for (const { file } of ROUTES) {
+		const links = hrefs(await htmlDocument(file));
+		for (const site of SIBLING_SITES) {
+			assert.ok(links.has(site), `${file} does not link to ${site}`);
+		}
+		assert.ok(
+			links.has("https://github.com/hseshadr"),
+			`${file} does not link to the GitHub profile`,
+		);
+	}
+});
+
+test("llms.txt lists every repository and every live site", async () => {
+	const llms = await artifact("llms.txt");
+	for (const repo of PUBLIC_REPOS) {
+		assert.ok(
+			llms.includes(`https://github.com/hseshadr/${repo}`),
+			`llms.txt missing ${repo}`,
+		);
+	}
+	for (const site of SIBLING_SITES) {
+		assert.ok(llms.includes(site), `llms.txt missing ${site}`);
 	}
 });
 

@@ -1462,14 +1462,26 @@ input {
 	margin-bottom: 0;
 }
 
+/* Lead-in above the outbound-link row. Needs the gap the --muted modifier
+   removes, so it comes after it in source order and wins on equal specificity. */
+.nimbus-footer__line--lead {
+	margin: 18px 0 8px;
+}
+
 /* Internal-link row: GitHub repos + the /edgeproc and /faq entity pages, so the
-   site's link graph is fully connected from every view (the SEO entity hub). */
+   site's link graph is fully connected from every view (the SEO entity hub).
+   The second row of these is the OUTBOUND set — aml-filter.com, almamesh.com and
+   the full repo list — the only links that leave this domain. */
 .nimbus-footer__links {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px 18px;
 	margin: 0 0 14px;
 	font-size: 13px;
+}
+
+.nimbus-footer__links:last-child {
+	margin-bottom: 0;
 }
 
 /* Links sit inside sentence copy at 13px: AA needs a non-color cue (underline)
