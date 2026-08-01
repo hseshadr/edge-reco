@@ -53,4 +53,27 @@ describe("Footer", () => {
 			"/faq",
 		);
 	});
+
+	// The three live sites used to link only to themselves, so nothing on the
+	// open web pointed at edge-reco.com and its pages sat crawled-but-unindexed.
+	// A crawler follows an <a href>; it does not follow a sitemap into a domain
+	// nobody links to. These are the outbound edges that fix that.
+	it("links out to the sibling live sites", () => {
+		render(<Footer />);
+		expect(screen.getByRole("link", { name: /AML-Filter/i })).toHaveAttribute(
+			"href",
+			"https://aml-filter.com/",
+		);
+		expect(screen.getByRole("link", { name: /AlmaMesh/i })).toHaveAttribute(
+			"href",
+			"https://almamesh.com/",
+		);
+	});
+
+	it("links to the maintainer's full repository list", () => {
+		render(<Footer />);
+		expect(
+			screen.getByRole("link", { name: /All repositories/i }),
+		).toHaveAttribute("href", "https://github.com/hseshadr");
+	});
 });

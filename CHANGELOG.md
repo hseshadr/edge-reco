@@ -3,6 +3,41 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **`/github` now links every public repository, not three of eight.** The page
+  exists to hand crawlers a path to the source, and it was linking `edge-reco`,
+  `edge-proc` and `edgeproc-core` only. The five it omitted — `almamesh`,
+  `aml-filter`, `privacy-core`, `assay`, `ci` — each had **zero** pages indexed
+  in Google, while all six repo URLs returned HTTP 200 to Googlebot. Nothing was
+  blocking them; nothing had ever linked to them. Each repo now carries the
+  describing sentence from the repository itself, because the anchor's
+  surrounding copy is what a crawler weighs, and the page ships a
+  `CollectionPage` + `ItemList` JSON-LD with a per-repo `sameAs`.
+  `production-artifacts.test.mjs` pins the full set and requires ≥20 words of
+  copy per entry, so a repo cannot quietly drop back into invisibility.
+- **The site links out.** `edge-reco.com`, `aml-filter.com` and `almamesh.com`
+  were three islands that linked to nothing but each other's absence — which is
+  why `/edgeproc` sat at *Crawled – currently not indexed* despite being a
+  well-formed 2,195-character page. The domain had no inbound authority. Every
+  crawlable page (the SPA footer, `/github`, `/edgeproc`, `/faq`, the root
+  `<noscript>`) now carries visible links to the other two live sites and to
+  `github.com/hseshadr`, and `llms.txt` lists all eight repositories.
+- **Diagrams are inline Mermaid; `docs/diagrams/` is gone.** The five `.d2`
+  sources and their six committed SVGs are deleted. d2 emitted ~4:1 letterbox
+  SVGs that GitHub's ~1000px column shrank until the labels were unreadable and
+  the right third clipped; Mermaid renders natively with a zoom control, has no
+  build artifact to go stale, and diffs in review. The README diagram is now
+  five plain-language boxes with real numbers instead of an image plus a
+  collapsible duplicate of its own source.
+- **The diagrams also stopped lying.** The `.d2` sources predated the current
+  architecture and drew a `Compute Worker` reading `SQLite WASM` and `IndexedDB`
+  behind a `Hybrid Router` with a kill switch and a backend fallback. None of
+  those exist in this repo — it is a sync worker and an embedder worker over
+  OPFS, with an in-memory session profile. The Mermaid replacements describe
+  what the code does and match the prose beside them.
+
 ## [0.13.0] — 2026-07-21
 
 ### Added

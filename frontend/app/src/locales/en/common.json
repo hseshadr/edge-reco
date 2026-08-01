@@ -6,8 +6,13 @@
 			"repo": "EdgeReco on GitHub",
 			"substrate": "EdgeProc substrate",
 			"whatIs": "What is EdgeProc?",
-			"faq": "FAQ"
+			"faq": "FAQ",
+			"amlFilter": "AML-Filter — sanctions screening in the tab",
+			"almamesh": "AlmaMesh — a Python astrology engine in the tab",
+			"allRepos": "All repositories on GitHub"
 		},
+		"moreLabel": "More from the same maintainer",
+		"moreLead": "Built the same way — the heavy work runs in your browser, not on a server:",
 		"demoBefore": "Nimbus is a fictional demo store built to showcase",
 		"demoAfter": "— its entire search-and-recommend brain runs in this browser tab.",
 		"attribution": "Product data: Amazon E-commerce Products & Reviews Dataset (Kaggle, MIT). See the repo’s NOTICE for attribution."

@@ -195,44 +195,34 @@ You don't need to clone edge-proc or edgeproc-core — the backend pulls edgepro
 
 ## Architecture
 
-![EdgeReco architecture: a signed, content-addressed catalog is built and signed in your cloud and served through a CDN edge cache; each shopper's device downloads it once, verifies it (Ed25519 + SHA-256, fail-closed), then runs search, ranking, and recommendations locally with zero backend calls. An optional, off-by-default learning loop sends batched anonymous activity back to retrain and republish the catalog, which every device re-syncs.](docs/diagrams/architecture.svg)
+```mermaid
+flowchart LR
+  build["Your cloud<br>build + sign the catalog<br>720 products → one 1.6 MB file"]
+  sync["Download once, then check it<br>Ed25519 + SHA-256<br>any mismatch aborts the load"]
+  engine["Search + rank in the tab<br>keywords + meaning → fuse → personalize"]
+  recs["Results and recommendations<br>0 backend calls · works offline"]
+  learn["Optional, off by default<br>batched anonymous activity retrains<br>ranking and re-signs the catalog"]
+
+  build -->|"one small signed file, served by any CDN"| sync
+  sync --> engine --> recs
+  recs -.->|"only if you switch it on"| learn
+  learn -.-> build
+
+  classDef cloud fill:#f0e8f8,stroke:#9472b0,color:#171717;
+  classDef device fill:#e8f8e8,stroke:#5fa85f,color:#171717;
+  classDef opt fill:#e8f4f8,stroke:#5b9bbf,color:#171717;
+  class build cloud;
+  class sync,engine,recs device;
+  class learn opt;
+```
+
+Everything in green happens on the shopper's own device. Your cloud is touched
+only to publish a new catalog — never to answer a search.
 
 - **origin** — serves a *signed, content-addressed bundle*. A **bundle** is the one file-set your store hands out: the products, the prebuilt search index, and the ranking weights. *Content-addressed* means every piece is named by the hash of its own bytes, so it can be cached forever and can't be tampered with undetectably. It's structured as a `latest` version pointer plus immutable `manifest/<hash>` and `chunk/<hash>` objects. A committed 720-product bundle lives in `backend/examples/catalog/` (1.6 MB on disk).
 - **edge** — a Caddy reverse proxy (a small static web server standing in for a CDN) applying the cache policy: immutable chunks cached forever, short-lived pointer.
 - **browser tier** — the Nimbus single-page app **syncs** the bundle — *sync* meaning: fetch it, check its signature, and store it locally — into **OPFS** (Origin Private File System: a private, per-site sandboxed disk the browser gives each website). It verifies with Ed25519 signatures + SHA-256 checksums *fail-closed* (any mismatch aborts the load) against a key baked into the app build, loads the `all-MiniLM-L6-v2` model, and runs the full pipeline **in the tab**. No application server in the request path.
 - **edgereco runtime (Python)** — the same engine packaged as a FastAPI app for the server-side case. Same scoring formula, same sync + verify, same prebuilt index — the in-browser engine is tested for parity against it.
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
-```mermaid
-flowchart TB
-  subgraph cloud["☁️ Your cloud — touched only to publish or retrain"]
-    direction LR
-    cat["📦 Product catalog"] --> build["🔏 Build + sign<br>index · embeddings · ranking"] --> origin["🗄️ Origin<br>signed, content-addressed bundle"]
-  end
-  origin --> edge["🌐 CDN edge cache<br>serves one small signed file"]
-  edge ==>|"one-time download"| sync
-  subgraph device["📱💻🖥️ Shopper's own device — every search + click runs HERE"]
-    direction LR
-    sync["⬇️ Sync + verify<br>Ed25519 · SHA-256 · fail-closed"] --> opfs["💾 On-device store (OPFS)"] --> engine["🧠 On-device engine<br>keyword + meaning → fuse → personalize"] --> recs["✨ Results + recommendations<br>instant · offline · 0 backend calls"]
-  end
-  subgraph learn["🔁 Optional learning loop — OFF by default"]
-    direction LR
-    uplink["📨 Batched, anonymous activity"] --> retrain["🔧 Retrain ranking + co-occurrence<br>re-sign the bundle"] --> republish["📤 Republish → every device re-syncs"]
-  end
-  recs -.->|"only if you turn it on"| uplink
-  classDef cloudCls fill:#f0e8f8,stroke:#9472b0,color:#171717;
-  classDef edgeCls fill:#f8f0e8,stroke:#c2925a,color:#171717;
-  classDef deviceCls fill:#e8f8e8,stroke:#5fa85f,color:#171717;
-  classDef learnCls fill:#e8f4f8,stroke:#5b9bbf,color:#171717;
-  class cat,build,origin cloudCls;
-  class edge edgeCls;
-  class sync,opfs,engine,recs deviceCls;
-  class uplink,retrain,republish learnCls;
-```
-
-</details>
 
 ## Hybrid search
 
@@ -412,11 +402,13 @@ This attribution is *not* a license to the underlying content: the product listi
 
 ## Docs
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture, system context, request lifecycle (with d2 diagrams).
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture, system context, request lifecycle (with diagrams).
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run the demo end to end.
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns.
 - [`docs/SECURITY-PRIVACY.md`](docs/SECURITY-PRIVACY.md) — threat model, privacy/egress inventory, retention, operator requirements.
-- [`docs/diagrams/`](docs/diagrams/) — d2 sources + rendered SVGs.
+
+Every diagram in this repo is an inline Mermaid fence — no build step, no committed
+image that can drift from the text beside it.
 
 ## Repo layout
 
@@ -433,7 +425,7 @@ This attribution is *not* a license to the underlying content: the product listi
 - `frontend/` — pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`).
   - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
   - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine
-- `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `SECURITY-PRIVACY.md` · `diagrams/`
+- `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `SECURITY-PRIVACY.md`
 
 ## Security
 

@@ -12,6 +12,7 @@
 - Maintainer: https://github.com/hseshadr
 - Substrate (EdgeProc): https://github.com/hseshadr/edge-proc
 - EdgeProc name disambiguation: https://edge-reco.com/edgeproc
+- All repositories: https://edge-reco.com/github
 - FAQ: https://edge-reco.com/faq
 
 ## Project facts
@@ -44,3 +45,22 @@ EdgeProc — not the other way around.
 - EdgeProc repository: https://github.com/hseshadr/edge-proc
 - edgeproc-core (EdgeProc's foundation): https://github.com/hseshadr/edgeproc-core
 - EdgeProc is implemented in Python and runs locally / edge-capable.
+
+## Other repositories by the same maintainer
+
+All public, all on https://github.com/hseshadr. Listed with anchor copy at
+https://edge-reco.com/github.
+
+- https://github.com/hseshadr/aml-filter — screen a name against 31,566 sanctioned
+  entities (OFAC SDN, EU, UN, UK OFSI) entirely inside the browser tab; signed watchlist
+  bundles with fail-closed Ed25519 verification. Live at https://aml-filter.com/
+- https://github.com/hseshadr/privacy-core — redact PII in the browser before a prompt
+  leaves the machine, then rehydrate the reply locally; 11 entity types, type-checked
+  Egress Guard on the send path. TypeScript.
+- https://github.com/hseshadr/assay — sign a decision record with Ed25519 over RFC 8785
+  canonical JSON and verify it offline years later; shipped as avow on PyPI and
+  @edgeproc/avow on npm.
+- https://github.com/hseshadr/almamesh — Vedic astrology running the whole Python engine
+  in the browser via Pyodide (Skyfield, DE421 JPL kernel). Live at https://almamesh.com/
+- https://github.com/hseshadr/ci — the shared GitHub Actions the edgeproc repos use: 7
+  reusable workflows + 5 composite actions, every `uses:` SHA-pinned.
