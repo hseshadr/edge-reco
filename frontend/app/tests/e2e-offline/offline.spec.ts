@@ -1,3 +1,4 @@
+import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
 /**
@@ -16,11 +17,50 @@ import { expect, test } from "@playwright/test";
 const PRODUCT_CARD = "main article.card button.card__overlay";
 const OFFLINE_BADGE = ".offline-badge";
 
-async function launch(page: import("@playwright/test").Page): Promise<void> {
+async function launch(page: Page): Promise<void> {
 	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
 	await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
 		timeout: 240_000,
 	});
+}
+
+/**
+ * Re-apply the emulated offline state to the document a reload just created.
+ *
+ * `context.setOffline(true)` cuts the network at the browser context and that cut
+ * SURVIVES a reload — every request the offline page makes still fails. What does
+ * NOT survive, as of the Chromium that Playwright 1.62 bundles (chromium-1234 /
+ * Chrome 151; chromium-1228 kept it), is the renderer-side half: a navigation
+ * served by the service worker boots its new document with the default network
+ * state, so `navigator.onLine` reads back `true` on a context that is still
+ * offline. And because the state never TRANSITIONS, no `offline` event fires
+ * either — so nothing that listens for one can self-correct.
+ *
+ * That is emulation leaking, not a product bug: a real browser derives
+ * `navigator.onLine` from the OS, which is process-global and survives navigation.
+ * So we re-sync the renderer instead of relaxing the assertion. `setOffline(true)`
+ * a second time is a no-op (Playwright short-circuits on unchanged state) and
+ * toggling false→true would briefly REALLY reconnect the network mid-proof, which
+ * is the one thing this test must never do. Sending the CDP command directly
+ * re-applies offline to the live document without ever going online.
+ *
+ * The session is deliberately left attached: `Network.emulateNetworkConditions` is
+ * scoped to its CDP session, so detaching immediately reverts the override and
+ * `navigator.onLine` snaps back to `true`. Playwright tears the session down with
+ * the page at end of test.
+ */
+async function reassertOffline(
+	context: BrowserContext,
+	page: Page,
+): Promise<void> {
+	const cdp = await context.newCDPSession(page);
+	await cdp.send("Network.emulateNetworkConditions", {
+		offline: true,
+		latency: 0,
+		downloadThroughput: -1,
+		uploadThroughput: -1,
+	});
+	await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
 }
 
 test("storefront works fully offline after one online sync", async ({
@@ -64,6 +104,27 @@ test("storefront works fully offline after one online sync", async ({
 	// 4. Reload. Shell ← SW precache, bundle ← OPFS, model ← transformers-cache.
 	//    No network.
 	await page.reload();
+
+	// 5. Re-sync the reloaded document's network state (see reassertOffline), then
+	//    PROVE the network is still genuinely cut — the re-assert must restore what
+	//    the browser reports, never quietly restore connectivity. A same-origin
+	//    fetch that bypasses the SW must reject.
+	await reassertOffline(context, page);
+	const reachedNetwork = await page.evaluate(async () => {
+		try {
+			await fetch(`/public.key?offline-probe=${Date.now()}`, {
+				cache: "no-store",
+			});
+			return true;
+		} catch {
+			return false;
+		}
+	});
+	expect(
+		reachedNetwork,
+		"the network must still be cut after re-asserting",
+	).toBe(false);
+
 	await launch(page); // mounts offline ⇒ model + bundle + shell all served without network
 	await expect(page.locator(OFFLINE_BADGE)).toBeVisible();
 	await expect(page.locator("h2:text-is('Recommended for you')")).toBeVisible();
