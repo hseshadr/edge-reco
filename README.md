@@ -196,7 +196,7 @@ You don't need to clone edge-proc or edgeproc-core — the backend pulls edgepro
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
   build["Your cloud<br>build + sign the catalog<br>720 products → one 1.6 MB file"]
   sync["Download once, then check it<br>Ed25519 + SHA-256<br>any mismatch aborts the load"]
   engine["Search + rank in the tab<br>keywords + meaning → fuse → personalize"]

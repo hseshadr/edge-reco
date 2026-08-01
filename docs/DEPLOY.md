@@ -12,7 +12,7 @@ Both deliver the same scoring; the bundle contract is identical.
 ## Shape 1 — Backend-free (the headline demo)
 
 ```mermaid
-flowchart LR
+flowchart TB
   origin["Static origin<br>latest + manifest + chunk objects"]
   edge["Caddy edge / CDN<br>chunks immutable, latest short-TTL"]
   spa["Nimbus SPA — static files<br>public key pinned at build time"]
@@ -247,7 +247,7 @@ For multi-region: stamp the same container in each region; each replica syncs th
 ## Bundle lifecycle in production
 
 ```mermaid
-flowchart LR
+flowchart TB
   ci["Build CI<br>build-catalog → index → bundle"]
   upload["Upload chunks + manifest<br>immutable, so upload order does not matter"]
   flip["Flip the latest pointer — last<br>the only thing a client reacts to"]
