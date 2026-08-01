@@ -40,9 +40,15 @@ const PUBLIC_REPOS = [
 // Every page must reach the other two, or each stays an island.
 const SIBLING_SITES = ["https://aml-filter.com/", "https://almamesh.com/"];
 
+// A Set, deliberately: these assertions must match a whole href, never a
+// substring of one. `"…/hseshadr".includes()`-style checks pass for
+// `https://evil.example/?q=https://github.com/hseshadr`, and CodeQL is right to
+// flag that shape even inside a test.
 function hrefs(document) {
-	return [...document.querySelectorAll("a[href]")].map((a) =>
-		a.getAttribute("href"),
+	return new Set(
+		[...document.querySelectorAll("a[href]")].map((a) =>
+			a.getAttribute("href"),
+		),
 	);
 }
 const AI_CRAWLERS = [
@@ -221,10 +227,10 @@ test("/github links every public repository with real describing copy", async ()
 	const links = hrefs(document);
 	for (const repo of PUBLIC_REPOS) {
 		const url = `https://github.com/hseshadr/${repo}`;
-		assert.ok(links.includes(url), `/github is missing a link to ${repo}`);
+		assert.ok(links.has(url), `/github is missing a link to ${repo}`);
 	}
 	assert.ok(
-		links.includes("https://github.com/hseshadr"),
+		links.has("https://github.com/hseshadr"),
 		"/github is missing the maintainer profile link",
 	);
 
@@ -247,10 +253,10 @@ test("every crawlable page links out to the sibling sites and the profile", asyn
 	for (const { file } of ROUTES) {
 		const links = hrefs(await htmlDocument(file));
 		for (const site of SIBLING_SITES) {
-			assert.ok(links.includes(site), `${file} does not link to ${site}`);
+			assert.ok(links.has(site), `${file} does not link to ${site}`);
 		}
 		assert.ok(
-			links.includes("https://github.com/hseshadr"),
+			links.has("https://github.com/hseshadr"),
 			`${file} does not link to the GitHub profile`,
 		);
 	}
