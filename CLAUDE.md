@@ -109,4 +109,4 @@ make demo-retrain    # cloud retrain: recompute popularity → re-sign → repub
   `#f8f0e8` orange · `#f8e8e8` red. Always pair a fill with `color:#171717` so the
   labels stay legible in GitHub's dark theme.
 - README diagrams get 3–5 boxes, plain-language labels, and real numbers (720 products,
-  1.6 MB, Ed25519). Deep-dive docs may go wider. No jargon a newcomer can't parse.
+  1.5 MB, Ed25519). Deep-dive docs may go wider. No jargon a newcomer can't parse.

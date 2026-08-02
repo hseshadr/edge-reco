@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BUNDLE_SIZE } from "../metrics/landing-figures";
 import { Landing } from "./Landing";
 
 afterEach(cleanup);
@@ -58,7 +59,15 @@ describe("Landing", () => {
 				/The optional learning loop is off until you switch it on/,
 			),
 		).toBeInTheDocument();
-		expect(screen.getByText(/~2\.2 MB signed bundle/)).toBeInTheDocument();
+		// Derived from the constant, never hardcoded. This line used to pin "~2.2 MB"
+		// while the bundle on disk was 1.5 MB, so a green suite kept a wrong figure
+		// alive in front of users. Split of duties: landing-figures.test.ts asserts
+		// the constant is TRUE against the bundle's bytes; this asserts the footnote
+		// actually renders it.
+		const bundleSize = BUNDLE_SIZE.replaceAll(".", "\\.");
+		expect(
+			screen.getByText(new RegExp(`~${bundleSize} signed bundle`)),
+		).toBeInTheDocument();
 	});
 
 	it("calls onLaunch when the Launch CTA is clicked", async () => {
