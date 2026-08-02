@@ -1,14 +1,24 @@
 # EdgeReco
 
-**A store's search and "you might also like" — running entirely inside the shopper's browser tab, with no server behind it.**
+Search and "you might also like" for a 720-product store, running entirely inside the shopper's browser tab — with no recommendation service behind it.
+
+![The Nimbus storefront: searching the catalog, opening a product, and the recommendation rail re-ranking itself — while the backend calls counter stays at zero](docs/assets/nimbus-demo.gif)
+
+**[Try it at edge-reco.com](https://edge-reco.com)** — nothing to install. Or run it locally:
+
+```bash
+make demo
+```
+
+The strip along the top is the app measuring your own session. `backend calls` counts real requests from the page **and** from both Web Workers — a sentinel is installed inside each worker, because a main-thread counter would be structurally blind to them — and an end-to-end test drives a genuine fetch inside the live embedder worker to prove the counter can leave zero. Everything after the one-time 1.5 MB catalog download runs on the device.
+
+---
 
 [![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![TypeScript 6](https://img.shields.io/badge/typescript-6.0-blue.svg)](https://www.typescriptlang.org/)
 [![Live demo](https://img.shields.io/badge/live%20demo-edge--reco.com-brightgreen.svg)](https://edge-reco.com)
-
-▶ **[Try it live at edge-reco.com](https://edge-reco.com)** — nothing to install, nothing to sign up for. The whole engine boots in your tab.
 
 ## The problem, in one shopping trip
 
@@ -50,19 +60,17 @@ So every shopper brings their own hardware. The more popular you get, the more c
 
 ### Nimbus is the proof
 
-Nimbus is a pretend storefront built on 720 real products so you can watch this happen: search, click a few items, and see the recommendations re-rank — while the **"backend calls" counter sits at 0**.
+Nimbus is a pretend storefront built on 720 real products so you can watch this happen: search, click a few items, and see the recommendations re-rank — while the **"backend calls" counter sits at 0**. That's the recording at the top of this page.
 
-[![Nimbus demo: searching the storefront and clicking a few products — the "Recommended for you" rail re-ranks instantly while the metrics strip stays at zero backend calls](docs/assets/nimbus-hero.gif)](https://edge-reco.com)
-
-A live **metrics strip** inside the app reports the real numbers for *your* session — search latency, memory, and backend calls — measured in your own browser as you browse. That's the honest place to look at performance; this README deliberately publishes no timing figures of its own, because a number typed into a README goes stale the moment anything changes.
+The metrics strip reports search latency and memory alongside the backend-call count, measured in your own browser as you browse. That's the honest place to look at performance; this README deliberately publishes no timing figures of its own, because a number typed into a README goes stale the moment anything changes.
 
 > _Nimbus is fictional — built only to demo EdgeReco. It is not a real shop. Its products come from a public Amazon research dataset — see [Data & attribution](#data--attribution)._
 
 **What's actually deployed right now:** [`edge-reco.com/build.json`](https://edge-reco.com/build.json) is generated at deploy time and names the exact commit, version, and catalog bundle currently live. It is always current, which is why this README doesn't pin a commit.
 
-## Try it (one command)
+## Running it locally
 
-You need this repo and Docker. Nothing else.
+`make demo` at the top of this page is the path with the toolchain installed. Without one, you need this repo and Docker. Nothing else.
 
 ```bash
 cd frontend && docker compose up --build
@@ -197,7 +205,7 @@ You don't need to clone edge-proc or edgeproc-core — the backend pulls edgepro
 
 ```mermaid
 flowchart TB
-  build["Your cloud<br>build + sign the catalog<br>720 products → one 1.6 MB file"]
+  build["Your cloud<br>build + sign the catalog<br>720 products → one 1.5 MB file"]
   sync["Download once, then check it<br>Ed25519 + SHA-256<br>any mismatch aborts the load"]
   engine["Search + rank in the tab<br>keywords + meaning → fuse → personalize"]
   recs["Results and recommendations<br>0 backend calls · works offline"]
@@ -219,7 +227,7 @@ flowchart TB
 Everything in green happens on the shopper's own device. Your cloud is touched
 only to publish a new catalog — never to answer a search.
 
-- **origin** — serves a *signed, content-addressed bundle*. A **bundle** is the one file-set your store hands out: the products, the prebuilt search index, and the ranking weights. *Content-addressed* means every piece is named by the hash of its own bytes, so it can be cached forever and can't be tampered with undetectably. It's structured as a `latest` version pointer plus immutable `manifest/<hash>` and `chunk/<hash>` objects. A committed 720-product bundle lives in `backend/examples/catalog/` (1.6 MB on disk).
+- **origin** — serves a *signed, content-addressed bundle*. A **bundle** is the one file-set your store hands out: the products, the prebuilt search index, and the ranking weights. *Content-addressed* means every piece is named by the hash of its own bytes, so it can be cached forever and can't be tampered with undetectably. It's structured as a `latest` version pointer plus immutable `manifest/<hash>` and `chunk/<hash>` objects. A committed 720-product bundle lives in `backend/examples/catalog/` (1.5 MB on disk).
 - **edge** — a Caddy reverse proxy (a small static web server standing in for a CDN) applying the cache policy: immutable chunks cached forever, short-lived pointer.
 - **browser tier** — the Nimbus single-page app **syncs** the bundle — *sync* meaning: fetch it, check its signature, and store it locally — into **OPFS** (Origin Private File System: a private, per-site sandboxed disk the browser gives each website). It verifies with Ed25519 signatures + SHA-256 checksums *fail-closed* (any mismatch aborts the load) against a key baked into the app build, loads the `all-MiniLM-L6-v2` model, and runs the full pipeline **in the tab**. No application server in the request path.
 - **edgereco runtime (Python)** — the same engine packaged as a FastAPI app for the server-side case. Same scoring formula, same sync + verify, same prebuilt index — the in-browser engine is tested for parity against it.

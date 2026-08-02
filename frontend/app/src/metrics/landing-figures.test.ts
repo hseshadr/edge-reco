@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+	BUNDLE_SIZE,
 	CATALOG_PRODUCTS,
 	LANDING_METRICS,
 	REFERENCE_MEASUREMENT,
@@ -12,6 +13,24 @@ import {
 const here = dirname(fileURLToPath(import.meta.url)); // …/frontend/app/src/metrics
 const repoRoot = join(here, "../../../..");
 const readme = () => readFileSync(join(repoRoot, "README.md"), "utf8");
+
+/** Total bytes of every file under `dir`, recursively. */
+const dirBytes = (dir: string): number =>
+	readdirSync(dir, { withFileTypes: true }).reduce((sum, entry) => {
+		const path = join(dir, entry.name);
+		return sum + (entry.isDirectory() ? dirBytes(path) : statSync(path).size);
+	}, 0);
+
+/**
+ * How far BUNDLE_SIZE may sit from the bundle's real byte count: ±10%.
+ *
+ * Rounding a real size to one decimal place ("1.5 MB") already costs up to
+ * ±0.05 MB — about 3% here — so a tighter band would go red on a republish that
+ * changed nothing meaningful. 10% still leaves headroom for ordinary chunk churn
+ * while catching the failure that actually happened: the constant read "2.2 MB"
+ * against a 1.5 MB bundle, ~45% high, and rendered that to users in two places.
+ */
+const BUNDLE_SIZE_TOLERANCE = 0.1;
 
 /** The tile's number as a plain figure: "~1.2" -> 1.2, "~36" -> 36. */
 const tileValue = (id: string): number => {
@@ -33,6 +52,18 @@ describe("landing-figures", () => {
 		const csv = join(repoRoot, "backend/examples/source/catalog.csv");
 		const dataRows = readFileSync(csv, "utf8").trim().split("\n").length - 1; // minus header
 		expect(CATALOG_PRODUCTS).toBe(dataRows);
+	});
+
+	// Same idea as the count guard above, for the other figure tied to the committed
+	// bundle. BUNDLE_SIZE renders to users twice (the catalog tile's sub-label and the
+	// landing footnote) and was unguarded, so it drifted ~45% high without anything
+	// failing. Measure the bundle instead of trusting the string.
+	it("BUNDLE_SIZE matches the committed bundle's size on disk", () => {
+		const measuredMb =
+			dirBytes(join(repoRoot, "backend/examples/catalog")) / 1e6;
+		const claimedMb = Number.parseFloat(BUNDLE_SIZE); // "1.5 MB" -> 1.5
+		const drift = Math.abs(claimedMb - measuredMb) / measuredMb;
+		expect(drift).toBeLessThanOrEqual(BUNDLE_SIZE_TOLERANCE);
 	});
 
 	it("exposes exactly six representative tiles", () => {
