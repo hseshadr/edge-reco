@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from edgereco.catalog.models import SearchResult
     from edgereco.reco.audit import AuditReport
     from edgereco.reco.cooccurrence import Session, SessionLog
+    from edgereco.reco.reranker import RetrievalEvidence
     from edgereco.republish import RetrainResult
 
 app = typer.Typer(name="edgereco", help="EdgeReco: edge product discovery engine.")
@@ -322,9 +323,12 @@ def serve(  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
-def _fused_search_results(container: ServiceContainer, query: str, k: int) -> list[SearchResult]:
-    """Hybrid keyword + vector hits fused with RRF, hydrated against the catalog."""
+def _fused_search_results(
+    container: ServiceContainer, query: str, k: int
+) -> tuple[list[SearchResult], dict[str, RetrievalEvidence]]:
+    """Fused candidates plus the absolute retrieval scores RRF discards."""
     from edgereco.catalog.models import SearchResult
+    from edgereco.reco.reranker import retrieval_evidence
     from edgereco.search.hybrid import reciprocal_rank_fusion
 
     keyword_hits = container.keyword.search(query, k=k)
@@ -335,7 +339,7 @@ def _fused_search_results(container: ServiceContainer, query: str, k: int) -> li
         product = container.by_id.get(pid)
         if product is not None:
             results.append(SearchResult(product=product, score=score))
-    return results
+    return results, retrieval_evidence(keyword_hits, vector_hits)
 
 
 def _print_search_results(results: list[SearchResult], output_json: bool) -> None:
@@ -366,8 +370,8 @@ def search(
     from edgereco.reco.reranker import rerank_search
 
     container = ServiceContainer.from_dirs(cache_dir, index_dir)
-    results = _fused_search_results(container, query, k=max(limit * 3, 30))
-    results = rerank_search(results, SessionProfile())
+    fused, evidence = _fused_search_results(container, query, k=max(limit * 3, 30))
+    results = rerank_search(fused, SessionProfile(), evidence)
     if category:
         results = [r for r in results if r.product.category == category]
     _print_search_results(results[:limit], output_json)

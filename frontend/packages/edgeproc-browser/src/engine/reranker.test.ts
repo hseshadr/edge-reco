@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Product, SearchResult } from "./domain";
 import { DEFAULT_RANKING_CONFIG } from "./rankingConfig";
-import { rerank, scoreProduct } from "./reranker";
+import {
+	MIN_LEXICAL_RELEVANCE,
+	MIN_SEMANTIC_RELEVANCE,
+	meetsRelevanceFloor,
+	type RetrievalEvidence,
+	rerank,
+	retrievalEvidence,
+	scoreProduct,
+} from "./reranker";
 import { applyInteraction, emptyProfile, type SessionProfile } from "./session";
 
 const WEIGHTS = DEFAULT_RANKING_CONFIG.scoring_weights;
@@ -129,13 +137,20 @@ describe("scoreProduct (Phase-3 co-occurrence term)", () => {
 	});
 });
 
+/** Every candidate admitted on strong semantic evidence — the "all relevant" case. */
+function allAdmitted(
+	...ids: ReadonlyArray<string>
+): ReadonlyMap<string, RetrievalEvidence> {
+	return new Map(ids.map((id) => [id, { semantic: 0.9, lexical: null }]));
+}
+
 describe("rerank", () => {
 	it("keeps strong retrieval relevance ahead of popularity", () => {
 		const input: SearchResult[] = [
 			{ product: P2, score: 99, score_components: null },
 			{ product: P1, score: 1, score_components: null },
 		];
-		const out = rerank(input, emptyProfile());
+		const out = rerank(input, allAdmitted("p1", "p2"), emptyProfile());
 		// Search relevance is the primary signal; popularity may refine, not erase it.
 		expect(out.map((r) => r.product.id)).toEqual(["p2", "p1"]);
 		expect(out[0]?.score_components?.retrieval).toBe(0.2);
@@ -150,8 +165,87 @@ describe("rerank", () => {
 				{ product: tie, score: 0, score_components: null },
 				{ product: tie2, score: 0, score_components: null },
 			],
+			allAdmitted("tieA", "tieB"),
 			emptyProfile(),
 		);
 		expect(out.map((r) => r.product.id)).toEqual(["tieA", "tieB"]);
+	});
+});
+
+describe("the absolute relevance floor", () => {
+	// The literal the docs and the Python twin both promise. Asserted against the
+	// number, not against itself — a floor compared only to its own constant would
+	// pass at any value, including 0, which is the defect this replaces.
+	it("is 0.4 cosine, or any strictly-positive BM25 score", () => {
+		expect(MIN_SEMANTIC_RELEVANCE).toBe(0.4);
+		expect(MIN_LEXICAL_RELEVANCE).toBe(0);
+	});
+
+	it("drops a candidate whose only evidence is a cosine below the floor", () => {
+		expect(meetsRelevanceFloor({ semantic: 0.3999, lexical: null })).toBe(
+			false,
+		);
+		expect(meetsRelevanceFloor({ semantic: 0.4, lexical: null })).toBe(true);
+	});
+
+	it("admits a weak-cosine candidate that the keyword index matched", () => {
+		// Lexical evidence is absolute too: the query shares a discriminating term
+		// with this product's indexed text, whatever the embedding thinks.
+		expect(meetsRelevanceFloor({ semantic: 0.05, lexical: 0.9 })).toBe(true);
+		expect(meetsRelevanceFloor({ semantic: 0.05, lexical: 0 })).toBe(false);
+	});
+
+	it("drops a candidate carrying no evidence at all (fail closed)", () => {
+		expect(meetsRelevanceFloor(undefined)).toBe(false);
+		expect(meetsRelevanceFloor({ semantic: null, lexical: null })).toBe(false);
+	});
+
+	// THE PROPERTY, not the shape. Before this floor, `rerank` normalized each
+	// retrieval score against the best hit in its OWN result set, so the top hit
+	// always scored a full 1.0 no matter how bad it was and a full page came back
+	// for every query. Here the whole set is junk — and the answer is nothing.
+	it("returns nothing when the BEST hit in the set is still below the floor", () => {
+		const junk: SearchResult[] = [
+			{ product: P1, score: 0.0328, score_components: null },
+			{ product: P2, score: 0.0164, score_components: null },
+		];
+		const evidence = new Map<string, RetrievalEvidence>([
+			["p1", { semantic: 0.397, lexical: null }],
+			["p2", { semantic: 0.21, lexical: null }],
+		]);
+		expect(rerank(junk, evidence, emptyProfile())).toEqual([]);
+	});
+
+	it("renormalizes retrieval over the survivors, not the dropped set", () => {
+		const results: SearchResult[] = [
+			{ product: P1, score: 100, score_components: null },
+			{ product: P2, score: 10, score_components: null },
+		];
+		const evidence = new Map<string, RetrievalEvidence>([
+			["p1", { semantic: 0.1, lexical: null }],
+			["p2", { semantic: 0.9, lexical: null }],
+		]);
+		const out = rerank(results, evidence, emptyProfile());
+		expect(out.map((r) => r.product.id)).toEqual(["p2"]);
+		// p2 is now the best admitted hit, so it takes the full relevance weight —
+		// the dropped p1's score of 100 no longer sets the scale.
+		expect(out[0]?.score_components?.retrieval).toBe(0.2);
+	});
+});
+
+describe("retrievalEvidence", () => {
+	it("keys both retrievers' absolute scores by product id", () => {
+		const evidence = retrievalEvidence(
+			[{ id: "p1", score: 3.5 }],
+			[
+				{ id: "p1", score: 0.62 },
+				{ id: "p2", score: 0.31 },
+			],
+		);
+		expect(evidence.get("p1")).toEqual({ semantic: 0.62, lexical: 3.5 });
+		// Retrieved by one engine only — the other side is absent, not zero. Zero
+		// would read as "scored 0", which is a measurement the retriever never made.
+		expect(evidence.get("p2")).toEqual({ semantic: 0.31, lexical: null });
+		expect(evidence.get("nope")).toBeUndefined();
 	});
 });

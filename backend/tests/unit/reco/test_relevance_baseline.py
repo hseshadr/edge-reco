@@ -8,14 +8,12 @@ the gate answers exactly one question: did this change make relevance worse?
 
 WHERE THE NUMBERS CAME FROM
 ``assay.ranking`` (ir_measures/trec_eval) over the committed
-``relevance_export.json``, 2026-08-03, at the export's own depth k=24 and at the
-conventional first-page depth k=10. Python reproduces the TypeScript suite's reported
-P@10 to six decimals in both segments (natural 0.233333, taxonomy-word 0.775000),
-which is the cross-language agreement that lets one committed metric stand for both.
+``relevance_export.json``, re-measured 2026-08-03 after the absolute relevance floor
+landed, at the export's own depth k=24 and at the conventional first-page depth k=10.
 
 WHY FLOORS ARE ROUNDED DOWN TO 4dp
-0.422503 is asserted as 0.4225. trec_eval is deterministic and the export is a static
-committed artifact, so the metric is exactly reproducible; the ~2.5e-5 of slack exists
+0.539049 is asserted as 0.5390. trec_eval is deterministic and the export is a static
+committed artifact, so the metric is exactly reproducible; the ~5e-5 of slack exists
 only so a BLAS thread count cannot turn float noise into a red run. It is far tighter
 than any regression worth catching — a single relevant document falling out of the
 top 10 moves natural nDCG@10 by ~0.02, three orders of magnitude more.
@@ -36,8 +34,10 @@ import pytest
 from edgereco.reco.relevance_baseline import (
     RelevanceExport,
     Segment,
+    empty_positive_pages,
     full_depth_negatives,
     load_export,
+    negative_results,
     segment_report,
 )
 
@@ -57,26 +57,43 @@ class Floor(NamedTuple):
 #: condition; precision@k rides along because it is the number the golden set's own
 #: commit message reported, so a reader can tie the two together.
 #:
-#: The natural/taxonomy-word gap IS the finding — natural nDCG@10 0.4225 against
-#: taxonomy-word 0.7610 is the retrieval leak, quantified. Both are gated separately
-#: and neither is ever averaged with the other.
+#: The natural/taxonomy-word gap IS the finding — natural nDCG@10 0.5390 against
+#: taxonomy-word 0.8944 is the retrieval leak, quantified. Both are gated separately
+#: and neither is ever averaged with the other. The gap narrowed with the absolute
+#: floor (was 0.4225 vs 0.7610) but it did not close, so it stays two numbers.
+#:
+#: RAISED 2026-08-03 by the absolute relevance floor (reranker.ts / reco/reranker.py).
+#: Every floor below moved UP; not one was lowered to accommodate the change. Prior
+#: values, for the record:
+#:     natural       nDCG@10 0.4225  R@10 0.5286  P@10 0.2333  nDCG@24 0.5416  R@24 0.8333
+#:     taxonomy-word nDCG@10 0.7610  R@10 0.1277  P@10 0.7750  nDCG@24 0.7566  R@24 0.3006
 BASELINE: Final[tuple[Floor, ...]] = (
     # natural (n=30): wording held out of both retrieval representations.
-    Floor("natural", "mean_ndcg_at_k", 10, 0.4225),
-    Floor("natural", "mean_recall_at_k", 10, 0.5286),
-    Floor("natural", "mean_precision_at_k", 10, 0.2333),
-    Floor("natural", "mean_ndcg_at_k", 24, 0.5416),
-    Floor("natural", "mean_recall_at_k", 24, 0.8333),
+    Floor("natural", "mean_ndcg_at_k", 10, 0.5390),
+    Floor("natural", "mean_recall_at_k", 10, 0.6742),
+    Floor("natural", "mean_precision_at_k", 10, 0.3033),
+    Floor("natural", "mean_ndcg_at_k", 24, 0.6330),
+    Floor("natural", "mean_recall_at_k", 24, 0.8997),
     # taxonomy-word (n=12): the leaky control group, gated so the leak cannot widen.
-    Floor("taxonomy-word", "mean_ndcg_at_k", 10, 0.7610),
-    Floor("taxonomy-word", "mean_recall_at_k", 10, 0.1277),
-    Floor("taxonomy-word", "mean_precision_at_k", 10, 0.7750),
-    Floor("taxonomy-word", "mean_ndcg_at_k", 24, 0.7566),
-    Floor("taxonomy-word", "mean_recall_at_k", 24, 0.3006),
+    Floor("taxonomy-word", "mean_ndcg_at_k", 10, 0.8943),
+    Floor("taxonomy-word", "mean_recall_at_k", 10, 0.1481),
+    Floor("taxonomy-word", "mean_precision_at_k", 10, 0.9000),
+    Floor("taxonomy-word", "mean_ndcg_at_k", 24, 0.8936),
+    Floor("taxonomy-word", "mean_recall_at_k", 24, 0.3539),
 )
 
-#: Today every one of the 8 negative queries comes back holding all 24 results.
-NEGATIVES_AT_FULL_DEPTH: Final[int] = 8
+#: Not one of the 8 unanswerable queries may come back holding a full page. Was 8
+#: of 8 before the absolute floor landed.
+MAX_NEGATIVES_AT_FULL_DEPTH: Final[int] = 0
+
+#: Total results shown across all 8 unanswerable queries. Every one of them is
+#: wrong by construction, so the honest number is zero — and zero is what the floor
+#: now returns. Was 192 (8 queries x the full 24).
+MAX_NEGATIVE_RESULTS: Final[int] = 0
+
+#: An answerable query must still answer. This is the floor's own failure mode:
+#: buying a clean negative segment by silencing real queries. Zero, before and after.
+MAX_EMPTY_POSITIVE_PAGES: Final[int] = 0
 
 
 def measure(export: RelevanceExport, floor: Floor) -> float:
@@ -126,22 +143,9 @@ def test_relevance_has_not_regressed(export: RelevanceExport, floor: Floor) -> N
     )
 
 
-@pytest.mark.parametrize(
-    "floor",
-    [f for f in BASELINE if f.metric == "mean_ndcg_at_k"],
-    ids=lambda f: f"{f.segment}@{f.k}",
-)
-def test_the_ratchet_refuses_a_degraded_ranking(export: RelevanceExport, floor: Floor) -> None:
-    """PROOF THE GATE CAN FAIL — the permanent half of the watched red run.
-
-    Reverse every ranked list and the relevant documents, which sit near the top,
-    land at the bottom. Retrieval is untouched (the same documents come back, in the
-    same count); only the ORDER is destroyed, which is exactly the property nDCG
-    measures and a position-blind metric would miss entirely.
-
-    A green ratchet is evidence only if this test would be red without it.
-    """
-    degraded = export.model_copy(
+def _reorder(export: RelevanceExport) -> RelevanceExport:
+    """Same documents, same count, ORDER destroyed — every list reversed."""
+    return export.model_copy(
         update={
             "queries": tuple(
                 query.model_copy(update={"ranked_ids": tuple(reversed(query.ranked_ids))})
@@ -149,28 +153,135 @@ def test_the_ratchet_refuses_a_degraded_ranking(export: RelevanceExport, floor: 
             )
         }
     )
-    value = measure(degraded, floor)
+
+
+def _junk(export: RelevanceExport) -> RelevanceExport:
+    """Same count, RETRIEVAL destroyed — every list refilled with non-relevant ids."""
+    catalog = tuple({pid for query in export.queries for pid in query.ranked_ids})
+    return export.model_copy(
+        update={
+            "queries": tuple(
+                query.model_copy(
+                    update={
+                        "ranked_ids": tuple(
+                            pid for pid in catalog if pid not in set(query.relevant_ids)
+                        )[: len(query.ranked_ids)]
+                    }
+                )
+                for query in export.queries
+            )
+        }
+    )
+
+
+@pytest.mark.parametrize("floor", BASELINE, ids=lambda f: f"{f.segment}-{f.metric}@{f.k}")
+def test_every_floor_refuses_junk_retrieval(export: RelevanceExport, floor: Floor) -> None:
+    """PROOF EVERY GATE CAN FAIL — the permanent half of the watched red run.
+
+    Hand each query the same number of results it gets today, drawn only from
+    documents that are NOT relevant to it. Nothing about the ranking is subtle here:
+    the engine returned the wrong documents, and all ten floors must refuse it.
+
+    A green ratchet is evidence only if this test would be red without it.
+    """
+    value = measure(_junk(export), floor)
+    assert value < floor.minimum, (
+        f"junk retrieval still scored {value:.6f} on "
+        f"{floor.metric}@{floor.k} for {floor.segment!r} — this gate has no teeth."
+    )
+
+
+@pytest.mark.parametrize(
+    "floor",
+    [f for f in BASELINE if f.metric == "mean_ndcg_at_k" and f.segment == "natural"],
+    ids=lambda f: f"{f.segment}@{f.k}",
+)
+def test_the_ratchet_still_measures_ORDER_not_just_membership(  # noqa: N802
+    export: RelevanceExport, floor: Floor
+) -> None:
+    """Reversal degrades nDCG without touching retrieval — position is really scored.
+
+    SCOPED TO `natural`, AND THAT IS A FINDING, NOT A CONVENIENCE. Before the
+    absolute floor this same reversal refused the taxonomy-word floors too. It no
+    longer can: that segment now returns a page that is ~90% relevant (P@24 0.8958),
+    so there is almost nothing non-relevant left to push the good documents beneath
+    and reversal moves its nDCG@24 to 0.8988 — still above the floor. The mutation
+    lost its teeth because the ranker got better, which is why the junk-retrieval
+    test above exists and covers all ten floors including those two.
+    """
+    value = measure(_reorder(export), floor)
     assert value < floor.minimum, (
         f"a fully reversed ranking still scored {value:.6f} on "
         f"{floor.metric}@{floor.k} for {floor.segment!r} — this gate has no teeth."
     )
 
 
-def test_negative_queries_return_the_full_page_KNOWN_DEFECT(export: RelevanceExport) -> None:  # noqa: N802
-    """A WITNESS TO A DEFECT, deliberately asserted as it stands today.
+def test_negative_queries_return_almost_nothing(export: RelevanceExport) -> None:
+    """THIS ASSERTION WAS INVERTED ON 2026-08-03. It used to assert the defect.
 
-    Nothing in the catalog answers a negative query, so the honest response is few
-    results or none. All 8 come back holding the full 24. The cause is known and out
-    of scope here: the reranker rank-normalises each retrieval score against the best
-    hit in its OWN result set (``reranker.ts:107,117``), so there is no absolute
-    floor and no response can ever express "no good match".
+    Under the name ``test_negative_queries_return_the_full_page_KNOWN_DEFECT`` this
+    asserted ``full_depth_negatives(export) == 8``: every unanswerable query came
+    back holding all 24 results, 192 false positives in total. The cause was named
+    there and is now fixed — the reranker rank-normalised each retrieval score
+    against the best hit in its OWN result set (``reranker.ts:107,117``), so the top
+    result took the full relevance weight for every query ever asked and no response
+    could express "no good match".
 
-    THE FIX MUST INVERT THIS ASSERTION, NOT DELETE IT. When a score floor lands, this
-    count drops and this test goes red — that red is the fix working, and the PR that
-    causes it says so and rewrites the expectation downward. Deleting it would erase
-    the only record that the defect was ever measured.
+    An absolute relevance floor (``MIN_SEMANTIC_RELEVANCE`` / ``MIN_LEXICAL_RELEVANCE``
+    in reco/reranker.py, mirrored in reranker.ts) now drops candidates that clear no
+    retriever's absolute bar. All 8 negative queries return zero results. The
+    assertion is inverted, not deleted: the record that the defect was measured is
+    the point, and the direction of this test is now a ratchet in the other
+    direction — the count may fall, never rise.
     """
-    assert full_depth_negatives(export) == NEGATIVES_AT_FULL_DEPTH
+    assert full_depth_negatives(export) <= MAX_NEGATIVES_AT_FULL_DEPTH
+    assert negative_results(export) <= MAX_NEGATIVE_RESULTS
+
+
+def test_the_floor_did_not_buy_silence_with_silence(export: RelevanceExport) -> None:
+    """The floor's own failure mode: refusing everything scores a clean negative set.
+
+    An empty page for an answerable query is the cost a too-high floor would hide.
+    Assay refuses to score an empty ranking at all, so without this the failure would
+    surface as a crash in a metric test rather than as the relevance loss it is.
+    """
+    assert empty_positive_pages(export) <= MAX_EMPTY_POSITIVE_PAGES
+
+
+def test_the_negative_guard_refuses_a_floorless_ranking(export: RelevanceExport) -> None:
+    """PROOF THE NEGATIVE GUARD CAN FAIL — the permanent half of its watched red run.
+
+    Restore exactly what the ranker did before the floor: hand every unanswerable
+    query a full page of real catalog ids. Both predicates must refuse it. A guard
+    that has never been watched fail is measuring shape.
+    """
+    full_page = export.in_segment("natural")[0].ranked_ids
+    assert len(full_page) == export.k, "fixture no longer supplies a full page"
+    floorless = export.model_copy(
+        update={
+            "queries": tuple(
+                query.model_copy(update={"ranked_ids": full_page})
+                if query.segment == "negative"
+                else query
+                for query in export.queries
+            )
+        }
+    )
+    assert full_depth_negatives(floorless) > MAX_NEGATIVES_AT_FULL_DEPTH
+    assert negative_results(floorless) > MAX_NEGATIVE_RESULTS
+
+
+def test_the_empty_page_guard_refuses_a_silenced_query(export: RelevanceExport) -> None:
+    """PROOF THE EMPTY-PAGE GUARD CAN FAIL — silence one real query and watch it red."""
+    silenced = export.model_copy(
+        update={
+            "queries": tuple(
+                query.model_copy(update={"ranked_ids": ()}) if query.segment == "natural" else query
+                for query in export.queries
+            )
+        }
+    )
+    assert empty_positive_pages(silenced) > MAX_EMPTY_POSITIVE_PAGES
 
 
 def test_scoring_the_negative_segment_is_refused(export: RelevanceExport) -> None:

@@ -125,9 +125,30 @@ def full_depth_negatives(export: RelevanceExport) -> int:
     """How many negative queries came back holding the FULL ``k`` results.
 
     Nothing in the catalog answers a negative query, so every result is a false
-    positive. A ranker with an absolute score floor would return few or none; one that
+    positive. A ranker with an absolute score floor returns few or none; one that
     only rank-normalises against the best hit in its own result set must return the
     whole page, every time. This count is that distinction, measured.
     """
     negatives = export.in_segment("negative")
     return sum(1 for query in negatives if len(query.ranked_ids) >= export.k)
+
+
+def negative_results(export: RelevanceExport) -> int:
+    """Total false positives shown for the unanswerable queries, across all of them.
+
+    ``full_depth_negatives`` only notices a page that is completely full, so it
+    cannot tell 23 wrong answers from none. This is the finer measure the absolute
+    floor is gated on — every result here is, by construction, wrong.
+    """
+    return sum(len(query.ranked_ids) for query in export.in_segment("negative"))
+
+
+def empty_positive_pages(export: RelevanceExport) -> int:
+    """How many answerable queries came back with nothing — the floor's own risk.
+
+    A floor set too high stops returning junk by refusing to return anything. This
+    counts that failure directly, so "the negatives are clean" can never be bought
+    by silencing real queries.
+    """
+    answerable = [q for q in export.queries if q.segment != "negative"]
+    return sum(1 for query in answerable if not query.ranked_ids)
