@@ -32,7 +32,7 @@ import numpy as np
 from edgereco.catalog.models import Product, SearchResult, SessionProfile
 from edgereco.embeddings.encoder import ProductEncoder
 from edgereco.embeddings.index import VectorIndex
-from edgereco.reco.reranker import rerank_search
+from edgereco.reco.reranker import rerank_search, retrieval_evidence
 from edgereco.search.hybrid import reciprocal_rank_fusion
 from edgereco.search.keyword import KeywordSearcher
 from edgereco.search.vector import VectorSearcher
@@ -95,12 +95,14 @@ def _search(
     results = [
         SearchResult(product=by_id[pid], score=score) for pid, score in fused if pid in by_id
     ]
-    total = len(results)
-    # /search blends normalized RRF retrieval into the session rerank
-    # (rerank_search, api/routes/search.py) — the fixture must replay THAT
-    # path, which is also what the browser engine mirrors.
-    results = rerank_search(results, SessionProfile())
-    return results[:LIMIT], total
+    # /search blends normalized RRF retrieval into the session rerank behind an
+    # absolute relevance floor (rerank_search, api/routes/search.py) — the fixture
+    # must replay THAT path, which is also what the browser engine mirrors. `total`
+    # counts survivors of the floor, exactly as the route reports it.
+    results = rerank_search(
+        results, SessionProfile(), retrieval_evidence(keyword_hits, vector_hits)
+    )
+    return results[:LIMIT], len(results)
 
 
 def main() -> None:

@@ -4,7 +4,7 @@
 	"cases": [
 		{
 			"query": "polo shirt",
-			"total": 30,
+			"total": 10,
 			"expected": [
 				{
 					"id": "B0BZDLXKTS",
@@ -23,14 +23,6 @@
 					"score": 0.4841794308634237
 				},
 				{
-					"id": "B0BVKYB5D5",
-					"score": 0.44913383494869913
-				},
-				{
-					"id": "B0C5TFFWNQ",
-					"score": 0.44904443841792097
-				},
-				{
 					"id": "B0C4HS52X9",
 					"score": 0.4437469056390946
 				},
@@ -39,18 +31,26 @@
 					"score": 0.42761278126162433
 				},
 				{
-					"id": "B0C6BMNV6S",
-					"score": 0.41743714454072556
-				},
-				{
 					"id": "B0C31P2VY7",
 					"score": 0.40811463589059543
+				},
+				{
+					"id": "B0C1CQH65Z",
+					"score": 0.39761478877652356
+				},
+				{
+					"id": "B0BVMW67L4",
+					"score": 0.3961980694371951
+				},
+				{
+					"id": "B0BVK9RVF6",
+					"score": 0.3653160165706035
 				}
 			]
 		},
 		{
 			"query": "men's running shoes",
-			"total": 40,
+			"total": 33,
 			"expected": [
 				{
 					"id": "B0BZDLXKTS",
@@ -96,7 +96,7 @@
 		},
 		{
 			"query": "cotton t-shirt",
-			"total": 39,
+			"total": 28,
 			"expected": [
 				{
 					"id": "B0C3Y25C54",
@@ -131,18 +131,18 @@
 					"score": 0.4452605532817745
 				},
 				{
-					"id": "B0C5TFFWNQ",
-					"score": 0.4408555490903259
+					"id": "B0C5VSSKHK",
+					"score": 0.43601732679770355
 				},
 				{
-					"id": "B0C5RLJDSF",
-					"score": 0.43805160358843354
+					"id": "B0C4C89P5S",
+					"score": 0.42807045491210316
 				}
 			]
 		},
 		{
 			"query": "moisture wicking golf polo",
-			"total": 31,
+			"total": 7,
 			"expected": [
 				{
 					"id": "B0BTBVJ2WZ",
@@ -153,36 +153,24 @@
 					"score": 0.47662349872841997
 				},
 				{
-					"id": "B0C62MD9JY",
-					"score": 0.4448905038079942
-				},
-				{
-					"id": "B0C5RLJDSF",
-					"score": 0.44261042921298904
-				},
-				{
 					"id": "B0BT2R7T7Q",
 					"score": 0.43825134680788774
 				},
 				{
-					"id": "B0C3Y25C54",
-					"score": 0.4309919617114431
+					"id": "B0CH9YBT5Y",
+					"score": 0.3767740441997493
 				},
 				{
-					"id": "B0C6HF5LBL",
-					"score": 0.4271994320194957
+					"id": "B0B7NXKBW8",
+					"score": 0.37627468695265565
 				},
 				{
-					"id": "B0C6HGLK6Z",
-					"score": 0.41926042071864417
+					"id": "B0C4D1CHTM",
+					"score": 0.3487459439385815
 				},
 				{
-					"id": "B0C6HGW455",
-					"score": 0.4170465205419329
-				},
-				{
-					"id": "B0C21C58ZD",
-					"score": 0.405564218284642
+					"id": "B0C3BVX694",
+					"score": 0.3337456322154348
 				}
 			]
 		}

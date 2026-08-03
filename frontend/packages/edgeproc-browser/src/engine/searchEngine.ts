@@ -42,6 +42,7 @@ import {
 	rerank,
 	rerankWithCooccurrence,
 	rerankWithSimilarity,
+	retrievalEvidence,
 } from "./reranker";
 import { emptyProfile, type SessionProfile } from "./session";
 import {
@@ -191,10 +192,17 @@ class HybridSearchEngine implements SearchEngine {
 		const fused = reciprocalRankFusion(keywordHits, vectorHits);
 
 		const fusedResults = hydrateFused(this.#index, fused);
-		const totalPreFilter = fusedResults.length;
-
 		const profile = opts?.profile ?? emptyProfile();
-		let reranked = rerank(fusedResults, profile, this.#config.scoring_weights);
+		let reranked = rerank(
+			fusedResults,
+			retrievalEvidence(keywordHits, vectorHits),
+			profile,
+			this.#config.scoring_weights,
+		);
+		// `total` counts what SURVIVED the absolute floor, not what fusion produced.
+		// Reporting the fused count would tell a user "192 matches" above a page
+		// showing none of them — the same lie the floor exists to stop telling.
+		const totalPreFilter = reranked.length;
 		if (opts?.category !== undefined) {
 			reranked = reranked.filter((r) => r.product.category === opts.category);
 		}

@@ -16,11 +16,98 @@
 
 import type { Product, ScoreComponents, SearchResult } from "./domain";
 import { DEFAULT_RANKING_CONFIG, type ScoringWeights } from "./rankingConfig";
+import type { RankedHit } from "./rerank";
 import type { SessionProfile } from "./session";
 
 // Search intent is the primary signal. RRF is normalized to [0, 1] before this
 // weight is applied, so popularity can refine the fused ranking without erasing it.
 const SEARCH_RELEVANCE_WEIGHT = 0.2;
+
+/**
+ * What each retriever actually measured for one candidate, on its own scale and
+ * independent of every other candidate in the set.
+ *
+ * `null` means "this retriever never scored it", which is not the same as 0. RRF
+ * and the rank-normalization below both erase these numbers by design — RRF keeps
+ * only positions, and the normalization divides by the best hit in the set — so a
+ * result set of pure noise looks identical to a set of perfect matches once it
+ * reaches the ranker. This is the only place the absolute magnitudes survive.
+ */
+export interface RetrievalEvidence {
+	/** Cosine to the query embedding; null when the vector index did not return it. */
+	readonly semantic: number | null;
+	/** BM25 score; null when the keyword index did not return it. */
+	readonly lexical: number | null;
+}
+
+/**
+ * The absolute semantic floor: the cosine below which a document is, empirically,
+ * not an answer.
+ *
+ * CALIBRATED, NOT CHOSEN. 0.3970 is the highest cosine any document in the catalog
+ * reaches for a query the catalog cannot answer — measured over the golden set's 8
+ * `negative` queries (`__fixtures__/relevanceGoldenSet.ts`), 576 candidate
+ * observations. That is what noise looks like at its loudest, so the floor is that
+ * ceiling rounded up to the next hundredth. Everything at or below it is
+ * indistinguishable from a query with no answer at all.
+ */
+export const MIN_SEMANTIC_RELEVANCE = 0.4;
+
+/**
+ * The absolute lexical floor: any strictly-positive BM25 score is evidence.
+ *
+ * Calibrated by the same rule against the same 8 unanswerable queries, which
+ * produced ZERO positive BM25 scores across those 576 observations — the measured
+ * lexical noise ceiling is 0. A hit means the query literally shares a
+ * discriminating term with the product's indexed text, which is absolute evidence
+ * no matter what the embedding thinks. Honest limitation: the negative queries are
+ * nonsense words by construction, so they can never produce a BM25 hit; this side
+ * of the floor is calibrated on a tautology and a wider negative set could tighten
+ * it. Dropping the lexical branch is not the safer option — a semantic-only floor
+ * at 0.4 silences three real queries in the golden set outright.
+ */
+export const MIN_LEXICAL_RELEVANCE = 0;
+
+/**
+ * Does this candidate clear the floor on EITHER retriever?
+ *
+ * Hybrid retrieval produces two independent absolute signals and a document needs
+ * only one of them to be a defensible answer. Missing evidence is a refusal, not a
+ * pass: a candidate the caller cannot account for is dropped.
+ */
+export function meetsRelevanceFloor(
+	evidence: RetrievalEvidence | undefined,
+): boolean {
+	if (evidence === undefined) {
+		return false;
+	}
+	const semantic = evidence.semantic;
+	if (semantic !== null && semantic >= MIN_SEMANTIC_RELEVANCE) {
+		return true;
+	}
+	const lexical = evidence.lexical;
+	return lexical !== null && lexical > MIN_LEXICAL_RELEVANCE;
+}
+
+/**
+ * Both retrievers' raw scores, keyed by product id — the fusion input before RRF
+ * throws the magnitudes away. Absent on one side stays `null`, never 0.
+ */
+export function retrievalEvidence(
+	keywordHits: ReadonlyArray<RankedHit>,
+	vectorHits: ReadonlyArray<RankedHit>,
+): ReadonlyMap<string, RetrievalEvidence> {
+	const lexical = new Map(keywordHits.map((hit) => [hit.id, hit.score]));
+	const semantic = new Map(vectorHits.map((hit) => [hit.id, hit.score]));
+	const evidence = new Map<string, RetrievalEvidence>();
+	for (const id of new Set([...lexical.keys(), ...semantic.keys()])) {
+		evidence.set(id, {
+			semantic: semantic.get(id) ?? null,
+			lexical: lexical.get(id) ?? null,
+		});
+	}
+	return evidence;
+}
 
 /**
  * Personalized score + signal breakdown for a product (scorer.score_product).
@@ -95,17 +182,31 @@ export function scoreProduct(
 }
 
 /**
- * Re-score every result against the profile and sort descending by score.
- * Mirrors reranker.rerank: a stable descending sort (ties keep input order),
- * matching Python's list.sort stability so fused-rank ties resolve identically.
+ * Drop every candidate that fails the absolute floor, then re-score the survivors
+ * against the profile and sort descending. Mirrors reranker.rerank_search: a stable
+ * descending sort (ties keep input order), matching Python's list.sort stability so
+ * fused-rank ties resolve identically.
+ *
+ * WHY THE FLOOR RUNS FIRST, AND WHY IT DROPS RATHER THAN DEMOTES
+ * `r.score` is the RRF fused score, which is built from POSITIONS: a document
+ * ranked first by one retriever scores 1/61 whether it is a perfect match or the
+ * least bad of 720 wrong answers. The normalization below then divides by the best
+ * hit in this very result set, so the top result always takes the full relevance
+ * weight — by construction, for every query ever asked. Nothing downstream can
+ * express "no good match", so a full page came back for queries with no answer at
+ * all. Ranking junk last does not fix that; only refusing to return it does.
  */
 export function rerank(
 	results: ReadonlyArray<SearchResult>,
+	evidence: ReadonlyMap<string, RetrievalEvidence>,
 	profile: SessionProfile,
 	weights: ScoringWeights = DEFAULT_RANKING_CONFIG.scoring_weights,
 ): ReadonlyArray<SearchResult> {
-	const maxRetrieval = Math.max(0, ...results.map((result) => result.score));
-	const rescored = results.map((r, index) => ({
+	const admitted = results.filter((r) =>
+		meetsRelevanceFloor(evidence.get(r.product.id)),
+	);
+	const maxRetrieval = Math.max(0, ...admitted.map((result) => result.score));
+	const rescored = admitted.map((r, index) => ({
 		result: scoreProduct(
 			r.product,
 			profile,
