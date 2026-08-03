@@ -63,12 +63,22 @@ minimumReleaseAge: 1440
 #     copies of the same vite), which declares `postcss: ^8.5.x` — so there is no
 #     direct dependency to bump instead. Bounded `<9` — a floor inside the
 #     patched 8.x line, not a major upgrade.
-#   brace-expansion: floor raised to >=5.0.8 for GHSA-mh99-v99m-4gvg (DoS —
-#     unbounded expansion length crashes the process with OOM; vulnerable <=5.0.7,
-#     patched >=5.0.8). The advisory has ONE vulnerable range spanning every major
-#     (`<= 5.0.7`) and ONE fix (5.0.8) — upstream shipped no 1.x/2.x/3.x/4.x
-#     backport, so every resolution must land on 5.0.8. `filelist` below is what
-#     makes that possible; see the note there.
+#   brace-expansion: floor raised to >=5.0.9. Two advisories stack on this package
+#     and only 5.0.9 clears both:
+#       GHSA-mh99-v99m-4gvg (DoS — unbounded expansion length crashes the process
+#         with OOM; vulnerable <=5.0.7, patched >=5.0.8). ONE vulnerable range
+#         spanning every major and ONE fix — upstream shipped no 1.x/2.x/3.x/4.x
+#         backport, so every resolution must land on the 5.x line.
+#       GHSA-rgw5-rvv9-x895 (DoS — unbounded INTERMEDIATE arrays; the expansion
+#         is built up in memory before the length check that GHSA-mh99 added ever
+#         runs, so 5.0.8 bypasses its own CVE-2026-14257 mitigation. Vulnerable
+#         >=4.0.0 <5.0.9, patched >=5.0.9). This is why the 5.0.8 floor below went
+#         red on main: 5.0.8 fixed the first advisory and is vulnerable to the
+#         second. Note the range starts at 4.0.0 — 1.x/2.x/3.x are unaffected by
+#         this one, but they are still caught by GHSA-mh99 above, so dropping to
+#         an older major is not an escape. 5.0.9 is the only version clear of both.
+#     `filelist` below is what makes a single 5.x resolution possible; see the
+#     note there.
 #   filelist: floor raised to >=2.0.2 — required to make the brace-expansion floor
 #     above *viable*, not an independent upgrade. Two paths resolved a vulnerable
 #     brace-expansion:
@@ -81,8 +91,9 @@ minimumReleaseAge: 1440
 #     `TypeError: expand is not a function` at minimatch.js:119 — verified locally.
 #     Upstream already solved this: filelist@2.0.2 depends on `minimatch: ^10.2.1`,
 #     which is on the brace-expansion 5.x line. Raising filelist drops minimatch@5.1.9
-#     from the graph entirely, leaving one brace-expansion (5.0.8) that every consumer
-#     can actually use. filelist 2.x is still CJS (`main: index.js`) so jake@10.9.4's
+#     from the graph entirely, leaving one brace-expansion (now 5.0.9) that every
+#     consumer can actually use — minimatch@10.2.6 declares `^5.0.5`, which 5.0.9
+#     satisfies. filelist 2.x is still CJS (`main: index.js`) so jake@10.9.4's
 #     `require('filelist')` is unaffected; jake itself moved to `filelist: ^2.0.2` in
 #     jake@12, confirming the API is compatible. Bounded `<3`.
 overrides:
@@ -92,7 +103,7 @@ overrides:
   sharp: "^0.35.0"
   fast-uri: ">=3.1.4 <4"
   postcss: ">=8.5.18 <9"
-  brace-expansion: ">=5.0.8 <6"
+  brace-expansion: ">=5.0.9 <6"
   filelist: ">=2.0.2 <3"
 
 # pnpm v11 does not run a dependency's build/postinstall scripts unless it is
