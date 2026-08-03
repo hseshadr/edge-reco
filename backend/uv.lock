@@ -476,13 +476,17 @@ wheels = [
 
 [[package]]
 name = "edge-proc"
-version = "0.1.5"
-source = { git = "https://github.com/hseshadr/edge-proc.git?rev=d88af078c75bd145b28c5bb2cefd15143cec3d21#d88af078c75bd145b28c5bb2cefd15143cec3d21" }
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "edgeproc-core" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/5f/5ea29c942135ce4aafb428170e98823de2d7a5b395f1035b8885cd204eae/edge_proc-0.2.0.tar.gz", hash = "sha256:5bf489170e3d8fd2b6794b34351b1dbf948c716e7ab9502140df847bbbe9c26c", size = 111729, upload-time = "2026-08-01T17:21:41.627Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/70/78cbc4e3b88430438e7c00397ec8a5f70a1c0493292e66075b094c67c846/edge_proc-0.2.0-py3-none-any.whl", hash = "sha256:2996fa244851992e941eace0bdcb4f80c6e097fd285202e8cf08ae6acc024dbb", size = 65072, upload-time = "2026-08-01T17:21:40.49Z" },
 ]
 
 [package.optional-dependencies]
@@ -556,7 +560,7 @@ dev = [
 requires-dist = [
     { name = "avow", extras = ["assay"], specifier = ">=0.3.0" },
     { name = "cryptography", specifier = ">=48.0.1" },
-    { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?rev=d88af078c75bd145b28c5bb2cefd15143cec3d21" },
+    { name = "edge-proc", extras = ["localvec", "bundles"], specifier = ">=0.2.0" },
     { name = "edgeproc-core", specifier = ">=0.2.1" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },

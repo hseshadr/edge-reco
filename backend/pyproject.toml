@@ -17,7 +17,26 @@ dependencies = [
   "httpx>=0.27",
   "numpy>=2.0",
   "structlog>=24.4",
-  "edge-proc[localvec,bundles]",
+  # FROM PyPI, NOT GIT. edge-proc has been on PyPI since 2026-07-22 (0.1.5) and
+  # 0.2.0 shipped 2026-08-01, so the `[tool.uv.sources]` git pin on d88af07 — a rev
+  # from the 0.1.5 line — is gone. Its stated reason ("pending its own PyPI release")
+  # had been false for twelve days. That pin cost real coverage: pip-audit SKIPS any
+  # URL requirement ("URL requirements cannot be pinned to a specific package
+  # version"), so a CVE against edge-proc or its transitive deps was invisible to
+  # `poe audit` while it stood. With a normal version requirement, edge-proc is
+  # audited. It was the last URL requirement in this tree.
+  #
+  # The pin's other stated reason is also retired, not merely stale: uv honors a GIT
+  # dependency's own `[tool.uv.sources]`, which is why the rev had to be one whose
+  # edgeproc-core came from PyPI. A wheel carries no `[tool.uv.sources]` at all —
+  # only `requires_dist` (edge-proc 0.2.0 declares `edgeproc-core>=0.2.1`) — so
+  # consuming the release dissolves the lineage constraint rather than working
+  # around it.
+  #
+  # Floor only, no ceiling — the same rule as avow below. 0.2.0 is 22 commits AHEAD
+  # of the rev this replaces, including fail-closed anti-rollback/anti-replay at
+  # promote and fail-closed FAISS index options; the pin was holding those back.
+  "edge-proc[localvec,bundles]>=0.2.0",
   # Direct dependency (not just transitive via edge-proc): edgereco imports
   # edgeproc_core.vector_mgmt.core.types in embeddings/index.py, so the
   # import is declared honestly here. Published on PyPI (0.2.1+).
@@ -69,21 +88,17 @@ dev = [
 package = true
 
 [tool.uv.sources]
-# Open-source onboarding: clone ONLY this repo and `uv sync`. edgeproc-core now
-# installs from PyPI (see the >=0.2.1 floor in [project].dependencies — the
-# uv.lock pins the exact release + hashes); only edge-proc still comes from
-# public GitHub, pending its own PyPI release.
+# EMPTY ON PURPOSE, and that is the point: every dependency now resolves from PyPI
+# by version, and uv.lock pins the exact release + hashes. Open-source onboarding is
+# clone ONLY this repo and `uv sync`. No URL requirements remain, so `poe audit`
+# audits the whole tree — pip-audit silently skips anything it cannot pin to a
+# version, so a git source is a hole in the scan, not just a resolution style.
 #
-# Pinned by full commit SHA, not by tag. A git tag is mutable: whoever can push to
-# that repo can retarget it at different code, and every clone would silently
-# resolve a dependency nobody reviewed.
+# Adding an entry back is a real decision. It should be temporary (a fix that has
+# not been released yet), it costs the audit coverage of that package and everything
+# under it, and it must be removed the moment the release lands. See the edge-proc
+# and avow notes in [project].dependencies for how the last two came out.
 #
-# d88af07 (v0.1.5 line, src-identical to 0852319) is the first rev whose own
-# [tool.uv.sources] consumes edgeproc-core from PyPI — required here because uv
-# honors a git dependency's sources, so an older rev would force the retired
-# shared-libs-python git pin back into this lock.
-edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", rev = "d88af078c75bd145b28c5bb2cefd15143cec3d21" }
-
 # Co-developing the substrate locally? Clone the siblings next to this repo and
 # swap in path sources (uncomment):
 #   edge-proc = { path = "../../edge-proc" }
@@ -116,10 +131,9 @@ disallow_any_explicit = true
 warn_unreachable = true
 packages = ["edgereco"]
 # Source roots for mypy. In the default flow both substrate deps install into
-# site-packages (`uv sync`: edgeproc-core from PyPI, edge-proc from its git
-# pin), so mypy resolves them there; the sibling entries only serve the
-# optional co-developer path-source flow (see [tool.uv.sources]). Both
-# siblings use a flat layout (package dir at repo root).
+# site-packages from PyPI (`uv sync`), so mypy resolves them there; the sibling
+# entries only serve the optional co-developer path-source flow (see
+# [tool.uv.sources]). Both siblings use a flat layout (package dir at repo root).
 mypy_path = [
   "src",
   "../../edge-proc",
