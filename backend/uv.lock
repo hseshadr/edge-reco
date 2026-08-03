@@ -78,13 +78,17 @@ wheels = [
 
 [[package]]
 name = "avow"
-version = "0.2.0"
-source = { git = "https://github.com/hseshadr/assay.git?rev=1c382ce10dcf13c73ddd21a1524c6ec42d5b4aa2#1c382ce10dcf13c73ddd21a1524c6ec42d5b4aa2" }
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pynacl" },
     { name = "rfc8785" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d3/72/1f9a1be2bc45651e02c6af7ec0bc803fbad1eec5090ae7761a9e6a14ee39/avow-0.3.0.tar.gz", hash = "sha256:2e30e1818bd905703fa9cb399d41a97b09f21f02e8bf0b1aa5d192c573b9c7c5", size = 102023, upload-time = "2026-08-03T14:24:20.108Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/49/0b17517aa13eb8273e81f8e0db622d2d3188e71e21fac3cf38e6ecd85735/avow-0.3.0-py3-none-any.whl", hash = "sha256:4170868fc4e26f3dfddbb507502ee48b619b9c338a1cbea8fd224ebeb82873e2", size = 52383, upload-time = "2026-08-03T14:24:18.669Z" },
 ]
 
 [package.optional-dependencies]
@@ -550,7 +554,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "avow", extras = ["assay"], git = "https://github.com/hseshadr/assay.git?rev=1c382ce10dcf13c73ddd21a1524c6ec42d5b4aa2" },
+    { name = "avow", extras = ["assay"], specifier = ">=0.3.0" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "edge-proc", extras = ["localvec", "bundles"], git = "https://github.com/hseshadr/edge-proc.git?rev=d88af078c75bd145b28c5bb2cefd15143cec3d21" },
     { name = "edgeproc-core", specifier = ">=0.2.1" },
