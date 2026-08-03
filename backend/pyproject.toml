@@ -66,7 +66,39 @@ dependencies = [
   # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
   # where a fix exists. See `poe audit`.
   "starlette>=1.3.1",       # CVE-2026-54283 + CVE-2026-54282 (transitive via fastapi)
-  "cryptography>=48.0.1",   # GHSA-537c-gmf6-5ccf (transitive via edge-proc signing)
+  # cryptography arrives via edge-proc[bundles], whose own floor is only
+  # `cryptography>=44` — so THIS line is the only thing holding the resolved version
+  # up. Three advisories bear on it, and they do not share a fix version:
+  #
+  #   GHSA-537c-gmf6-5ccf   HIGH      vulnerable OpenSSL in the wheels   fixed 48.0.1
+  #   GHSA-jwv3-5hgf-82ww   HIGH      CVE-2026-69249, duplicate self-signed
+  #                                   intermediates -> exponential path building
+  #                                                                      fixed 49.0.0
+  #   GHSA-m2h6-j472-rp4c   MODERATE  CVE-2026-69248, wildcard DNS name escapes
+  #                                   an intermediate's permittedSubtrees fixed 49.0.0
+  #   GHSA-g6cj-pr64-35w5   HIGH      CVE-2026-69247, PKCS#7 EnvelopedData decryption
+  #                                   is a Bleichenbacher oracle via distinguishable
+  #                                   errors + timing (affects >=44.0.0) fixed 50.0.0
+  #
+  # 50.0.0 is therefore the floor: 49.0.0 clears the first three and leaves
+  # CVE-2026-69247 standing, which is exactly what `poe audit` reported.
+  # GHSA-537c-gmf6-5ccf is kept on the record because it is why this pin exists at
+  # all; it is subsumed by 50, not retired.
+  #
+  # NOT REACHED, STILL FLOORED. The only cryptography import in the whole first-party
+  # chain is edgeproc/bundles/signing.py -> `asymmetric.ed25519`. Raw 32-byte ed25519
+  # is neither PKCS#7 nor X.509 path building, and nothing in the tree calls
+  # pkcs7_decrypt_* or PolicyBuilder/ServerVerifier, so today's exposure is
+  # precautionary. That is an argument for calm, not for staying on 49: the gate
+  # contracts on the resolved version, and "we don't call it yet" expires the moment
+  # someone adds a certificate.
+  #
+  # FLOOR ONLY, NO CEILING — the same rule as edge-proc and avow above, and here it
+  # is load-bearing rather than stylistic. Two of these three fixes shipped in a
+  # major (50.0.0); a `<49`-style cap would have converted each into a blocked build
+  # and left the pin sitting on a vulnerable release. A ceiling on a security floor
+  # is how you get pinned to the CVE.
+  "cryptography>=50",       # GHSA-g6cj-pr64-35w5 / -jwv3-5hgf-82ww / -m2h6-j472-rp4c
   "msgpack>=1.2.1",         # GHSA-6v7p-g79w-8964 (transitive)
   "torch>=2.12.1",          # CVE-2025-3000 fix (GHSA-rrmf-rvhw-rf47, PYSEC-2025-194); transitive via sentence-transformers
   "setuptools>=83.0.0",     # PYSEC-2026-3447 (transitive build/runtime dep)
