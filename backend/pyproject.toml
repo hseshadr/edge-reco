@@ -22,11 +22,33 @@ dependencies = [
   # edgeproc_core.vector_mgmt.core.types in embeddings/index.py, so the
   # import is declared honestly here. Published on PyPI (0.2.1+).
   "edgeproc-core>=0.2.1",
-  # Trust kernel: the ranking attestation (reco/score_receipt.py) seals the bundle's
-  # scoring weights as a signed Assay composite receipt at publish time. The [assay]
-  # extra pulls the scoring face (scikit-learn stack — already transitive here via
-  # sentence-transformers). Published on PyPI.
-  "avow[assay]>=0.1.0,<0.2",
+  # Trust kernel, used twice:
+  #   1. reco/score_receipt.py seals the bundle's scoring weights as a signed Assay
+  #      composite receipt at publish time.
+  #   2. reco/relevance_baseline.py scores the committed relevance export with
+  #      assay.ranking, which wraps ir_measures/trec_eval — the IR field's reference
+  #      implementation. Nothing here reimplements a metric.
+  # The [assay] extra pulls the scientific stack (scikit-learn — already transitive
+  # via sentence-transformers) plus ir-measures.
+  #
+  # PINNED TO GIT, NOT PyPI — and it should not stay that way. `assay.ranking` landed
+  # in hseshadr/assay#13 AFTER the v0.2.0 tag, so it is in NO published release: PyPI
+  # avow 0.2.0 has no ir-measures in its metadata and no ranking module. The rev below
+  # is the merge commit that added it.
+  #
+  # Read the SHA, not the version string. Git avow reports version 0.2.0 — the same
+  # string as the published 0.2.0, which is a DIFFERENT artifact without the ranking
+  # face. The commit hash in uv.lock is the real identity here; the version is not.
+  # Move this back to a plain PyPI floor (`avow[assay]>=0.2.1`) and delete the source
+  # entry below the moment assay cuts a release carrying the ranking face.
+  #
+  # COST OF THE GIT PIN, STATED: `poe audit` now SKIPS avow ("URL requirements cannot
+  # be pinned to a specific package version") exactly as it already skips edge-proc.
+  # A CVE filed against avow would not be caught here while this pin stands. That is
+  # the concrete reason this is temporary and not just untidy.
+  #
+  # The previous constraint was `>=0.1.0,<0.2`, which excluded 0.2.0 outright.
+  "avow[assay]>=0.2.0",
   # Security floors on transitive deps (pulled via fastapi / edge-proc[bundles] /
   # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
   # where a fix exists. See `poe audit`.
@@ -67,6 +89,10 @@ package = true
 # honors a git dependency's sources, so an older rev would force the retired
 # shared-libs-python git pin back into this lock.
 edge-proc = { git = "https://github.com/hseshadr/edge-proc.git", rev = "d88af078c75bd145b28c5bb2cefd15143cec3d21" }
+# TEMPORARY — delete when assay releases the ranking face to PyPI. See the long note
+# on the `avow[assay]` line in [project].dependencies. Full commit SHA, never a tag,
+# for the same reason edge-proc is pinned that way.
+avow = { git = "https://github.com/hseshadr/assay.git", rev = "1c382ce10dcf13c73ddd21a1524c6ec42d5b4aa2" }
 
 # Co-developing the substrate locally? Clone the siblings next to this repo and
 # swap in path sources (uncomment):
@@ -126,6 +152,7 @@ module = [
   "edgereco.reco.audit",
   "edgereco.reco.cooccurrence",
   "edgereco.reco.ranking_config",
+  "edgereco.reco.relevance_baseline",
   "edgereco.reco.retrain",
   "edgereco.republish",
 ]
