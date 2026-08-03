@@ -5,6 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- **`edge-proc` installs from PyPI, closing the last hole in `poe audit`.**
+  pip-audit *skips* any URL requirement — "URL requirements cannot be pinned to a
+  specific package version" — so while `edge-proc` was pinned to a git SHA it and
+  everything under it were silently outside the scan. It was the only URL
+  requirement left in this tree, so the audit now covers all of it. Measured:
+  before, the run printed a skip table with `edge-proc` in it and the requirement
+  read `edge-proc @ git+https://github.com/hseshadr/edge-proc.git@d88af07…`;
+  after, the requirement reads `edge-proc==0.2.0`, 131 requirements are audited
+  (up from 130), and pip-audit prints **no skip table at all**. Both runs exit 0
+  with no known vulnerabilities.
+
+  The pin's stated reason ("pending its own PyPI release") had been false for
+  twelve days — `edge-proc` published 0.1.5 on 2026-07-22 and 0.2.0 on
+  2026-08-01. Its second reason is retired rather than merely stale: uv honors a
+  *git* dependency's own `[tool.uv.sources]`, which is why the rev had to be one
+  whose `edgeproc-core` came from PyPI. A wheel carries no `[tool.uv.sources]`,
+  only `requires_dist`, so consuming the release dissolves that constraint.
+  `[tool.uv.sources]` is now empty and documented as deliberately so.
+
+  This moves *forward*, not sideways: `d88af07` was on the 0.1.5 line, so the pin
+  had been holding back 22 commits including fail-closed anti-rollback/anti-replay
+  at promote and fail-closed FAISS index options. Floor only, no upper bound — a
+  `<0.2` ceiling is exactly what forced the `avow` git detour, and that trap is
+  not being re-armed.
+
+  Relevance is bit-identical across the swap: natural nDCG@10 `0.42250285361220213`,
+  P@10 `0.2333333333333333`; taxonomy-word nDCG@10 `0.761066848804909`, P@10
+  `0.775` — the same values as the 2026-08-03 baseline, to full float precision.
+  The ratchet reads a committed export and scores it with `assay`, so `edge-proc`
+  is not in that path; the numbers confirm it.
+
 ### Changed
 - **`/github` now links every public repository, not three of eight.** The page
   exists to hand crawlers a path to the source, and it was linking `edge-reco`,
