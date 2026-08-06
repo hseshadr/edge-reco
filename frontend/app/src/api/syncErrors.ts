@@ -1,7 +1,11 @@
 /**
  * Bundle-sync error classification — edge-reco's adoption of the portfolio
- * canonical-errors standard (`@edgeproc/errors`, vendored at
- * `packages/edgeproc-errors`).
+ * canonical-errors standard ([`@edgeproc/errors`](https://www.npmjs.com/package/@edgeproc/errors),
+ * installed from npm).
+ *
+ * This module is the ONLY place in the app that names that library. Everything
+ * else imports `bootErrorMessage` / `bundleErrorRegistry` from here, so
+ * upgrading, swapping, or removing the library is a one-file change.
  *
  * The one user-facing failure the demo can actually hit is the one-time signed
  * catalog-bundle sync. The in-browser engine throws typed errors deep in that
@@ -27,7 +31,7 @@ import {
 
 /**
  * edge-reco's bundle-sync catalog, expressed in the shared `@edgeproc/errors`
- * vocabulary. Each code is REUSED from the library's `starterPack`; on top of
+ * vocabulary. Each code is REUSED from the published `starterPack`; on top of
  * the starter data we attach a `match` predicate keyed on the engine's stable
  * error `.name`, so `classify()` reproduces the engine's fail-closed taxonomy.
  *
