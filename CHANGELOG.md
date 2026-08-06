@@ -40,7 +40,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - **The secret scan runs from the shared `hseshadr/ci` brick instead of an
   inlined copy.** Same control, one maintained definition: gitleaks over the
-  full history on every PR. The inlined job was missing two things the brick
+  commits each push or PR introduces — every one of them, not just the net diff.
+  It is not a full-history sweep: on `push` and `pull_request` gitleaks-action
+  scopes the scan to that event's commit range, and `fetch-depth: 0` only makes
+  the base commit reachable so the range resolves. The inlined job was missing
+  two things the brick
   has — `persist-credentials: false` on the checkout, and `pull-requests: read`,
   which gitleaks-action needs to list a PR's commits. The call is pinned to a
   40-char commit SHA (`605e51c`, `ci-v3.2.1`); `test_workflow_security.py`
