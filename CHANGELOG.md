@@ -38,6 +38,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   is not in that path; the numbers confirm it.
 
 ### Changed
+- **The secret scan runs from the shared `hseshadr/ci` brick instead of an
+  inlined copy.** Same control, one maintained definition: gitleaks over the
+  full history on every PR. The inlined job was missing two things the brick
+  has — `persist-credentials: false` on the checkout, and `pull-requests: read`,
+  which gitleaks-action needs to list a PR's commits. The call is pinned to a
+  40-char commit SHA (`605e51c`, `ci-v3.2.1`); `test_workflow_security.py`
+  rejects a moving `@ci-v3` ref, first-party or not.
+
+  **Operator action: the reported check name changes** from `gitleaks` to
+  `Secret scan / gitleaks`, because a reusable call reports as
+  `<caller job name> / <callee job id>`. Branch protection on `main` must swap
+  the required context to match, or the old one never arrives again.
 - **`/github` now links every public repository, not three of eight.** The page
   exists to hand crawlers a path to the source, and it was linking `edge-reco`,
   `edge-proc` and `edgeproc-core` only. The five it omitted — `almamesh`,
