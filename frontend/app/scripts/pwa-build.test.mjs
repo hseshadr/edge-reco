@@ -46,6 +46,25 @@ test(
 			!/bundle\//.test(sw),
 			"service worker precache must exclude bundle/**",
 		);
+
+		// Cloudflare Pages advanced mode consumes these four filenames as platform
+		// configuration and 404s them as assets. Workbox's install is atomic, so a
+		// single one in the precache means the deployed site gets NO service worker
+		// at all — which is exactly how edge-reco.com shipped a false "works
+		// offline" claim behind a green preview-driven test lane. This is the fast
+		// offline signal; tests/e2e-offline/pages-advanced-mode.spec.ts proves the
+		// install survives against a harness with the real origin's semantics.
+		for (const reserved of [
+			"_worker.js",
+			"_headers",
+			"_redirects",
+			"_routes.json",
+		]) {
+			assert.ok(
+				!new RegExp(`url:\\s*"${reserved}"`).test(sw),
+				`service worker precache must exclude ${reserved} — Cloudflare Pages 404s it, which aborts the whole install`,
+			);
+		}
 	},
 	{ timeout: 180_000 },
 );
