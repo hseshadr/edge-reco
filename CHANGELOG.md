@@ -5,6 +5,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **`@edgeproc/errors` is installed from npm; the copy in this repo is deleted.**
+  The library was vendored at `frontend/packages/edgeproc-errors/` as a snapshot of
+  upstream commit `7705a72`. A copy cannot be upgraded, so it rotted quietly: by
+  removal it was pinned at `0.1.0-dev` against a published `0.1.1`, sat **408 source
+  lines** behind upstream, and was missing **8 exports** the library had grown
+  (`corePack`, `aiPack`, `bundlePack`, `defineErrorsWith`, `DEFAULT_FALLBACK_CODE`,
+  `UnregisteredFallbackError`, `KnownCategory`, `RegistryOptions`). Nothing was ever
+  red, because nothing measured it.
+
+  The copy held **zero local changes**: its `src/` and `test/` are byte-identical to
+  upstream `7705a72`, so nothing was lost and nothing needed pushing upstream. Only
+  packaging differed (`private: true`, a source-entry `exports` map, toolchain-matched
+  devDependencies) — all of it an artifact of vendoring.
+
+  Behaviour is unchanged. The seam `app/src/api/syncErrors.ts` is the only module that
+  names the library and it was not restructured — one dependency line moved. All 6
+  reused `starterPack` codes, their English strings, and the classification precedence
+  are identical, and the shipped bundle does not grow.
+
+  New guard: `app/scripts/errors-package-contract.test.mjs` fails if the dependency
+  reverts to a local protocol, if a fork reappears under `frontend/packages/`, or if
+  the *resolved* package in `node_modules` is not the published artifact — the last
+  clause being the one that reads what actually loads, not what was asked for.
+
 ### Security
 - **`edge-proc` installs from PyPI, closing the last hole in `poe audit`.**
   pip-audit *skips* any URL requirement — "URL requirements cannot be pinned to a

@@ -17,12 +17,12 @@ function engineError(name: string, message: string): Error {
 }
 
 describe("@edgeproc/errors adoption — bundleErrorRegistry", () => {
-	// Proves (1) the vendored library is really what does the work —
+	// Proves (1) the published library is really what does the work —
 	// `bundleErrorRegistry` is a genuine @edgeproc/errors Registry built from its
 	// `starterPack` codes; and (2) each engine error still maps to a canonical
 	// code, so the classification vocabulary is the shared portfolio one.
 
-	it("is a genuine @edgeproc/errors Registry built from the vendored starterPack", () => {
+	it("is a genuine @edgeproc/errors Registry built from the published starterPack", () => {
 		for (const method of [
 			"classify",
 			"describe",
@@ -35,9 +35,9 @@ describe("@edgeproc/errors adoption — bundleErrorRegistry", () => {
 				],
 			).toBe("function");
 		}
-		// The reused codes ARE the vendored starter-pack codes, carrying the
-		// vendored library's own default English (impossible to satisfy from
-		// local-only logic).
+		// The reused codes ARE the published starter-pack codes, carrying the
+		// library's own default English (impossible to satisfy from local-only
+		// logic).
 		const reused = [
 			"bundle.download_failed",
 			"bundle.integrity_failed",
