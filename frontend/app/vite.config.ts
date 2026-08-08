@@ -132,7 +132,27 @@ const pwa = process.env.VITEST
 					// runtime (~23 MB — offline-covered by the edgereco-wasm runtime
 					// route below). Precaching either would force a ~46 MB download on
 					// every visitor at SW install.
-					globIgnores: ["**/bundle/**", "**/models/**", "**/ort/**"],
+					//
+					// `_worker.js` and its siblings are the OTHER reason an entry must be
+					// ignored: Cloudflare Pages advanced mode CONSUMES those four filenames
+					// as platform configuration and never publishes them as assets, so each
+					// one 404s on the deployed origin even though the file is in `dist/`.
+					// Workbox's install is ATOMIC — a single 404 rejects it and the service
+					// worker never activates. `_worker.js` matched `**/*.js` above, so
+					// edge-reco.com shipped with NO service worker (24 of 25 precache urls
+					// returned 200; the 25th killed all of it) while `vite preview`, a plain
+					// file server, served it 200 and kept the offline lane green.
+					// Proven by tests/e2e-offline/pages-advanced-mode.spec.ts, which re-serves
+					// this same `dist/` through the live origin's asset semantics.
+					globIgnores: [
+						"**/bundle/**",
+						"**/models/**",
+						"**/ort/**",
+						"_worker.js",
+						"_headers",
+						"_redirects",
+						"_routes.json",
+					],
 					// Same-origin ONNX/zstd WASM can exceed the 2 MB default — allow up to 32 MB.
 					maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
 					// SPA: serve index.html for navigations the precache can't match (offline reload).
