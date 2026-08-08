@@ -14,26 +14,36 @@ on:
 # input is interpolated anywhere, so there is no workflow-injection surface.
 
 # Least privilege for the whole workflow: every job only reads the checkout and
-# runs the gate — none write repo contents, releases, or PR comments. Jobs may
-# still narrow further (the gitleaks job restates contents: read explicitly).
+# runs the gate — none write repo contents, releases, or PR comments. A job sets
+# its own `permissions:` only when it needs something this default does not give:
+# the `gitleaks` job adds `pull-requests: read`, which the reusable secret-scan
+# brick needs to list a PR's commits. Nothing here grants a write scope.
 permissions:
   contents: read
 
 jobs:
-  # Secret-leak scan over the FULL history (fetch-depth: 0), not just the diff —
-  # a credential committed five commits ago is exactly as leaked as one committed
-  # now. No repo .gitleaks.toml: nothing to allowlist, the default ruleset applies.
+  # Secret-leak scan over the commits a push or PR introduces — every one of them,
+  # not just the net diff, so a credential added and then deleted three commits
+  # later is still caught. Runs via the shared brick in hseshadr/ci, where the
+  # mechanics and their rationale now live: one maintained copy of this control
+  # instead of an inlined duplicate that drifts. The brick also sets
+  # persist-credentials: false and grants pull-requests: read, both of which this
+  # inlined copy was missing. No repo .gitleaks.toml: nothing to allowlist, the
+  # default ruleset applies.
+  # Scope, stated accurately: on push and pull_request gitleaks-action passes
+  # --log-opts=--no-merges --first-parent <base>^..<head>, so it reads the commits
+  # that push or PR introduces — NOT the whole repository. fetch-depth: 0 only
+  # makes the base commit reachable so that range resolves. A full sweep needs a
+  # schedule or workflow_dispatch event, and this workflow fires on neither.
   gitleaks:
-    runs-on: ubuntu-latest
+    name: Secret scan
+    # The reusable workflow lists a PR's commits over the API, which needs
+    # pull-requests: read. The workflow-level `contents: read` does not grant it,
+    # and a caller job may raise a scope the read-only top level withholds.
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      pull-requests: read
+    uses: hseshadr/ci/.github/workflows/secret-scan.yml@605e51cbc86f452b56edcf1c9660921da797cbfe # ci-v3.2.1
 
   quality:
     runs-on: ubuntu-latest
