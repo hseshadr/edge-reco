@@ -99,6 +99,25 @@ minimumReleaseAge: 1440
 #     satisfies. filelist 2.x is still CJS (`main: index.js`) so jake@10.9.4's
 #     `require('filelist')` is unaffected; jake itself moved to `filelist: ^2.0.2` in
 #     jake@12, confirming the API is compatible. Bounded `<3`.
+#   nanoid: floor raised to >=3.3.17 for GHSA-2v37-7h3g-55p8 / CVE-2026-67213
+#     (HIGH — a custom alphabet generator loops forever when `size` is 0, hanging
+#     the caller; vulnerable <3.3.17 and >=4.0.0 <5.1.6, patched 3.3.17 and 5.1.6).
+#     Pulled in transitively only through postcss (app>vite>postcss>nanoid, plus
+#     the vitest / @vitejs/plugin-react copies of the same vite) — 17 paths, one
+#     resolution, and no direct dependency to bump instead. postcss@8.5.25 already
+#     declares `nanoid: ^3.3.11`, so the range admits the fix; the lockfile had
+#     simply frozen 3.3.16 from before it existed. The floor makes the patched
+#     version a stated requirement rather than a side effect of when the lock was
+#     last resolved.
+#     This is NOT a defect introduced by any open PR: 3.3.16 is byte-identical on
+#     main and on every open branch. The advisory was published 2026-07-29 and
+#     UPDATED 2026-08-07T20:50:35Z — after the last green `audit-frontend` run —
+#     which is what flipped the gate. It fails on every edge-reco PR until this
+#     lands on main.
+#     Bounded `<4` for the usual minimal-bump reason and one hard one: nanoid 4.x+
+#     is ESM-only (it dropped the CJS entry point), while postcss is CJS and does
+#     `require('nanoid')`. An open `>=3.3.17` overshoots to the 6.x line and breaks
+#     postcss outright. 3.x is the patched line postcss can actually consume.
 overrides:
   adm-zip: "0.6.0"
   undici: ">=7.28.0 <8"
@@ -108,6 +127,7 @@ overrides:
   postcss: ">=8.5.18 <9"
   brace-expansion: ">=5.0.9 <6"
   filelist: ">=2.0.2 <3"
+  nanoid: ">=3.3.17 <4"
 
 # pnpm v11 does not run a dependency's build/postinstall scripts unless it is
 # explicitly allowlisted here (replaces v10's onlyBuiltDependencies). These are
