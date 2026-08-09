@@ -13,6 +13,17 @@
 # before checkout, and the final step verifies the exact source SHA through the
 # deployed, no-store `/build.json` artifact. A stale or partial deploy therefore
 # cannot be reported as green.
+#
+# THE DEPLOY TARGET IS RESOLVED AT EXECUTION TIME, NOT FROM THE TRIGGER.
+# `workflow_run.head_sha` is the commit that fired this run — a fact that was
+# already true minutes ago and may not be true now. On 2026-08-08 three commits
+# landed within ~30s, their CI runs finished out of commit order, and the deploy
+# for the OLDEST one ran last and won: edge-reco.com served 295fcaf while main was
+# 3eec558, with every single run green. Each run was correct on its own terms; the
+# composition was not. So the "Resolve the deploy target" step below reads
+# refs/heads/main from the remote at the moment it runs, and everything downstream
+# — checkout, wrangler's --commit-hash, and every verify — uses THAT sha.
+# Property-tested in backend/tests/unit/test_deploy_target_resolution.py.
 # SPA-ONLY: a static `build:pages` artifact (signed catalog copied same-origin
 # into dist/bundle) — no R2, no bundle signing key in CI. See docs/DEPLOY.md.
 #
@@ -31,6 +42,10 @@ on:
 
 permissions:
   contents: read
+  # The resolve step asks the Actions API whether main HEAD has a successful CI
+  # run. Reading workflow runs is `actions: read`; without it that call 403s and
+  # the job fails closed (which is correct, but wastes a run).
+  actions: read
 
 # Never let two deploys interleave their uploads.
 concurrency:
@@ -59,8 +74,6 @@ jobs:
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
-    env:
-      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Guard deployment credentials
         working-directory: ${{ github.workspace }}
@@ -77,18 +90,80 @@ jobs:
           done
           exit "$missing"
 
+      # Read refs/heads/main from the remote NOW. The trigger's head_sha is a
+      # statement about the past; this is the branch as it stands at the instant
+      # the deploy actually runs. Everything downstream keys off `target_sha`.
+      #
+      # If main HEAD has not passed CI, this deploys NOTHING and exits green: that
+      # commit's own deploy fires when its CI passes. Skipping is safe precisely
+      # because cancellation only ever happens when a NEWER run is queued, so a
+      # cancelled deploy always has a successor — and the successor re-resolves
+      # main HEAD. That is what makes the cancellation harmless rather than
+      # load-bearing. (Switching to cancel-in-progress: true would "fix" the
+      # ordering by killing a deploy mid-upload; don't.)
+      #
+      # Every ${{ }} value enters through env: and is read as "$VAR" — nothing is
+      # interpolated into the script body, so there is no injection surface.
+      - name: Resolve the deploy target from the remote
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CI_WORKFLOW: ci.yml
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          # git ls-remote speaks the git protocol directly, so this is the ref
+          # itself rather than an API's cached view of it.
+          target_sha="$(git ls-remote "https://github.com/$REPO" refs/heads/main | cut -f1)"
+          if ! printf '%s' "$target_sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::could not resolve refs/heads/main on $REPO (got: '$target_sha')"
+            exit 1
+          fi
+          echo "trigger sha : $TRIGGER_SHA  (fired this run; may already be stale)"
+          echo "main HEAD   : $target_sha  (resolved just now, from the remote)"
+
+          green="$(gh api \
+            "repos/$REPO/actions/workflows/$CI_WORKFLOW/runs?head_sha=$target_sha&per_page=30" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          # `[ null -eq 0 ]` is a bash ERROR, not false, and an `if` swallows it
+          # into the deploy branch. Refuse anything that is not a count.
+          case "$green" in
+            '' | *[!0-9]*)
+              echo "::error::unreadable CI run count for $target_sha: '$green'"
+              exit 1
+              ;;
+          esac
+
+          if [ "$green" -eq 0 ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::main HEAD $target_sha has no successful CI run yet -- DEPLOYING NOTHING. Its own deploy fires when its CI passes."
+            exit 0
+          fi
+
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+          # EXPECTED_SHA is what every verify step below judges against. It is set
+          # from the SAME variable the checkout takes, so the two cannot disagree.
+          echo "EXPECTED_SHA=$target_sha" >> "$GITHUB_ENV"
+          echo "Deploy target: $target_sha ($green successful CI run(s))."
+
       - name: Checkout code
+        if: steps.resolve.outputs.deploy == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Deploy the exact commit that passed CI (auto-run); HEAD for manual.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # main HEAD as resolved above — NOT the trigger's head_sha.
+          ref: ${{ steps.resolve.outputs.target_sha }}
 
       # Reads the pinned pnpm version from frontend/package.json "packageManager".
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        if: steps.resolve.outputs.deploy == 'true'
         with:
           package_json_file: frontend/package.json
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.resolve.outputs.deploy == 'true'
         with:
           # THE one Node pin (frontend/.nvmrc) — the SAME build CI tests on.
           # This previously read a separate `.node-version` (22) while CI ran 24,
@@ -101,6 +176,7 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install workspace
+        if: steps.resolve.outputs.deploy == 'true'
         run: pnpm -C frontend install --frozen-lockfile
 
       # Self-hosted SPA model weights (house standard §8.1b), fetched BEFORE the
@@ -110,11 +186,13 @@ jobs:
       # file is under the Cloudflare Pages 25 MiB single-asset limit (the q8
       # ONNX is ~22.97 MB; pinned by scripts/download-model.test.mjs).
       - name: Cache self-hosted model weights
+        if: steps.resolve.outputs.deploy == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: frontend/app/public/models
           key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
       - name: Fetch self-hosted model weights (idempotent, sha256-verified)
+        if: steps.resolve.outputs.deploy == 'true'
         working-directory: frontend/app
         run: node scripts/download-model.mjs
 
@@ -123,10 +201,14 @@ jobs:
       # same-origin into dist/bundle (zero CORS, zero application backend).
       # Output: frontend/app/dist.
       - name: Build the static SPA (signed bundle copied same-origin)
+        if: steps.resolve.outputs.deploy == 'true'
         run: pnpm -C frontend -F frontend run build:pages
 
       - name: Deploy to Cloudflare Pages
+        if: steps.resolve.outputs.deploy == 'true'
         # wrangler reads the API token + account id from the environment.
+        # EXPECTED_SHA came from the resolve step via $GITHUB_ENV and is the same
+        # sha the checkout above took.
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -138,6 +220,7 @@ jobs:
           --commit-dirty=false
 
       - name: Verify deployed source identity
+        if: steps.resolve.outputs.deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -163,6 +246,7 @@ jobs:
           exit 1
 
       - name: Verify public build identity
+        if: steps.resolve.outputs.deploy == 'true'
         run: |
           for attempt in $(seq 1 12); do
             identity=$(curl --fail-with-body --silent --show-error --max-time 15 \
@@ -179,6 +263,7 @@ jobs:
           exit 1
 
       - name: Verify canonical hosts
+        if: steps.resolve.outputs.deploy == 'true'
         run: |
           curl --fail --silent --show-error --max-time 15 \
             --output /dev/null https://edge-reco.com/
