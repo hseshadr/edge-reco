@@ -20,6 +20,7 @@ import parityFixture from "./__fixtures__/embedding_parity.json" with {
 import {
 	configureTransformersEnv,
 	createEmbedder,
+	createEmbedderWith,
 	EMBEDDING_DTYPE,
 	pipelineOptions,
 } from "./embedder";
@@ -156,5 +157,46 @@ describe("pipeline options — explicit dtype pin (house standard §8.1b)", () =
 	// Python sentence-transformers fp32 recipe, and q8-vs-fp32 drift would flunk it.
 	it("node runtime keeps the default dtype", () => {
 		expect(pipelineOptions(true)).toEqual({});
+	});
+});
+
+describe("model-load lifecycle", () => {
+	it("coalesces concurrent first embeddings into one model allocation", async () => {
+		let loadCalls = 0;
+		type TestExtract = (
+			text: string,
+		) => Promise<{ readonly data: Float32Array }>;
+		let finishLoad: ((extract: TestExtract) => void) | undefined;
+		const load = () => {
+			loadCalls += 1;
+			return new Promise<TestExtract>((resolve) => {
+				finishLoad = resolve;
+			});
+		};
+		const embedder = createEmbedderWith(load);
+
+		const first = embedder.embed("first query");
+		const second = embedder.embed("second query");
+
+		expect(loadCalls).toBe(1);
+		finishLoad?.(async () => ({ data: new Float32Array(384) }));
+		await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+	});
+
+	it("allows a clean retry after model allocation fails", async () => {
+		let loadCalls = 0;
+		const embedder = createEmbedderWith(async () => {
+			loadCalls += 1;
+			if (loadCalls === 1) {
+				throw new Error("allocation failed");
+			}
+			return async () => ({ data: new Float32Array(384) });
+		});
+
+		await expect(embedder.embed("first try")).rejects.toThrow(
+			"allocation failed",
+		);
+		await expect(embedder.embed("retry")).resolves.toHaveLength(384);
+		expect(loadCalls).toBe(2);
 	});
 });

@@ -1,23 +1,27 @@
 # EdgeReco
 
-Search and "you might also like" for a 720-product store, running entirely inside the shopper's browser tab — with no recommendation service behind it.
+EdgeReco is search and "you might also like" for an online store, running in the shopper's browser instead of a recommendation server.
+
+The store publishes one signed catalog. The browser verifies it, searches it, and personalizes results locally. Nimbus is the working 720-product demo.
+
+**Status:** public demo, Python library, and browser package. The optional learning loop is a maintainer demo, not a hosted service.
 
 ![The Nimbus storefront: searching the catalog, opening a product, and the recommendation rail re-ranking itself — while the backend calls counter stays at zero](docs/assets/nimbus-demo.gif)
 
 **[Try it at edge-reco.com](https://edge-reco.com)** — nothing to install. Or run it locally:
 
 ```bash
-make demo
+make demo  # opens Nimbus; search "something for my aching back"
 ```
 
-The strip along the top is the app measuring your own session. `backend calls` counts real requests from the page **and** from both Web Workers — a sentinel is installed inside each worker, because a main-thread counter would be structurally blind to them — and an end-to-end test drives a genuine fetch inside the live embedder worker to prove the counter can leave zero. Everything after the one-time 1.5 MB catalog download runs on the device.
+The strip along the top measures the browser session: search time, cold start, JavaScript heap, products, and application-backend calls. The counter watches the page and both Web Workers. After the catalog and model are downloaded, search and ranking run on the device.
 
 ---
 
 [![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![TypeScript 6](https://img.shields.io/badge/typescript-6.0-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript 7](https://img.shields.io/badge/typescript-7.0-blue.svg)](https://www.typescriptlang.org/)
 [![Live demo](https://img.shields.io/badge/live%20demo-edge--reco.com-brightgreen.svg)](https://edge-reco.com)
 
 ## The problem, in one shopping trip
@@ -62,7 +66,7 @@ So every shopper brings their own hardware. The more popular you get, the more c
 
 Nimbus is a pretend storefront built on 720 real products so you can watch this happen: search, click a few items, and see the recommendations re-rank — while the **"backend calls" counter sits at 0**. That's the recording at the top of this page.
 
-The metrics strip reports search latency and memory alongside the backend-call count, measured in your own browser as you browse. That's the honest place to look at performance; this README deliberately publishes no timing figures of its own, because a number typed into a README goes stale the moment anything changes.
+The metrics strip reports search latency and memory alongside the backend-call count, measured in your own browser as you browse. Reproduce the release measurement with `cd frontend && pnpm -F frontend run test:e2e:c1`; it prints cold start, search p50/p95, and Chromium heap for that machine. CI enforces numerical release budgets in that test instead of copying a measurement into this README.
 
 > _Nimbus is fictional — built only to demo EdgeReco. It is not a real shop. Its products come from a public Amazon research dataset — see [Data & attribution](#data--attribution)._
 
@@ -82,7 +86,7 @@ You'll land on a short intro page — hit **"Launch the live demo"** and the eng
 
 Search for "shirt", then click a couple of products. Every click reshapes the "Recommended for you" rail across five taste signals — category, brand, tags, popularity, and freshness — re-ranking instantly, on-device, with no trip to a server. Hearts and cart-adds count more than clicks; what you linger on nudges things gently. The home page also stacks *Trending* and *New arrivals*; open any product for *Similar items*, *Because you viewed*, *Customers also bought*, and *Frequently bought together*.
 
-Then stop the containers and reload the page. It still works — everything it needs is already on your machine.
+After one successful online launch, use the browser's offline mode and reload. Search and recommendations continue from local caches.
 
 > _What that one-time download fetches:_ the signed catalog file, the `all-MiniLM-L6-v2` language model (~23 MB), and the runtime that executes it (~23 MB) — **all from the demo's own web address**, never a third-party CDN. Both are copied in at build time and pinned to their exact content hashes; an automated browser test boots the store with every external CDN blocked to prove it.
 
@@ -163,11 +167,13 @@ Prove it yourself:
 pnpm -F frontend test:e2e:offline
 ```
 
-That automated test warms the app online, cuts the network, reloads, and asserts the store still mounts and ranks — end to end, not a smoke test.
+That test warms the app online, cuts the network, reloads, and asserts the store still mounts and ranks. A second production-shaped test serves the build with Cloudflare Pages' reserved files withheld; this catches a missing service worker that a plain local file server cannot see.
 
 ## Honest limits
 
 Things this project does **not** do, stated plainly.
+
+**Resource floor.** A first launch downloads a roughly 23 MB quantized language model and a roughly 23 MB ONNX/WASM runtime, then allocates more memory while compiling and running them. The engine starts only after the shopper clicks Launch; simultaneous first searches share one model load, failed boots release both Workers, and the release test enforces cold-start, search, and Chromium-heap budgets. This is still a meaningful cost on low-memory phones and laptops. The app does not claim support for a particular minimum-memory device until physical-device measurements establish one.
 
 **1. There is no "verified" badge a user can see.** Signature checking genuinely runs, fail-closed, every time the catalog syncs — a tampered file *is* rejected and the app *does* refuse to load it (`frontend/packages/edgeproc-browser/src/engine/`: `crypto.ts`, `sync.ts`, `integrity.ts`). What does not exist is any screen that shows you that outcome. The landing page lists "verify (Ed25519 + SHA-256, fail-closed)" as a step, but that list is static text describing the pipeline — no checkmark, no pass/fail state, no live result. Don't read it as a user-visible verification result, because it isn't one.
 
@@ -191,7 +197,7 @@ EdgeReco is two layers, not one.
 
 The bottom layer is [**edge-proc**](https://github.com/hseshadr/edge-proc) — a reusable local-compute engine: signed catalog delivery, an on-device cache, fail-closed verification, and the retrieval primitives. The top layer is **edge-reco** — the product-discovery brain: the scoring formula, the session-signal capture, and the session-aware re-ranker.
 
-That split is real in both runtimes. The Python side depends on [`edge-proc[localvec,bundles]`](backend/pyproject.toml); the browser side runs [`@edgeproc/browser`](frontend/packages/edgeproc-browser/) over the same signed file. The lower layer is reusable for any local search workload; edge-reco is what turns it into recommendations, and the two halves are tested against each other to return identical results.
+That split is real in both runtimes. The Python side depends on [`edge-proc[localvec,bundles]`](backend/pyproject.toml); the browser side runs [`@edgeproc/browser`](frontend/packages/edgeproc-browser/) over the same signed file and imports the shared [`@edgeproc/errors`](https://www.npmjs.com/package/@edgeproc/errors) package for stable error codes. The lower layer is reusable for any local search workload; edge-reco is what turns it into recommendations, and the two halves are tested against each other to return identical results.
 
 | Repo | Role |
 | --- | --- |
@@ -420,6 +426,7 @@ image that can drift from the text beside it.
 
 ## Repo layout
 
+- `.github/` — exact-head CI, security scans, and serialized Cloudflare deployment.
 - `backend/` — Python project root (`pyproject.toml`, `uv.lock`).
   - `backend/src/edgereco/` — runtime: `catalog/` `embeddings/` `search/` `reco/` `edge/` `telemetry/` `api/` `cli.py` `config.py`
   - `backend/features/` — Gherkin behaviour specs, decoupled from step implementations

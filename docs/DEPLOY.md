@@ -150,10 +150,27 @@ alternative — or for a repo where you'd rather drive the deploy from CI — th
 
 **It fails loudly when it cannot deploy.** Until the two repository secrets below
 exist, both automatic and manual runs stop at the credential guard with a red failure.
-A green workflow means Wrangler uploaded the build, Cloudflare reports a successful
-deployment whose `deployment_trigger.metadata.commit_hash` matches the CI commit, and
-the public, no-store `/build.json` artifact reports the same commit. The workflow does
-not depend on the incompatible Workers-style `source.config.commit_hash` field.
+
+**It deploys `main` HEAD as of the moment it runs — not the commit that triggered it.**
+The first step reads `refs/heads/main` from the remote with `git ls-remote`; the
+checkout, `wrangler --commit-hash`, and every verification then key off that sha. The
+trigger's `workflow_run.head_sha` is a statement about the past. On 2026-08-08 three
+commits landed within ~30s, their CI runs finished out of commit order, and — because
+GitHub keeps only one pending run per concurrency group — the newest commit's deploy was
+cancelled while the oldest one's ran last and won. `edge-reco.com` served a stale commit
+with every run green. Resolving the target at execution time is what closes that.
+
+If `main` HEAD has no successful CI run, the workflow deploys nothing and exits
+**green**, logging why: that commit's own deploy fires when its CI passes. Skipping is
+safe because a cancelled deploy always has a successor (cancellation only happens when a
+newer run is queued), and the successor re-resolves `main` HEAD.
+
+So a green run means one of exactly two things: either Wrangler uploaded the build,
+Cloudflare reports a successful deployment whose
+`deployment_trigger.metadata.commit_hash` matches `main` HEAD, and the public, no-store
+`/build.json` artifact reports the same commit — or the run stated that it had nothing
+to deploy. The workflow does not depend on the incompatible Workers-style
+`source.config.commit_hash` field.
 
 To go live:
 
@@ -185,7 +202,7 @@ To go live:
    to the identical apex path and query.
 
 The build emits `frontend/app/dist`; `wrangler pages deploy frontend/app/dist
---project-name=edge-reco --branch=main --commit-hash=<CI_SHA>` uploads it. The
+--project-name=edge-reco --branch=main --commit-hash=<RESOLVED_MAIN_HEAD>` uploads it. The
 `frontend/app/public/_redirects` file intentionally has no SPA wildcard rewrite:
 the storefront has no client-side URL router, and unknown paths should retain
 the generated noindex 404 rather than serving the root shell.
@@ -193,7 +210,8 @@ the generated noindex 404 rather than serving the root shell.
 Each Pages build also emits `/build.json` with the CI source commit, application
 version, and signed catalog manifest hash. It is served with `Cache-Control:
 no-store`; the deploy workflow compares its `commit` to the exact `EXPECTED_SHA`
-after Cloudflare reports the Pages deployment as successful. This gives a public,
+(`main` HEAD, as resolved from the remote at the start of the run) after Cloudflare
+reports the Pages deployment as successful. This gives a public,
 machine-readable identity check without trusting a mutable README, an incompatible
 Workers-style source field, or an unversioned bundle pointer.
 
