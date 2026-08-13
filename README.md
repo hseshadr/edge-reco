@@ -1,6 +1,10 @@
 # EdgeReco
 
-EdgeReco is search and "you might also like" for an online store, running in the shopper's browser instead of a recommendation server. The store publishes one signed catalog; the browser verifies it, searches it, and personalizes results locally. Nimbus is the working 720-product demo. Current status: public demo, Python library, and browser package; the optional learning loop is a maintainer demo, not a hosted service.
+EdgeReco is search and "you might also like" for an online store, running in the shopper's browser instead of a recommendation server.
+
+The store publishes one signed catalog. The browser verifies it, searches it, and personalizes results locally. Nimbus is the working 720-product demo.
+
+**Status:** public demo, Python library, and browser package. The optional learning loop is a maintainer demo, not a hosted service.
 
 ![The Nimbus storefront: searching the catalog, opening a product, and the recommendation rail re-ranking itself — while the backend calls counter stays at zero](docs/assets/nimbus-demo.gif)
 
@@ -17,7 +21,7 @@ The strip along the top measures the browser session: search time, cold start, J
 [![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![TypeScript 6](https://img.shields.io/badge/typescript-6.0-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript 7](https://img.shields.io/badge/typescript-7.0-blue.svg)](https://www.typescriptlang.org/)
 [![Live demo](https://img.shields.io/badge/live%20demo-edge--reco.com-brightgreen.svg)](https://edge-reco.com)
 
 ## The problem, in one shopping trip
