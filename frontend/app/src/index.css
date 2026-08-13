@@ -229,6 +229,25 @@ input {
 	display: none;
 }
 
+@media (max-width: 720px) {
+	.nimbus-header__bar {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		gap: 10px 12px;
+	}
+
+	.search {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		max-width: none;
+		min-width: 0;
+	}
+
+	.session-pill {
+		display: none;
+	}
+}
+
 .chip {
 	flex-shrink: 0;
 	padding: 7px 15px;
