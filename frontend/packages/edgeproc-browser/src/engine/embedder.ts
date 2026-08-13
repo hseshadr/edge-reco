@@ -139,16 +139,15 @@ export function pipelineOptions(nodeRuntime: boolean): PipelineOptions {
 class PipelineEmbedder implements Embedder {
 	readonly #load: () => Promise<ExtractFn>;
 	#extract: ExtractFn | undefined;
+	#extractPromise: Promise<ExtractFn> | undefined;
 
 	public constructor(load: () => Promise<ExtractFn>) {
 		this.#load = load;
 	}
 
 	public async embed(text: string): Promise<Float32Array> {
-		if (this.#extract === undefined) {
-			this.#extract = await this.#load();
-		}
-		const output = await this.#extract(text, {
+		const extract = await this.#loadExtract();
+		const output = await extract(text, {
 			pooling: "mean",
 			normalize: true,
 		});
@@ -159,6 +158,21 @@ class PipelineEmbedder implements Embedder {
 			);
 		}
 		return vector;
+	}
+
+	async #loadExtract(): Promise<ExtractFn> {
+		if (this.#extract !== undefined) {
+			return this.#extract;
+		}
+		const pending = this.#extractPromise ?? this.#load();
+		this.#extractPromise = pending;
+		try {
+			this.#extract = await pending;
+			return this.#extract;
+		} catch (error) {
+			this.#extractPromise = undefined;
+			throw error;
+		}
 	}
 }
 
