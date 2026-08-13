@@ -94,6 +94,36 @@ test("launch gate: Landing first, engine cold until Launch is clicked", async ({
 	await expect(page.locator(STRIP)).toBeVisible();
 });
 
+test("mobile storefront never widens the page, including after cart state", async ({
+	page,
+}) => {
+	const mobileWidths = [320, 390, 430];
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto("/");
+	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
+
+	const productCards = page.locator(PRODUCT_CARD);
+	await expect(productCards.first()).toBeVisible({ timeout: 60_000 });
+	for (const width of mobileWidths) {
+		await page.setViewportSize({ width, height: 844 });
+		expect(
+			await page.evaluate(() => document.documentElement.scrollWidth),
+		).toBe(width);
+	}
+
+	await page
+		.getByRole("button", { name: /^Add .+ to cart$/ })
+		.first()
+		.click();
+	await expect(page.locator(".cart-pill")).toHaveText(/1/);
+	for (const width of mobileWidths) {
+		await page.setViewportSize({ width, height: 844 });
+		expect(
+			await page.evaluate(() => document.documentElement.scrollWidth),
+		).toBe(width);
+	}
+});
+
 test("live metrics strip: search drives a real latency; backend calls stay 0", async ({
 	page,
 }) => {
