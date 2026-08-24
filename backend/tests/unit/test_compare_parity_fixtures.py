@@ -1,10 +1,10 @@
 """The parity-fixture comparison must tolerate float noise and NOTHING else.
 
-Byte-exact ``git diff`` was the wrong test for float data: it went red on ~1e-7
-*relative* drift in ``score`` / embedding values — the signature of a different
-BLAS thread count or SIMD path on the runner, not a ranking change. The
-replacement (``scripts/compare_parity_fixtures.py``) must therefore be loose in
-exactly one dimension and strict everywhere else, so these tests pin BOTH sides:
+Byte-exact ``git diff`` was the wrong test for float data: it went red on
+platform-specific numeric drift. The replacement
+(``scripts/compare_parity_fixtures.py``) must tolerate the larger measured
+absolute drift only at embedding-vector paths and stay strict everywhere else,
+so these tests pin BOTH sides:
 
 * the drift it must now absorb (sub-tolerance float wobble), and
 * every real change it must still reject — ids, counts, ordering, array
@@ -82,9 +82,36 @@ def test_float_perturbed_within_tolerance_matches(tmp_path: Path) -> None:
 
 def test_float32_embedding_platform_noise_matches(tmp_path: Path) -> None:
     """ARM and x86 ONNX reductions can differ by one or two float32 ULPs."""
-    baseline = _write(tmp_path, "baseline.json", {"value": -0.06862691044807434})
-    candidate = _write(tmp_path, "candidate.json", {"value": -0.06862699240446091})
+    baseline = _write(
+        tmp_path,
+        "baseline.json",
+        {"items": [{"text": "polo shirt", "vector": [-0.06862691044807434]}]},
+    )
+    candidate = _write(
+        tmp_path,
+        "candidate.json",
+        {"items": [{"text": "polo shirt", "vector": [-0.06862699240446091]}]},
+    )
     assert compare_files(baseline, candidate, _TOL) == []
+
+
+def test_float32_search_query_vector_platform_noise_matches(tmp_path: Path) -> None:
+    """The synthetic search query is also a measured float32 embedding vector."""
+    baseline = _write(tmp_path, "baseline.json", {"query_vector": [-0.06862691044807434]})
+    candidate = _write(tmp_path, "candidate.json", {"query_vector": [-0.06862699240446091]})
+    assert compare_files(baseline, candidate, _TOL) == []
+
+
+@pytest.mark.parametrize("field", ["score", "feature_vector"])
+def test_embedding_absolute_tolerance_does_not_apply_to_other_fields(
+    tmp_path: Path, field: str
+) -> None:
+    """A zero score or look-alike vector must retain the strict absolute contract."""
+    baseline = _write(tmp_path, "baseline.json", {field: [0.0]})
+    candidate = _write(tmp_path, "candidate.json", {field: [1e-7]})
+    problems = compare_files(baseline, candidate, _TOL)
+    assert len(problems) == 1
+    assert f"$.{field}[0]" in problems[0]
 
 
 def test_float_perturbed_beyond_tolerance_fails(tmp_path: Path) -> None:

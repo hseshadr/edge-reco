@@ -241,6 +241,12 @@ The two tiers are kept honest by three fixtures generated from the Python source
 
 Regenerate via `backend/scripts/gen_*_fixture.py`. The browser tests under `frontend/packages/edgeproc-browser/src/engine/` consume them.
 
+Freshness comparison preserves score and configuration sensitivity: every float
+uses `rel_tol=1e-6` and `abs_tol=1e-12`, except the measured embedding-vector
+paths (`query_vector[*]` and `items[*].vector[*]`), which permit at most `2e-7`
+absolute ARM/x86 ONNX drift. IDs, ordering, counts, schemas, and all other values
+that are not floats remain exact.
+
 ## Invariants (load-bearing rules)
 
 - **Scoring formula** is the contract between the two tiers. The *weights* now live in the signed `ranking_config.json` (both tiers read them off the verified bundle), so retuning ranking is a data republish — no code edit. The scoring *math* (`scorer.py` ↔ the `@edgeproc/browser` rerank module) is still mirrored code; change it on both sides together, and both unit suites and the parity fixtures must update.

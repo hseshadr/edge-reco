@@ -12,10 +12,11 @@ hardware), not of a ranking change. Two unrelated Dependabot PRs reproduced the
 identical drift while pinning different toolchains, and the drift has already
 been papered over once by re-committing the fixtures.
 
-This script replaces that with a comparison that is loose in exactly one
-dimension and strict in every other:
+This script replaces that with a comparison that is loose only where the
+measured platform drift occurs and strict in every other dimension:
 
-* **floats** -> ``math.isclose(rel_tol, abs_tol)``
+* **embedding-vector floats** -> ``math.isclose(rel_tol, 2e-7)``
+* **all other floats** -> ``math.isclose(rel_tol, 1e-12)``
 * **everything else** -> exact. ``bool`` is checked before ``int`` (in Python
   ``bool`` IS an ``int``), ints (counts, dims, ``k``, shapes) never get
   tolerance, strings/nulls must be equal, object key SETS must be equal, array
@@ -28,7 +29,7 @@ Usage::
     python scripts/compare_parity_fixtures.py \\
         --pair BASELINE.json CANDIDATE.json \\
         [--pair BASELINE.json CANDIDATE.json ...] \\
-        [--rel-tol 1e-6] [--abs-tol 2e-7]
+        [--rel-tol 1e-6] [--abs-tol 1e-12]
 
 Exit code 0 means every pair agreed within tolerance; a non-zero exit prints one
 greppable ``MISMATCH <json path>: <why> (baseline=..., candidate=...)`` line per
@@ -40,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -56,16 +58,19 @@ from typing import cast
 # was failing on without being able to hide a real regression.
 REL_TOL = 1e-6
 
-# Absolute tolerance covers the observed ARM/x86 ONNX reduction drift. The
-# largest measured component delta is 1.21e-7, so 2e-7 gives less than 2x
-# headroom. Ranking ids/order and every non-float field remain exact, while a
-# genuine score change (1e-3..1e-1) stays four or more orders of magnitude away.
-ABS_TOL = 2e-7
+# Strict absolute tolerance for scores, config values, and every other float.
+# It absorbs only float32-underflow noise and cannot hide a meaningful value.
+ABS_TOL = 1e-12
+
+# The measured ARM/x86 ONNX component delta peaked at 1.21e-7. Less than 2x
+# headroom is allowed only at the two fixture schemas that contain embeddings.
+EMBEDDING_ABS_TOL = 2e-7
+_EMBEDDING_PATH = re.compile(r"^\$(?:\.query_vector\[\d+\]|\.items\[\d+\]\.vector\[\d+\])$")
 
 
 @dataclass(frozen=True)
 class Tolerance:
-    """The two knobs handed to :func:`math.isclose` for every float comparison."""
+    """Relative and strict absolute tolerances for ordinary float fields."""
 
     rel_tol: float
     abs_tol: float
@@ -98,9 +103,10 @@ def _mismatch(path: str, baseline: object, candidate: object, why: str) -> str:
 
 
 def _diff_float(baseline: object, candidate: object, path: str, tol: Tolerance) -> list[str]:
-    """The ONE place tolerance is applied."""
+    """Apply the wider absolute tolerance only to known embedding paths."""
     base, cand = cast(float, baseline), cast(float, candidate)
-    if math.isclose(base, cand, rel_tol=tol.rel_tol, abs_tol=tol.abs_tol):
+    abs_tol = EMBEDDING_ABS_TOL if _EMBEDDING_PATH.fullmatch(path) else tol.abs_tol
+    if math.isclose(base, cand, rel_tol=tol.rel_tol, abs_tol=abs_tol):
         return []
     why = f"float outside tolerance (|delta|={abs(cand - base):.6e})"
     return [_mismatch(path, base, cand, why)]
@@ -184,7 +190,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     tol = Tolerance(rel_tol=args.rel_tol, abs_tol=args.abs_tol)
-    print(f"float tolerance: rel_tol={tol.rel_tol:g} abs_tol={tol.abs_tol:g} (all else exact)")
+    print(
+        f"float tolerance: rel_tol={tol.rel_tol:g} abs_tol={tol.abs_tol:g}; "
+        f"embedding_abs_tol={EMBEDDING_ABS_TOL:g} (ids/order/schema exact)"
+    )
     pairs = [(Path(baseline), Path(candidate)) for baseline, candidate in args.pair]
     problems = [msg for baseline, cand in pairs for msg in _compare_pair(baseline, cand, tol)]
     if problems:

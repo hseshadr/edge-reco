@@ -1,12 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-	Product,
-	RankingProofEvidence,
-	ScoreComponents,
-	SearchResult,
-} from "../api/types";
+import type { Product, RankingProofEvidence, SearchResult } from "../api/types";
 import { RailCard } from "./RailCard";
 import { WhyPopover } from "./WhyPopover";
 
@@ -25,18 +20,6 @@ const product: Product = {
 	image_url: "/test-assets/p1.jpg",
 	url: "",
 	attributes: {},
-};
-
-const components: ScoreComponents = {
-	retrieval: 0,
-	popularity: 0.4,
-	category_match: 0.2,
-	tag_match: 0.15,
-	brand_match: 0.1,
-	freshness: 0.1,
-	similarity: 0,
-	cooccurrence: 0,
-	repetition_penalty: 0.25,
 };
 
 const explanation: NonNullable<SearchResult["score_explanation"]> = {
@@ -172,13 +155,7 @@ describe("RailCard", () => {
 	it("renders the rank, title and rounded score and picks on click", async () => {
 		const onPick = vi.fn();
 		render(
-			<RailCard
-				product={product}
-				rank={3}
-				score={0.876}
-				components={null}
-				onPick={onPick}
-			/>,
+			<RailCard product={product} rank={3} score={0.876} onPick={onPick} />,
 		);
 		expect(screen.getByText("3")).toBeInTheDocument();
 		expect(screen.getByText("Aero Mug")).toBeInTheDocument();
@@ -190,13 +167,7 @@ describe("RailCard", () => {
 
 	it("omits the why-toggle when there is no component breakdown", () => {
 		render(
-			<RailCard
-				product={product}
-				rank={1}
-				score={0.9}
-				components={null}
-				onPick={vi.fn()}
-			/>,
+			<RailCard product={product} rank={1} score={0.9} onPick={vi.fn()} />,
 		);
 		expect(
 			screen.queryByRole("button", { name: "why?" }),
@@ -209,7 +180,6 @@ describe("RailCard", () => {
 				product={product}
 				rank={1}
 				score={0.9}
-				components={components}
 				explanation={explanation}
 				proofEvidence={verified}
 				onPick={vi.fn()}

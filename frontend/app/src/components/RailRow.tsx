@@ -132,7 +132,6 @@ export function RailRow({
 								product={result.product}
 								rank={index + 1}
 								score={result.score}
-								components={result.score_components}
 								explanation={result.score_explanation ?? null}
 								{...(proofEvidence !== undefined ? { proofEvidence } : {})}
 								onPick={onPick}

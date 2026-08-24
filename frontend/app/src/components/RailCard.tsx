@@ -1,12 +1,7 @@
 import { motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type {
-	Product,
-	RankingProofEvidence,
-	ScoreComponents,
-	SearchResult,
-} from "../api/types";
+import type { Product, RankingProofEvidence, SearchResult } from "../api/types";
 import { formatPrice } from "../format";
 import { ProductImage } from "./ProductImage";
 import { WhyPopover } from "./WhyPopover";
@@ -15,8 +10,6 @@ interface RailCardProps {
 	product: Product;
 	rank: number;
 	score: number;
-	/** Legacy contribution map retained only for the shared response contract. */
-	components: ScoreComponents | null;
 	explanation?: SearchResult["score_explanation"];
 	proofEvidence?: RankingProofEvidence;
 	onPick: (product: Product) => void;
