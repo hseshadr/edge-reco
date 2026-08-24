@@ -18,7 +18,7 @@ The strip along the top measures the browser session: search time, cold start, J
 
 ---
 
-[![CI](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/ci.yml)
+[![Dagger](https://github.com/hseshadr/edge-reco/actions/workflows/dagger.yml/badge.svg)](https://github.com/hseshadr/edge-reco/actions/workflows/dagger.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![TypeScript 7](https://img.shields.io/badge/typescript-7.0-blue.svg)](https://www.typescriptlang.org/)
@@ -389,7 +389,11 @@ Vite auto-loads `frontend/.env`. The backend's `EDGERECO_*` vars are read from t
 ## Development
 
 ```bash
-make gate                         # the full dual-stack quality gate — mirrors CI
+dagger check                      # canonical full gate: same graph locally and on GitHub
+dagger check backend-quality      # run one independently cached contract
+dagger check -l                   # list the composable quality/security contracts
+
+make gate                         # direct host-toolchain gate
 
 # Backend (Python recommender)
 cd backend
