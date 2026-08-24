@@ -60,6 +60,34 @@ function profileFixture(): SessionProfile {
 
 // Reference values from edge-reco reco/scorer.score_product.
 describe("scoreProduct (parity vs scorer.score_product)", () => {
+	it("explains the exact ordered runtime formula with Assay", () => {
+		const result = scoreProduct(P1, profileFixture());
+		const explanation = result.score_explanation;
+
+		expect(explanation?.method).toEqual({
+			id: "additive",
+			version: "edgereco.recommendation-v3",
+		});
+		expect(explanation?.score).toBe(0.2435000000000001);
+		expect(explanation?.components.map((component) => component.id)).toEqual([
+			"retrieval",
+			"popularity",
+			"category_match",
+			"tag_match",
+			"brand_match",
+			"freshness",
+			"similarity",
+			"cooccurrence",
+			"repetition_penalty",
+		]);
+		expect(
+			explanation?.components.map((component) => component.operation),
+		).toEqual([...Array.from({ length: 8 }, () => "add"), "subtract"]);
+		expect(
+			explanation?.components.map((component) => component.coefficient),
+		).toEqual([1, 0.4, 0.2, 0.15, 0.1, 0.1, 0, 0, 0.25]);
+	});
+
 	it("breaks down the personalized score by signal", () => {
 		const result = scoreProduct(P1, profileFixture());
 		expect(result.score).toBeCloseTo(0.2435000000000001, 12);

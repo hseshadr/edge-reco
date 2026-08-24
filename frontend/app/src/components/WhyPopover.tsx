@@ -1,35 +1,91 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import type { ScoreComponents } from "../api/types";
+import type { RankingProofEvidence, SearchResult } from "../api/types";
 
-type BarTone = "signal" | "abyss";
+type ScoreExplanation = NonNullable<SearchResult["score_explanation"]>;
+type ExplainedRow = ScoreExplanation["components"][number];
 
-interface SignalRow {
-	key: keyof ScoreComponents;
-	/** Key into `storefront:why.signals.<labelKey>`. */
-	labelKey: string;
-	tone: BarTone;
+const LABEL_KEYS: Readonly<Record<string, string>> = {
+	retrieval: "retrieval",
+	popularity: "popularity",
+	category_match: "categoryMatch",
+	tag_match: "tagMatch",
+	brand_match: "brandMatch",
+	freshness: "freshness",
+	similarity: "similarity",
+	cooccurrence: "cooccurrence",
+	repetition_penalty: "repetitionPenalty",
+};
+
+function widthPct(value: number): string {
+	return `${Math.max(0, Math.min(1, Math.abs(value))) * 100}%`;
 }
 
-const SIGNAL_ROWS: SignalRow[] = [
-	{ key: "popularity", labelKey: "popularity", tone: "abyss" },
-	{ key: "category_match", labelKey: "categoryMatch", tone: "signal" },
-	{ key: "tag_match", labelKey: "tagMatch", tone: "signal" },
-	{ key: "brand_match", labelKey: "brandMatch", tone: "signal" },
-	{ key: "freshness", labelKey: "freshness", tone: "abyss" },
-];
+function number(value: number): string {
+	return String(value);
+}
 
-/** Clamps a raw component score to a 0..1 bar width as a CSS percentage. */
-function widthPct(value: number): string {
-	return `${Math.max(0, Math.min(1, Math.abs(value))) * 100}`.concat("%");
+function equation(row: ExplainedRow): string {
+	const sign = row.operation === "subtract" ? "−" : "+";
+	return `${number(row.raw)} × ${number(row.coefficient)} = ${sign}${number(
+		row.contribution,
+	)}`;
 }
 
 interface WhyPopoverProps {
 	open: boolean;
-	components: ScoreComponents;
+	explanation: ScoreExplanation;
+	proofEvidence: RankingProofEvidence;
 }
 
-export function WhyPopover({ open, components }: WhyPopoverProps) {
+function Verification({ evidence }: { evidence: RankingProofEvidence }) {
+	const { t } = useTranslation("storefront");
+	if (evidence.status === "verified") {
+		return (
+			<ul className="why__checks">
+				<li className="why__check why__check--ok">
+					{t("why.verified.signature")}
+				</li>
+				<li className="why__check why__check--ok">
+					{t("why.verified.config")}
+				</li>
+			</ul>
+		);
+	}
+	if (evidence.status === "failed") {
+		const signatureTone =
+			evidence.publisherSignature === "verified" ? "ok" : "bad";
+		const signatureCopy =
+			evidence.publisherSignature === "verified"
+				? t("why.verified.signature")
+				: evidence.publisherSignature === "failed"
+					? t("why.failed.signature")
+					: t("why.failed.signatureNotChecked");
+		return (
+			<ul className="why__checks">
+				<li className={`why__check why__check--${signatureTone}`}>
+					{signatureCopy}
+				</li>
+				<li className="why__check why__check--bad">
+					{evidence.configHash === "mismatch"
+						? t("why.failed.config")
+						: t("why.failed.proof")}
+				</li>
+			</ul>
+		);
+	}
+	return (
+		<p className="why__unavailable">
+			{t(`why.unavailable.${evidence.reason}`)}
+		</p>
+	);
+}
+
+export function WhyPopover({
+	open,
+	explanation,
+	proofEvidence,
+}: WhyPopoverProps) {
 	const { t } = useTranslation("storefront");
 	return (
 		<AnimatePresence initial={false}>
@@ -42,47 +98,48 @@ export function WhyPopover({ open, components }: WhyPopoverProps) {
 					transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
 				>
 					<div className="why__inner">
-						<div className="why__head">{t("why.head")}</div>
-
-						{SIGNAL_ROWS.map((row) => (
-							<div className="why__row" key={row.key}>
-								<div className="why__label">
-									<span className="why__label-name">
-										{t(`why.signals.${row.labelKey}`)}
-									</span>
-									<span className="why__label-val">
-										{components[row.key].toFixed(2)}
-									</span>
+						<section className="why__section">
+							<h3 className="why__head">{t("why.calculationHead")}</h3>
+							<p className="why__intro">{t("why.calculationIntro")}</p>
+							{explanation.components.map((row) => (
+								<div
+									className={`why__row${
+										row.operation === "subtract" ? " why__row--penalty" : ""
+									}`}
+									key={row.id}
+								>
+									<div className="why__label">
+										<span className="why__label-name">
+											{t(`why.signals.${LABEL_KEYS[row.id] ?? row.id}`, {
+												defaultValue: row.id,
+											})}
+										</span>
+										<span className="why__label-val">{equation(row)}</span>
+									</div>
+									<div className="why__track">
+										<motion.div
+											className={`why__bar why__bar--${
+												row.operation === "subtract" ? "penalty" : "signal"
+											}`}
+											initial={{ width: 0 }}
+											animate={{ width: widthPct(row.contribution) }}
+											transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+										/>
+									</div>
 								</div>
-								<div className="why__track">
-									<motion.div
-										className={`why__bar why__bar--${row.tone}`}
-										initial={{ width: 0 }}
-										animate={{ width: widthPct(components[row.key]) }}
-										transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-									/>
-								</div>
+							))}
+							<div className="why__total">
+								<span>{t("why.total")}</span>
+								<strong>{number(explanation.score)}</strong>
 							</div>
-						))}
+						</section>
 
-						<div className="why__row why__row--penalty">
-							<div className="why__label">
-								<span className="why__label-name">
-									{t("why.signals.repetitionPenalty")}
-								</span>
-								<span className="why__label-val">
-									{components.repetition_penalty.toFixed(2)}
-								</span>
-							</div>
-							<div className="why__track">
-								<motion.div
-									className="why__bar why__bar--penalty"
-									initial={{ width: 0 }}
-									animate={{ width: widthPct(components.repetition_penalty) }}
-									transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-								/>
-							</div>
-						</div>
+						<section className="why__section why__section--verification">
+							<h3 className="why__head">{t("why.verificationHead")}</h3>
+							<Verification evidence={proofEvidence} />
+							<p className="why__limits">{t("why.limitStatic")}</p>
+							<p className="why__limits">{t("why.limitScope")}</p>
+						</section>
 					</div>
 				</motion.div>
 			)}

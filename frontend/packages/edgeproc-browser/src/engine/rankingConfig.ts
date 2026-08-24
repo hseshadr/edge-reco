@@ -239,20 +239,6 @@ const CANDIDATE_POLICIES: ReadonlySet<string> = new Set<CandidatePolicy>([
 	"co_occurrence",
 ]);
 
-const SCORING_WEIGHT_FIELDS = [
-	"popularity",
-	"category",
-	"tag",
-	"brand",
-	"freshness",
-	"repetition_penalty",
-	"similarity",
-	"cooccurrence",
-] as const;
-
-const GRADED_SIGNAL_FIELDS = ["category", "tag", "brand"] as const;
-const INTERACTION_FIELDS = ["click", "view", "favorite", "cart"] as const;
-
 /**
  * Thrown when a present-but-malformed `ranking_config.json` fails validation. The
  * browser tier fails CLOSED here so a corrupt-but-signed bundle surfaces loudly
@@ -280,6 +266,22 @@ function assertFiniteNumber(value: unknown, at: string): number {
 	return value;
 }
 
+function assertNonNegativeNumber(value: unknown, at: string): number {
+	const number = assertFiniteNumber(value, at);
+	if (number < 0) {
+		throw new RankingConfigError(`${at} must be a non-negative finite number`);
+	}
+	return number;
+}
+
+function assertInteger(value: unknown, at: string): number {
+	const number = assertFiniteNumber(value, at);
+	if (!Number.isInteger(number)) {
+		throw new RankingConfigError(`${at} must be an integer`);
+	}
+	return number;
+}
+
 function assertString(value: unknown, at: string): string {
 	if (typeof value !== "string") {
 		throw new RankingConfigError(`${at} must be a string`);
@@ -289,50 +291,81 @@ function assertString(value: unknown, at: string): string {
 
 function assertScoringWeights(value: unknown, at: string): ScoringWeights {
 	const record = asRecord(value, at);
-	for (const field of SCORING_WEIGHT_FIELDS) {
-		assertFiniteNumber(record[field], `${at}.${field}`);
-	}
-	return value as ScoringWeights;
+	return {
+		popularity: assertNonNegativeNumber(record.popularity, `${at}.popularity`),
+		category: assertNonNegativeNumber(record.category, `${at}.category`),
+		tag: assertNonNegativeNumber(record.tag, `${at}.tag`),
+		brand: assertNonNegativeNumber(record.brand, `${at}.brand`),
+		freshness: assertNonNegativeNumber(record.freshness, `${at}.freshness`),
+		repetition_penalty: assertNonNegativeNumber(
+			record.repetition_penalty,
+			`${at}.repetition_penalty`,
+		),
+		similarity: assertNonNegativeNumber(
+			record.similarity === undefined ? 0 : record.similarity,
+			`${at}.similarity`,
+		),
+		cooccurrence: assertNonNegativeNumber(
+			record.cooccurrence === undefined ? 0 : record.cooccurrence,
+			`${at}.cooccurrence`,
+		),
+	};
 }
 
-function assertGradedSignal(value: unknown, at: string): void {
+function assertGradedSignal(value: unknown, at: string): GradedSignal {
 	const record = asRecord(value, at);
-	for (const field of GRADED_SIGNAL_FIELDS) {
-		assertFiniteNumber(record[field], `${at}.${field}`);
-	}
+	return {
+		category: assertNonNegativeNumber(record.category, `${at}.category`),
+		tag: assertNonNegativeNumber(record.tag, `${at}.tag`),
+		brand: assertNonNegativeNumber(record.brand, `${at}.brand`),
+	};
 }
 
-function assertInteractionWeights(value: unknown, at: string): void {
+function assertInteractionWeights(
+	value: unknown,
+	at: string,
+): InteractionWeights {
 	const record = asRecord(value, at);
-	for (const field of INTERACTION_FIELDS) {
-		assertGradedSignal(record[field], `${at}.${field}`);
-	}
+	return {
+		click: assertGradedSignal(record.click, `${at}.click`),
+		view: assertGradedSignal(record.view, `${at}.view`),
+		favorite: assertGradedSignal(record.favorite, `${at}.favorite`),
+		cart: assertGradedSignal(record.cart, `${at}.cart`),
+	};
 }
 
-function assertCandidatePolicy(value: unknown, at: string): void {
+function assertCandidatePolicy(value: unknown, at: string): CandidatePolicy {
 	if (typeof value !== "string" || !CANDIDATE_POLICIES.has(value)) {
 		throw new RankingConfigError(
 			`${at}.candidate_policy is not a known policy`,
 		);
 	}
+	return value as CandidatePolicy;
 }
 
-function assertStrategy(value: unknown, at: string): void {
+function assertStrategy(value: unknown, at: string): Strategy {
 	const record = asRecord(value, at);
-	assertString(record.label, `${at}.label`);
-	assertCandidatePolicy(record.candidate_policy, at);
-	assertScoringWeights(record.weights, `${at}.weights`);
 	const topK = record.co_occurrence_top_k;
-	if (topK !== undefined && topK !== null) {
-		assertFiniteNumber(topK, `${at}.co_occurrence_top_k`);
-	}
+	const normalizedTopK =
+		topK === undefined || topK === null
+			? null
+			: assertInteger(topK, `${at}.co_occurrence_top_k`);
+	return {
+		label: assertString(record.label, `${at}.label`),
+		candidate_policy: assertCandidatePolicy(record.candidate_policy, at),
+		weights: assertScoringWeights(record.weights, `${at}.weights`),
+		co_occurrence_top_k: normalizedTopK,
+	};
 }
 
-function assertStrategies(value: unknown): void {
+function assertStrategies(value: unknown): Record<string, Strategy> {
 	const record = asRecord(value, "strategies");
-	for (const [key, strategy] of Object.entries(record)) {
-		assertStrategy(strategy, `strategies.${key}`);
-	}
+	return Object.fromEntries(
+		Object.entries(record).map(([key, value]) => [
+			key,
+			assertStrategy(value, `strategies.${key}`),
+		]),
+	);
 }
 
 /**
@@ -340,15 +373,23 @@ function assertStrategies(value: unknown): void {
  * model field-for-field. Throws RankingConfigError on any shape/type mismatch so a
  * corrupt-but-signed bundle fails closed rather than producing NaN scores.
  */
-function assertRankingConfig(value: unknown): RankingConfig {
+export function normalizeRankingConfig(value: unknown): RankingConfig {
 	const record = asRecord(value, "ranking_config");
-	assertScoringWeights(record.scoring_weights, "scoring_weights");
-	assertInteractionWeights(record.interaction_weights, "interaction_weights");
-	assertFiniteNumber(record.schema_version, "schema_version");
-	if (record.strategies !== undefined) {
-		assertStrategies(record.strategies);
-	}
-	return value as RankingConfig;
+	return {
+		scoring_weights: assertScoringWeights(
+			record.scoring_weights,
+			"scoring_weights",
+		),
+		interaction_weights: assertInteractionWeights(
+			record.interaction_weights,
+			"interaction_weights",
+		),
+		schema_version: assertFiniteNumber(record.schema_version, "schema_version"),
+		strategies:
+			record.strategies === undefined
+				? {}
+				: assertStrategies(record.strategies),
+	};
 }
 
 /**
@@ -368,5 +409,5 @@ export function parseRankingConfig(
 	if (bytes === undefined) {
 		return DEFAULT_RANKING_CONFIG;
 	}
-	return assertRankingConfig(JSON.parse(DECODER.decode(bytes)));
+	return normalizeRankingConfig(JSON.parse(DECODER.decode(bytes)));
 }

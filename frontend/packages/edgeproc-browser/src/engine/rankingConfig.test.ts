@@ -140,7 +140,7 @@ describe("parseRankingConfig", () => {
 
 	it("parses a v1 bundle (no strategies) into a graceful-degrade config", () => {
 		// A schema_version 1 bundle predates the strategy map. It must parse cleanly
-		// with strategies undefined, so the app degrades to the single for_you rail.
+		// with Pydantic's empty-map default, so no named strategy is invented.
 		const v1 = {
 			scoring_weights: DEFAULT_RANKING_CONFIG.scoring_weights,
 			interaction_weights: DEFAULT_RANKING_CONFIG.interaction_weights,
@@ -149,7 +149,27 @@ describe("parseRankingConfig", () => {
 		const bytes = new TextEncoder().encode(JSON.stringify(v1));
 		const parsed = parseRankingConfig(bytes);
 		expect(parsed.schema_version).toBe(1);
-		expect(parsed.strategies).toBeUndefined();
+		expect(parsed.strategies).toEqual({});
+	});
+
+	it("normalizes accepted JSON to the publisher's exact typed shape", () => {
+		const raw = JSON.parse(JSON.stringify(DEFAULT_RANKING_CONFIG)) as Record<
+			string,
+			unknown
+		>;
+		raw.unexpected_top_level = 1;
+		const strategies = raw.strategies as Record<
+			string,
+			Record<string, unknown>
+		>;
+		delete strategies.for_you?.co_occurrence_top_k;
+
+		const parsed = parseRankingConfig(
+			new TextEncoder().encode(JSON.stringify(raw)),
+		);
+
+		expect(parsed).toEqual(DEFAULT_RANKING_CONFIG);
+		expect("unexpected_top_level" in parsed).toBe(false);
 	});
 });
 
@@ -194,6 +214,88 @@ describe("parseRankingConfig fail-closed validation", () => {
 		const cfg = validConfig();
 		(cfg.scoring_weights as Record<string, unknown>).popularity = "0.4";
 		expect(() => parseRankingConfig(encode(cfg))).toThrow();
+	});
+
+	it.each([
+		"popularity",
+		"category",
+		"tag",
+		"brand",
+		"freshness",
+		"repetition_penalty",
+		"similarity",
+		"cooccurrence",
+	] as const)("rejects a negative top-level %s scoring weight", (field) => {
+		const cfg = validConfig();
+		(cfg.scoring_weights as Record<string, unknown>)[field] = -0.01;
+
+		expect(() => parseRankingConfig(encode(cfg))).toThrow(
+			new RegExp(`scoring_weights\\.${field}.*non-negative`),
+		);
+	});
+
+	it.each([
+		"popularity",
+		"category",
+		"tag",
+		"brand",
+		"freshness",
+		"repetition_penalty",
+		"similarity",
+		"cooccurrence",
+	] as const)("rejects a negative strategy %s scoring weight", (field) => {
+		const cfg = validConfig();
+		const strategies = cfg.strategies as Record<
+			string,
+			Record<string, unknown>
+		>;
+		const strategy = strategies.for_you;
+		if (strategy === undefined) throw new Error("for_you fixture missing");
+		(strategy.weights as Record<string, unknown>)[field] = -0.01;
+
+		expect(() => parseRankingConfig(encode(cfg))).toThrow(
+			new RegExp(`strategies\\.for_you\\.weights\\.${field}.*non-negative`),
+		);
+	});
+
+	it.each([
+		["click", "category"],
+		["click", "tag"],
+		["click", "brand"],
+		["view", "category"],
+		["view", "tag"],
+		["view", "brand"],
+		["favorite", "category"],
+		["favorite", "tag"],
+		["favorite", "brand"],
+		["cart", "category"],
+		["cart", "tag"],
+		["cart", "brand"],
+	] as const)("rejects a negative %s.%s interaction weight", (event, field) => {
+		const cfg = validConfig();
+		const interactions = cfg.interaction_weights as Record<
+			string,
+			Record<string, unknown>
+		>;
+		const signal = interactions[event];
+		if (signal === undefined) throw new Error(`${event} fixture missing`);
+		signal[field] = -0.01;
+
+		expect(() => parseRankingConfig(encode(cfg))).toThrow(
+			new RegExp(`interaction_weights\\.${event}\\.${field}.*non-negative`),
+		);
+	});
+
+	it("defaults an omitted optional weight but rejects an explicit null", () => {
+		const omitted = validConfig();
+		delete (omitted.scoring_weights as Record<string, unknown>).similarity;
+		expect(parseRankingConfig(encode(omitted)).scoring_weights.similarity).toBe(
+			0,
+		);
+
+		const invalid = validConfig();
+		(invalid.scoring_weights as Record<string, unknown>).similarity = null;
+		expect(() => parseRankingConfig(encode(invalid))).toThrow(/similarity/);
 	});
 
 	it("throws when schema_version is absent", () => {
@@ -241,6 +343,23 @@ describe("parseRankingConfig fail-closed validation", () => {
 		strategies.for_you = broken;
 		cfg.strategies = strategies;
 		expect(() => parseRankingConfig(encode(cfg))).toThrow(/label/);
+	});
+
+	it("rejects a fractional co_occurrence_top_k like the Python integer field", () => {
+		const cfg = validConfig();
+		const strategies = cfg.strategies as Record<
+			string,
+			Record<string, unknown>
+		>;
+		const strategy = strategies.frequently_bought_together;
+		if (strategy === undefined) {
+			throw new Error("frequently_bought_together fixture missing");
+		}
+		strategy.co_occurrence_top_k = 1.5;
+
+		expect(() => parseRankingConfig(encode(cfg))).toThrow(
+			/co_occurrence_top_k.*integer/,
+		);
 	});
 
 	it("throws when a strategy's weights are malformed", () => {

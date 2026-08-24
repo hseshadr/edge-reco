@@ -8,9 +8,9 @@ verifies it (ed25519 + sha256) against a **pinned** public key, materializes it 
 and loads a small embedding model into a Web Worker. From then on, every search,
 recommendation, and the **live personalization loop** runs locally: click a few products
 and the "Recommended for you" rail visibly re-ranks toward your taste — **no network round
-trip per click** — while a **"why?"** panel opens up the engine and shows the score
-components (popularity, category/tag/brand affinity, freshness, repetition penalty) behind
-each pick.
+trip per click** — while a **"why?"** panel opens up the engine. **How calculated —
+Assay** shows every live term, coefficient, contribution, and subtraction. **What verified —
+Avow** shows whether the publisher signature and the complete ranking-config hash match.
 
 ## Architecture (backend-free)
 
@@ -91,11 +91,14 @@ The dev SPA reads `VITE_BUNDLE_BASE_URL` (default `http://localhost:8081`, the e
    session profile and a toast confirms it was added to your taste — **no network call**.
 4. **Watch the rail re-rank** toward that category after each click, and the **session badge**
    increment as signals accumulate.
-5. **Open "why?"** on a recommended card to see the **score bars** — popularity,
-   category/tag/brand match, freshness, and the repetition penalty — the engine explaining
-   why it surfaced that product for *you*.
+5. **Open "why?"** on a recommended card. The Assay section shows retrieval plus all
+   seven positive ranking signals and the subtractive repetition penalty, in execution
+   order. The sibling Avow section reports signature/config verification and its limits:
+   the personalized result is not signed, and the proof does not establish input truth,
+   freshness, fairness, or recommendation quality.
 
-Sessions are **per-tab** and held in memory; reload to start from a clean slate.
+Taste signals are stored only in this browser and survive reloads; use **Reset taste** to
+clear them.
 
 **Tests** (units + the browser e2e that proves the backend-free loop and captures the
 screenshot):

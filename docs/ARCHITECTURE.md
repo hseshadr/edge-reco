@@ -65,7 +65,7 @@ sequenceDiagram
     participant Engine as Engine (same code, both tiers)
     participant BM25 as BM25 keyword index
     participant Vec as FAISS vector index
-    participant Session as Session profile (memory only)
+    participant Session as Browser-local taste profile
 
     UI->>Engine: search(query) or recommend(strategy, seed)
     par Retrieve
@@ -77,8 +77,8 @@ sequenceDiagram
     end
     Engine->>Engine: Fuse — Reciprocal Rank Fusion, k=60
     Engine->>Session: read category / tag / brand affinity
-    Engine->>Engine: Rerank — personalized_score
-    Engine-->>UI: ranked products + score_components
+    Engine->>Engine: Rerank — ordered Assay formula
+    Engine-->>UI: ranked products + Assay explanation + Avow proof state
     UI->>Session: click / view / favorite / cart
 ```
 
@@ -115,7 +115,7 @@ The seed bundle ships seven strategies:
 | `also_bought` | Customers who bought this also bought | `co_occurrence` | co-occurrence + popularity | product |
 | `frequently_bought_together` | Frequently bought together | `co_occurrence` (tighter cut, `co_occurrence_top_k: 3`) | co-occurrence | product |
 
-`vector_similarity` is the one genuinely new retrieval primitive: a FAISS search by a product's reconstructed vector (`nearest(product_id, k)` Python / `VectorIndex.nearest` browser, excluding the seed). Its candidates carry a per-candidate `similarity` (cosine to seed) that the scorer adds as `+ weights.similarity · similarity`; `co_occurrence` candidates carry a `cooccurrence` score added the same way. For every other strategy those two signals are absent/0, so the formula reduces to the original — and `score_components` stays populated so the "Why?" panel works per strategy.
+`vector_similarity` is the one genuinely new retrieval primitive: a FAISS search by a product's reconstructed vector (`nearest(product_id, k)` Python / `VectorIndex.nearest` browser, excluding the seed). Its candidates carry a per-candidate `similarity` (cosine to seed) that the scorer adds as `+ weights.similarity · similarity`; `co_occurrence` candidates carry a `cooccurrence` score added the same way. For every other strategy those two signals are absent/0. Assay still emits all nine ordered rows, so “How calculated” never hides a zero-valued term.
 
 The **product-detail page (PDP)** that hosts the seed-based rails is **state-based, not routed**: `Storefront.tsx` flips a `view` between `{ kind: "browse" }` and a product view (`ProductDetail.tsx`), so there is no URL to deep-link to a missing route — the **no-404 property** of a static Pages deploy is preserved. Home stacks For You / Trending / New arrivals via `RailStack`; the PDP stacks Similar items / Because you viewed / Customers also bought / Frequently bought together. Each rail is guarded — an empty or throwing strategy is simply hidden — so a bundle that predates a strategy degrades gracefully to the rails it can serve.
 
@@ -126,15 +126,22 @@ The **product-detail page (PDP)** that hosts the seed-based rails is **state-bas
 ### Scoring formula
 
 ```
-personalized_score = 0.40·popularity
-                   + 0.20·category_affinity
-                   + 0.15·tag_affinity
-                   + 0.10·brand_affinity
-                   + 0.10·freshness
-                   − 0.25·repetition
-
-search_score = 0.20·(RRF / max_candidate_RRF) + personalized_score
+score = retrieval
+      + w_popularity·popularity
+      + w_category·category_affinity
+      + w_tag·tag_affinity
+      + w_brand·brand_affinity
+      + w_freshness·freshness
+      + w_similarity·similarity
+      + w_cooccurrence·cooccurrence
+      − w_repetition·was_recently_viewed
 ```
+
+Assay 0.5 executes those terms in the displayed order with ordinary binary64
+left-to-right arithmetic. Retrieval’s coefficient is 1; each strategy supplies all
+eight remaining coefficients through its `ScoringWeights`. Avow signs only the static
+formula probes plus the complete ranking-config hash. Personalized scores are never
+signed.
 
 Recently-viewed products get penalized; matching categories / brands / tags get amplified. Session affinity accumulates per click / view / favorite / cart event in the `SessionProfile`.
 

@@ -18,7 +18,13 @@ import { EngineClient } from "./client";
 import { type CooccurrenceMatrix, parseCooccurrence } from "./cooccurrence";
 import { createEmbedder, type Embedder } from "./embedder";
 import { createWorkerEmbedder, spawnEmbedderWorker } from "./embedderClient";
+import { fetchBytes } from "./fetchBytes";
 import { parseRankingConfig, type RankingConfig } from "./rankingConfig";
+import {
+	RANKING_RECEIPT_NAME,
+	type RankingProofEvidence,
+	verifyRankingProof,
+} from "./rankingProof";
 import { createSearchEngine, type SearchEngine } from "./searchEngine";
 import type { SyncResult } from "./types";
 import type { VectorIndexFiles } from "./vectorIndex";
@@ -30,6 +36,8 @@ const EMBEDDINGS_PATH = "vector/embeddings.f32";
 const PRODUCTS_PATH = "products.jsonl";
 /** The signed ranking weights; absent on bundles that predate the feature. */
 const RANKING_CONFIG_PATH = "ranking_config.json";
+/** Avow envelope containing EdgeReco's static Assay ranking proof. */
+const RANKING_RECEIPT_PATH = RANKING_RECEIPT_NAME;
 /** The signed co-occurrence matrix; absent on bundles that predate Phase 3. */
 const COOCCURRENCE_PATH = "cooccurrence.json";
 
@@ -76,11 +84,16 @@ export interface EnginePort {
 export interface RuntimeDeps {
 	readonly spawnEngine: () => EnginePort;
 	readonly makeEmbedder: () => Embedder;
+	readonly loadPublisherKey?: (url: string) => Promise<Uint8Array>;
 }
+
+const defaultLoadPublisherKey = (url: string): Promise<Uint8Array> =>
+	fetchBytes(url, { cache: "force-cache", maxBytes: 32 });
 
 const defaultDeps: RuntimeDeps = {
 	spawnEngine: () => EngineClient.spawn(),
 	makeEmbedder: () => createWorkerEmbedder(spawnEmbedderWorker()),
+	loadPublisherKey: defaultLoadPublisherKey,
 };
 
 /**
@@ -138,6 +151,37 @@ export async function readOptionalBundleFile(
 async function readRankingConfig(engine: EnginePort): Promise<RankingConfig> {
 	const bytes = await readOptionalBundleFile(engine, RANKING_CONFIG_PATH);
 	return parseRankingConfig(bytes);
+}
+
+async function loadPinnedKey(
+	url: string,
+	loader: (url: string) => Promise<Uint8Array>,
+): Promise<Uint8Array | undefined> {
+	try {
+		const bytes = await loader(url);
+		return bytes.byteLength === 32 ? bytes : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Read and verify the static proof without making proof availability boot-critical. */
+export async function readRankingProofEvidence(
+	engine: EnginePort,
+	config: RankingConfig,
+	pubkeyUrl: string,
+	loadPublisherKey: (url: string) => Promise<Uint8Array>,
+): Promise<RankingProofEvidence> {
+	const receipt = await readOptionalBundleFile(engine, RANKING_RECEIPT_PATH);
+	const preliminary = await verifyRankingProof(receipt, config, undefined);
+	if (
+		preliminary.status !== "unavailable" ||
+		preliminary.reason !== "key_unavailable"
+	) {
+		return preliminary;
+	}
+	const pinnedKey = await loadPinnedKey(pubkeyUrl, loadPublisherKey);
+	return verifyRankingProof(receipt, config, pinnedKey);
 }
 
 /**
@@ -234,6 +278,12 @@ export class EngineRuntime {
 				readRankingConfig(engineClient),
 				readCooccurrence(engineClient),
 			]);
+			const proofEvidence = await readRankingProofEvidence(
+				engineClient,
+				rankingConfig,
+				config.pubkeyUrl,
+				this.#deps.loadPublisherKey ?? defaultLoadPublisherKey,
+			);
 			// The sync worker has done its job; release OPFS/IPC resources before
 			// loading the model so the two largest allocations do not overlap.
 			this.#releaseEngine(engineClient);
@@ -253,6 +303,7 @@ export class EngineRuntime {
 				embedder,
 				rankingConfig,
 				cooccurrence,
+				proofEvidence,
 			);
 			this.#assertCurrent(generation);
 			this.#ready = engine;

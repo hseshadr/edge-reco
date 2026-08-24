@@ -10,6 +10,7 @@ export type {
 	EventType,
 	InteractionEvent,
 	Product,
+	RankingProofEvidence,
 	RecommendResponse,
 	ScoreComponents,
 	SearchResponse,

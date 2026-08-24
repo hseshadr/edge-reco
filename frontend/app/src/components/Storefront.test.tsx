@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 	strategies: vi.fn(),
 	catalog: vi.fn(),
 	catalogInfo: vi.fn(),
+	rankingProofEvidence: vi.fn(),
 	resetSession: vi.fn(),
 	replayedSignalCount: vi.fn(),
 	emitInteraction: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("../api/client", () => ({
 	strategies: mocks.strategies,
 	catalog: mocks.catalog,
 	catalogInfo: mocks.catalogInfo,
+	rankingProofEvidence: mocks.rankingProofEvidence,
 	resetSession: mocks.resetSession,
 	replayedSignalCount: mocks.replayedSignalCount,
 }));
@@ -115,6 +117,12 @@ beforeEach(() => {
 		total: 1,
 	});
 	mocks.catalogInfo.mockResolvedValue({ count: 720 });
+	mocks.rankingProofEvidence.mockReturnValue({
+		status: "unavailable",
+		publisherSignature: "not_checked",
+		configHash: "not_checked",
+		reason: "legacy",
+	});
 	mocks.emitInteraction.mockResolvedValue({ emitted: true, message: null });
 });
 

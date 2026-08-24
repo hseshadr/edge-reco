@@ -1,0 +1,884 @@
+{
+	"schema": "avow.receipt/v1",
+	"payload": {
+		"schema": "edgereco.ranking-proof/v1",
+		"ranking_config_hash": "sha256:143d1ed6e4983fc0cb922806660a57d7f672215e123abc2e05b9e980d33c79f5",
+		"formula_probes": [
+			{
+				"id": "search",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.3600000000000001,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.4,
+							"contribution": 0.27999999999999997,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.2,
+							"contribution": 0.12,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.15,
+							"contribution": 0.12,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.1,
+							"contribution": 0.05,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.1,
+							"contribution": 0.04000000000000001,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:d2570db91733c24022268ea6bb2ba96c69caf52b7c69c6927e06f5114e092377",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "also_bought",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.15400000000000003,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.15,
+							"contribution": 0.105,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.05,
+							"contribution": 0.03,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.04,
+							"contribution": 0.032,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.03,
+							"contribution": 0.015,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.03,
+							"contribution": 0.012,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.7,
+							"contribution": 0.21,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:9d44bdbd0b33adb054839217bce9017389e1a5416ac10f5a2c041604befc42e8",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "because_viewed",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.4970000000000001,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.1,
+							"contribution": 0.06999999999999999,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.12,
+							"contribution": 0.072,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.08,
+							"contribution": 0.064,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.06,
+							"contribution": 0.03,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.04,
+							"contribution": 0.016,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.55,
+							"contribution": 0.49500000000000005,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:f661b2709c34203806ba29ab31738d1d36cb3f84ab5b2f58d8331b14f1254782",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "for_you",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.3600000000000001,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.4,
+							"contribution": 0.27999999999999997,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.2,
+							"contribution": 0.12,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.15,
+							"contribution": 0.12,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.1,
+							"contribution": 0.05,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.1,
+							"contribution": 0.04000000000000001,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:d2570db91733c24022268ea6bb2ba96c69caf52b7c69c6927e06f5114e092377",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "frequently_bought_together",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.11199999999999999,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.08,
+							"contribution": 0.055999999999999994,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.04,
+							"contribution": 0.024,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.03,
+							"contribution": 0.024,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.02,
+							"contribution": 0.01,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.02,
+							"contribution": 0.008,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.8,
+							"contribution": 0.24,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:e01b2b356053d9c69353bbdf3936917da01abb8677417f3d1cad51af760c3abf",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "new_arrivals",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.21199999999999997,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.15,
+							"contribution": 0.105,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.05,
+							"contribution": 0.03,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.04,
+							"contribution": 0.032,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.03,
+							"contribution": 0.015,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.7,
+							"contribution": 0.27999999999999997,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:9cd752d49b58422b3af9467d6d36804e8c327d9c8fc0c5dc537d9a6facd8c52d",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "similar_items",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.527,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.2,
+							"contribution": 0.13999999999999999,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.05,
+							"contribution": 0.03,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.04,
+							"contribution": 0.032,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.03,
+							"contribution": 0.015,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.05,
+							"contribution": 0.020000000000000004,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.6,
+							"contribution": 0.54,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:ab9808345d5a6d4fecaa013ed3044416af5ec57801b825d9af420144737527f4",
+					"selected_component_id": null
+				}
+			},
+			{
+				"id": "trending",
+				"result": {
+					"schema": "assay.result/v1",
+					"method": {
+						"id": "additive",
+						"version": "edgereco.recommendation-v3"
+					},
+					"score": 0.41900000000000004,
+					"interval": null,
+					"clamp": null,
+					"intercept": 0.0,
+					"weight_total": null,
+					"components": [
+						{
+							"id": "retrieval",
+							"raw": 0.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 1.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "popularity",
+							"raw": 0.7,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.8,
+							"contribution": 0.5599999999999999,
+							"contribution_interval": null
+						},
+						{
+							"id": "category_match",
+							"raw": 0.6,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.05,
+							"contribution": 0.03,
+							"contribution_interval": null
+						},
+						{
+							"id": "tag_match",
+							"raw": 0.8,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.04,
+							"contribution": 0.032,
+							"contribution_interval": null
+						},
+						{
+							"id": "brand_match",
+							"raw": 0.5,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.03,
+							"contribution": 0.015,
+							"contribution_interval": null
+						},
+						{
+							"id": "freshness",
+							"raw": 0.4,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.08,
+							"contribution": 0.032,
+							"contribution_interval": null
+						},
+						{
+							"id": "similarity",
+							"raw": 0.9,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "cooccurrence",
+							"raw": 0.3,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "add",
+							"coefficient": 0.0,
+							"contribution": 0.0,
+							"contribution_interval": null
+						},
+						{
+							"id": "repetition_penalty",
+							"raw": 1.0,
+							"normalized": null,
+							"declared_weight": null,
+							"operation": "subtract",
+							"coefficient": 0.25,
+							"contribution": 0.25,
+							"contribution_interval": null
+						}
+					],
+					"inputs_hash": "sha256:a3219297965b6dd4a4f8ccdc1076bd22840d46ddca8f2a57bb9dc322a85daa1a",
+					"selected_component_id": null
+				}
+			}
+		]
+	},
+	"payload_hash": "sha256:7ccb60e444157ce1cc534562f86b1aa420b1b89a906f4d0b120dbc8d66d10111",
+	"public_key": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+	"signature": "9e96a54735d5f00b8c9de01e69c9bc1b04da0b7c0738225a193e1ebdbf1fab32421724a5f21f800223d1ec314203ed35010a94665f58c622acc82b2e91a53309"
+}

@@ -25,13 +25,36 @@
 		"catalog": "catalog"
 	},
 	"why": {
-		"head": "Why this ranks here",
+		"calculationHead": "How calculated — Assay",
+		"calculationIntro": "Live terms, applied left to right as binary64 arithmetic.",
+		"total": "Final score",
+		"verificationHead": "What verified — Avow",
+		"verified": {
+			"signature": "Publisher signature verified",
+			"config": "Full ranking-config hash matches"
+		},
+		"failed": {
+			"signature": "Publisher signature failed",
+			"signatureNotChecked": "Publisher signature not checked",
+			"config": "Full ranking-config hash does not match",
+			"proof": "Ranking proof could not be verified"
+		},
+		"unavailable": {
+			"missing": "Verification unavailable — this bundle has no ranking proof.",
+			"legacy": "Verification unavailable — this legacy receipt is not an EdgeReco v1 ranking proof.",
+			"key_unavailable": "Verification unavailable — the pinned publisher key could not be loaded."
+		},
+		"limitStatic": "The signature covers the static formula and ranking config only. This personalized result is not signed.",
+		"limitScope": "It does not verify input truth, freshness, fairness, or recommendation quality.",
 		"signals": {
+			"retrieval": "Retrieval",
 			"popularity": "Popularity",
 			"categoryMatch": "Category match",
 			"tagMatch": "Tag match",
 			"brandMatch": "Brand match",
 			"freshness": "Freshness",
+			"similarity": "Similarity",
+			"cooccurrence": "Cooccurrence",
 			"repetitionPenalty": "Repetition penalty"
 		}
 	},

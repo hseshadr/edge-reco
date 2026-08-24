@@ -6,6 +6,7 @@ import {
 	browse,
 	catalog,
 	catalogInfo,
+	rankingProofEvidence,
 	recommendStrategy,
 	replayedSignalCount,
 	resetSession,
@@ -143,6 +144,7 @@ export function Storefront() {
 	const [rails, setRails] = useState<RailData[]>([]);
 	const [pdpRails, setPdpRails] = useState<PdpRail[]>([]);
 	const strategyMap = useRef<Record<string, Strategy>>({});
+	const [proofEvidence] = useState(rankingProofEvidence);
 
 	// Explicit signals (click | favorite | cart) counted app-side: the engine's
 	// parity-locked clickCount only counts clicks, and the badge + cold-start
@@ -486,6 +488,7 @@ export function Storefront() {
 	const railStack = (
 		<RailStack
 			rails={rails}
+			proofEvidence={proofEvidence}
 			onPick={onPick}
 			personalizing={personalizing}
 			signalCount={sessionSignals}
@@ -548,6 +551,7 @@ export function Storefront() {
 					<ProductDetail
 						product={view.product}
 						rails={pdpRails}
+						proofEvidence={proofEvidence}
 						onBack={onBack}
 						onPick={onPick}
 					/>

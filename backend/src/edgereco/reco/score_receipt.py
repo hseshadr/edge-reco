@@ -1,95 +1,104 @@
-"""The ranking attestation: the bundle's scoring weights sealed as a signed
-Assay weighted-composite receipt (``ranking_receipt.json``).
-
-Why: the weights in ``ranking_config.json`` govern every recommendation a shopper
-sees. The bundle signature already covers that file's *bytes*; this receipt
-additionally seals the weights' *content hash* as the composite's
-``metric_version`` and replays the weighted formula over a fixed golden fixture,
-so any offline verifier — the browser demo, or a cold reader holding the
-publisher's public key — can confirm both WHICH weights governed ranking and that
-the composite math reproduces. Signing happens once at publish time (never in the
-per-request scoring loop), with the SAME Ed25519 seed that signs the bundle: one
-publisher identity, one pinned key.
-"""
+"""Static ranking proof: Assay formula probes sealed once with Avow."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
-from assay import composite_score
-from assay.models import CompositeRequest, SubScoreInput
-from assay.receipt import ScoreReceipt
-from avow import content_hash, load_signing_key
+from assay import ScoreResult
+from avow import content_hash, load_signing_key, sign_payload
 from nacl.signing import SigningKey
+from pydantic import BaseModel, ConfigDict, Field
 
+from edgereco.reco.formula import FormulaSignals, explain_score
 from edgereco.reco.ranking_config import RankingConfig, ScoringWeights
 
-#: The receipt's filename inside the signed bundle (beside ``ranking_config.json``).
 RANKING_RECEIPT_NAME: Final[str] = "ranking_receipt.json"
-
-#: Fixed golden signal levels, each on the formula's native 0..1 scale. The values
-#: are deliberately DISTINCT so every weight influences the attested composite
-#: differently — retuning any single weight changes the receipt's score, not only
-#: its governed hash. ``repetition_penalty`` is absent by design: ``score_product``
-#: subtracts it, and a weighted composite attests the positive contributions.
-_GOLDEN_SIGNALS: Final[dict[str, float]] = {
-    "popularity": 0.8,
-    "category": 0.6,
-    "tag": 0.4,
-    "brand": 0.5,
-    "freshness": 0.7,
-    "similarity": 0.9,
-    "cooccurrence": 0.3,
-}
+RANKING_PROOF_SCHEMA: Final[Literal["edgereco.ranking-proof/v1"]] = "edgereco.ranking-proof/v1"
+_SHA256_PATTERN: Final[str] = r"^sha256:[0-9a-f]{64}$"
+_PROBE_SIGNALS: Final[FormulaSignals] = FormulaSignals(
+    retrieval=0.0,
+    popularity=0.7,
+    category_match=0.6,
+    tag_match=0.8,
+    brand_match=0.5,
+    freshness=0.4,
+    similarity=0.9,
+    cooccurrence=0.3,
+    repetition_penalty=1.0,
+)
 
 
-def governed_version(weights: ScoringWeights) -> str:
-    """Content hash of the governing weights — the receipt's ``metric_version``."""
-    return content_hash(weights.model_dump(mode="json"))
+class FormulaProbe(BaseModel):
+    """One deterministic Assay replay for a runtime scoring profile."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    result: ScoreResult
 
 
-def _subscore(name: str, value: float, weight: float) -> SubScoreInput:
-    """One golden subscore: a degenerate interval (deterministic replay — no
-    fabricated uncertainty) on the signal's native 0..1 scale."""
-    return SubScoreInput(
-        name=name,
-        value=value,
-        low=value,
-        high=value,
-        scale_min=0.0,
-        scale_max=1.0,
-        weight=weight,
+class RankingProof(BaseModel):
+    """EdgeReco-owned signed statement about one full ranking configuration."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", serialize_by_alias=True)
+
+    schema_version: Literal["edgereco.ranking-proof/v1"] = Field(alias="schema")
+    ranking_config_hash: str = Field(pattern=_SHA256_PATTERN)
+    formula_probes: tuple[FormulaProbe, ...]
+
+
+class RankingReceipt(BaseModel):
+    """Avow's portable v1 wire envelope around the ranking proof."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", serialize_by_alias=True)
+
+    receipt_schema: Literal["avow.receipt/v1"] = Field(alias="schema")
+    payload: RankingProof
+    payload_hash: str = Field(pattern=_SHA256_PATTERN)
+    public_key: str
+    signature: str
+
+
+def _probe(identifier: str, weights: ScoringWeights) -> FormulaProbe:
+    return FormulaProbe(id=identifier, result=explain_score(_PROBE_SIGNALS, weights))
+
+
+def _config_hash(config: RankingConfig) -> str:
+    return content_hash(config.model_dump(mode="json"))
+
+
+def _utf16_sort_key(identifier: str) -> bytes:
+    """Match JavaScript string ordering for portable probe arrays."""
+    return identifier.encode("utf-16-be")
+
+
+def build_ranking_proof(config: RankingConfig) -> RankingProof:
+    """Build search plus every strategy probe from the full signed config."""
+    probes: tuple[FormulaProbe, ...] = (_probe("search", config.scoring_weights),)
+    probes += tuple(
+        _probe(strategy_id, config.strategies[strategy_id].weights)
+        for strategy_id in sorted(config.strategies, key=_utf16_sort_key)
+    )
+    return RankingProof(
+        schema=RANKING_PROOF_SCHEMA,
+        ranking_config_hash=_config_hash(config),
+        formula_probes=probes,
     )
 
 
-def ranking_request(config: RankingConfig) -> CompositeRequest:
-    """The attestation request: one subscore per positively-weighted additive signal.
-
-    Signals weighted 0 (``similarity`` / ``cooccurrence`` outside vector and
-    co-occurrence strategies) contribute nothing to the formula and are omitted,
-    so the receipt's parts are exactly the signals that can move a score.
-    """
-    weights = config.scoring_weights
-    subscores = tuple(
-        _subscore(name, value, getattr(weights, name))
-        for name, value in _GOLDEN_SIGNALS.items()
-        if getattr(weights, name) > 0
+def sign_ranking_receipt(config: RankingConfig, signing_key: SigningKey) -> RankingReceipt:
+    """Seal only the static proof; personalized ranking results are never signed."""
+    signed = sign_payload(build_ranking_proof(config), signing_key)
+    return RankingReceipt(
+        schema="avow.receipt/v1",
+        payload=signed.payload,
+        payload_hash=signed.payload_hash,
+        public_key=signed.public_key,
+        signature=signed.signature,
     )
-    return CompositeRequest(metric_version=governed_version(weights), subscores=subscores)
-
-
-def sign_ranking_receipt(config: RankingConfig, signing_key: SigningKey) -> ScoreReceipt:
-    """Seal ``config``'s weights into a signed, offline-verifiable score receipt."""
-    return composite_score(ranking_request(config), signing_key=signing_key)
 
 
 def signing_key_from_seed(path: Path) -> SigningKey:
-    """The bundle publisher's raw Ed25519 seed file as an avow signing key.
-
-    ``publish_bundle`` signs the bundle with a raw 32-byte Ed25519 seed
-    (edge-proc ``Ed25519Signer.from_private_bytes``); pynacl accepts the same
-    seed bytes, so the ranking receipt shares the bundle's publisher identity —
-    verifiers pin ONE public key for both.
-    """
+    """Load the publisher's raw Ed25519 seed for the shared bundle identity."""
     return load_signing_key(path)

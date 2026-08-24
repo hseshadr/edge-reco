@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { Product, SearchResult } from "../api/types";
+import type { Product, RankingProofEvidence, SearchResult } from "../api/types";
 import { formatPrice } from "../format";
 import { ProductImage } from "./ProductImage";
 import { RailRow } from "./RailRow";
@@ -16,6 +16,7 @@ interface ProductDetailProps {
 	rails: PdpRail[];
 	onBack: () => void;
 	onPick: (product: Product) => void;
+	proofEvidence?: RankingProofEvidence;
 }
 
 /**
@@ -30,6 +31,7 @@ export function ProductDetail({
 	rails,
 	onBack,
 	onPick,
+	proofEvidence,
 }: ProductDetailProps) {
 	const { t } = useTranslation("storefront");
 	const visibleRails = rails.filter((rail) => rail.results.length > 0);
@@ -68,6 +70,7 @@ export function ProductDetail({
 						results={rail.results}
 						onPick={onPick}
 						tagline={t("rail.taglineDefault")}
+						{...(proofEvidence !== undefined ? { proofEvidence } : {})}
 					/>
 				))}
 			</div>

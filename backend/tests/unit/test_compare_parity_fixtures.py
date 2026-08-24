@@ -80,6 +80,13 @@ def test_float_perturbed_within_tolerance_matches(tmp_path: Path) -> None:
     assert _pair(tmp_path, _mutate(expected=nudged)) == []
 
 
+def test_float32_embedding_platform_noise_matches(tmp_path: Path) -> None:
+    """ARM and x86 ONNX reductions can differ by one or two float32 ULPs."""
+    baseline = _write(tmp_path, "baseline.json", {"value": -0.06862691044807434})
+    candidate = _write(tmp_path, "candidate.json", {"value": -0.06862699240446091})
+    assert compare_files(baseline, candidate, _TOL) == []
+
+
 def test_float_perturbed_beyond_tolerance_fails(tmp_path: Path) -> None:
     """1e-4 relative is 100x the tolerance — a real scoring change, not noise."""
     nudged = [

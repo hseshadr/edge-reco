@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { Product, SearchResult } from "../api/types";
+import type { Product, RankingProofEvidence, SearchResult } from "../api/types";
 import { RailRow } from "./RailRow";
 import type { RailSpec } from "./railSelection";
 
@@ -18,6 +18,7 @@ interface RailStackProps {
 	signalCount: number;
 	/** "Reset taste" next to the badge: wipes the durable in-browser activity. */
 	onResetTaste: () => void;
+	proofEvidence?: RankingProofEvidence;
 }
 
 /**
@@ -42,6 +43,7 @@ export function RailStack({
 	personalizing,
 	signalCount,
 	onResetTaste,
+	proofEvidence,
 }: RailStackProps) {
 	const { t } = useTranslation("storefront");
 	const nonEmpty = rails.filter((rail) => rail.results.length > 0);
@@ -61,6 +63,7 @@ export function RailStack({
 						onPick={onPick}
 						tagline={t(TAGLINE_KEYS[spec.strategy] ?? "rail.taglineDefault")}
 						personalizing={isForYou && personalizing}
+						{...(proofEvidence !== undefined ? { proofEvidence } : {})}
 						{...(isForYou ? { signalCount, onResetTaste } : {})}
 					/>
 				);
