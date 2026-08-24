@@ -238,9 +238,9 @@ typecheck = "mypy src scripts/compare_parity_fixtures.py"
 # average must hold Radon rank A.
 complexity = "xenon --max-absolute A --max-modules A --max-average A src scripts/compare_parity_fixtures.py"
 # Dependency vulnerability scan (network-dependent — hits the PyPI advisory DB).
-# Runs in its own "Security audit" workflow (.github/workflows/security-audit.yml),
-# which goes honestly RED on any finding, so the main CI gate stays meaningful for
-# code changes. NO suppressions — every finding is fixed by a version floor, not
+# Runs as the Dagger `backend-audit` check, which goes honestly RED on any finding,
+# so dependency advisories cannot be hidden by an unrelated quality failure.
+# NO suppressions — every finding is fixed by a version floor, not
 # silenced. See the security-floor pins in [project].dependencies above.
 #
 # CVE-2025-3000 (GHSA-rrmf-rvhw-rf47, PYSEC-2025-194), torch.jit.script memory
@@ -259,7 +259,7 @@ uv export --frozen --all-extras --no-emit-project --no-hashes -o .audit-requirem
 """
 test = "pytest --cov=edgereco --cov-report=term-missing --cov-fail-under=90"
 fmt = "ruff format ."
-# `gate` mirrors CI's quality steps (format-check + lint + typecheck + complexity +
+# `gate` mirrors Dagger's quality steps (format-check + lint + typecheck + complexity +
 # test-with-coverage). `pip-audit` runs in the separate Security audit workflow.
 gate = ["fmt-check", "lint", "typecheck", "complexity", "test"]
 

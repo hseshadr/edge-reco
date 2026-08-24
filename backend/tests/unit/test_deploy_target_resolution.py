@@ -77,7 +77,7 @@ _RUN_BODY_INDENT = "          "
 
 # What the runner injects into the step. Pinned here so the harness's model of the
 # step's inputs cannot silently drift from the committed step.
-_STEP_ENV_KEYS = frozenset({"GH_TOKEN", "REPO", "CI_WORKFLOW", "TRIGGER_SHA"})
+_STEP_ENV_KEYS = frozenset({"GH_TOKEN", "REPO", "GATE_WORKFLOW", "TRIGGER_SHA"})
 
 _GIT_STUB = """#!/usr/bin/env bash
 if [ "$1" != "ls-remote" ]; then
@@ -247,7 +247,7 @@ def _stub_environment(tmp_path: Path, remote: Remote, trigger_sha: str) -> dict[
         "GITHUB_ENV": str(tmp_path / "exported"),
         "GH_TOKEN": "stub-token",
         "REPO": "hseshadr/edge-reco",
-        "CI_WORKFLOW": "ci.yml",
+        "GATE_WORKFLOW": "dagger.yml",
         "TRIGGER_SHA": trigger_sha,
         "STUB_LS_REMOTE_STDOUT": ls_remote,
         "STUB_LS_REMOTE_EXIT": str(remote.ls_remote_exit),
@@ -304,6 +304,12 @@ def test_the_resolve_step_reads_the_remote_and_not_the_trigger() -> None:
     assert _named(_RESOLVE_STEP).env_keys == _STEP_ENV_KEYS
 
 
+def test_deploy_waits_for_the_stable_dagger_workflow() -> None:
+    """Deployment authority stays external but consumes the consolidated gate."""
+    assert 'workflows: ["Dagger"]' in WORKFLOW
+    assert "GATE_WORKFLOW: dagger.yml" in WORKFLOW
+
+
 def test_a_trigger_that_still_matches_main_head_deploys_that_sha(tmp_path: Path) -> None:
     """The positive path. A guard that always skipped would pass every test but this."""
     result = resolve(tmp_path, Remote(main_head=_MAIN_HEAD), trigger_sha=_MAIN_HEAD)
@@ -352,7 +358,7 @@ def test_the_skip_states_its_reason_and_names_the_commit(tmp_path: Path) -> None
         trigger_sha=_STALE_TRIGGER,
     )
     assert _MAIN_HEAD in result.log
-    assert "no successful CI run" in result.log
+    assert "no successful Dagger run" in result.log
 
 
 def test_expected_sha_equals_the_sha_that_gets_checked_out(tmp_path: Path) -> None:

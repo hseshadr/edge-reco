@@ -1,6 +1,6 @@
 # Deploy https://edge-reco.com — Cloudflare Pages (static, backend-free PWA).
 #
-# AUTO-DEPLOY: runs automatically after the "CI" workflow passes on `main`
+# AUTO-DEPLOY: runs automatically after the "Dagger" workflow passes on `main`
 # (and on manual workflow_dispatch). Missing deployment secrets are a hard
 # failure: a green deploy workflow always means a deploy was attempted and its
 # public build identity was verified. Secrets required:
@@ -17,7 +17,7 @@
 # THE DEPLOY TARGET IS RESOLVED AT EXECUTION TIME, NOT FROM THE TRIGGER.
 # `workflow_run.head_sha` is the commit that fired this run — a fact that was
 # already true minutes ago and may not be true now. On 2026-08-08 three commits
-# landed within ~30s, their CI runs finished out of commit order, and the deploy
+# landed within ~30s, their gate runs finished out of order, and the deploy
 # for the OLDEST one ran last and won: edge-reco.com served 295fcaf while main was
 # 3eec558, with every single run green. Each run was correct on its own terms; the
 # composition was not. So the "Resolve the deploy target" step below reads
@@ -25,7 +25,7 @@
 # — checkout, wrangler's --commit-hash, and every verify — uses THAT sha.
 # Property-tested in backend/tests/unit/test_deploy_target_resolution.py.
 # SPA-ONLY: a static `build:pages` artifact (signed catalog copied same-origin
-# into dist/bundle) — no R2, no bundle signing key in CI. See docs/DEPLOY.md.
+# into dist/bundle) — no R2, no bundle signing key in Dagger. See docs/DEPLOY.md.
 #
 # One-time prerequisites (outside this workflow, done by a human with wrangler):
 #   npx wrangler pages project create edge-reco --production-branch=main
@@ -33,16 +33,16 @@
 name: Deploy edge-reco.com
 
 on:
-  # Auto-deploy the commit that just passed CI on main.
+  # Auto-deploy the commit that just passed Dagger on main.
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Dagger"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  # The resolve step asks the Actions API whether main HEAD has a successful CI
+  # The resolve step asks the Actions API whether main HEAD has a successful Dagger
   # run. Reading workflow runs is `actions: read`; without it that call 403s and
   # the job fails closed (which is correct, but wastes a run).
   actions: read
@@ -53,7 +53,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Only auto-deploy when the triggering CI run succeeded on a PUSH TO THIS
+  # Only auto-deploy when the triggering Dagger run succeeded on a PUSH TO THIS
   # REPO's main; a manual dispatch is a pass-through.
   #
   # `head_branch == 'main'` is NOT a trust boundary on its own: a fork's default
@@ -94,8 +94,8 @@ jobs:
       # statement about the past; this is the branch as it stands at the instant
       # the deploy actually runs. Everything downstream keys off `target_sha`.
       #
-      # If main HEAD has not passed CI, this deploys NOTHING and exits green: that
-      # commit's own deploy fires when its CI passes. Skipping is safe precisely
+      # If main HEAD has not passed Dagger, this deploys NOTHING and exits green: that
+      # commit's own deploy fires when Dagger passes. Skipping is safe precisely
       # because cancellation only ever happens when a NEWER run is queued, so a
       # cancelled deploy always has a successor — and the successor re-resolves
       # main HEAD. That is what makes the cancellation harmless rather than
@@ -109,7 +109,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          CI_WORKFLOW: ci.yml
+          GATE_WORKFLOW: dagger.yml
           TRIGGER_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
@@ -125,20 +125,20 @@ jobs:
           echo "main HEAD   : $target_sha  (resolved just now, from the remote)"
 
           green="$(gh api \
-            "repos/$REPO/actions/workflows/$CI_WORKFLOW/runs?head_sha=$target_sha&per_page=30" \
+            "repos/$REPO/actions/workflows/$GATE_WORKFLOW/runs?head_sha=$target_sha&per_page=30" \
             --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
           # `[ null -eq 0 ]` is a bash ERROR, not false, and an `if` swallows it
           # into the deploy branch. Refuse anything that is not a count.
           case "$green" in
             '' | *[!0-9]*)
-              echo "::error::unreadable CI run count for $target_sha: '$green'"
+              echo "::error::unreadable Dagger run count for $target_sha: '$green'"
               exit 1
               ;;
           esac
 
           if [ "$green" -eq 0 ]; then
             echo "deploy=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::main HEAD $target_sha has no successful CI run yet -- DEPLOYING NOTHING. Its own deploy fires when its CI passes."
+            echo "::notice::main HEAD $target_sha has no successful Dagger run yet -- DEPLOYING NOTHING. Its own deploy fires when Dagger passes."
             exit 0
           fi
 
@@ -147,7 +147,7 @@ jobs:
           # EXPECTED_SHA is what every verify step below judges against. It is set
           # from the SAME variable the checkout takes, so the two cannot disagree.
           echo "EXPECTED_SHA=$target_sha" >> "$GITHUB_ENV"
-          echo "Deploy target: $target_sha ($green successful CI run(s))."
+          echo "Deploy target: $target_sha ($green successful Dagger run(s))."
 
       - name: Checkout code
         if: steps.resolve.outputs.deploy == 'true'
@@ -165,7 +165,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: steps.resolve.outputs.deploy == 'true'
         with:
-          # THE one Node pin (frontend/.nvmrc) — the SAME build CI tests on.
+          # THE one Node pin (frontend/.nvmrc) — the SAME build Dagger tests on.
           # This previously read a separate `.node-version` (22) while CI ran 24,
           # so the artifact deployed to edge-reco.com was built on a runtime
           # nothing tested against. Pages serves this build as static assets and
@@ -180,7 +180,7 @@ jobs:
         run: pnpm -C frontend install --frozen-lockfile
 
       # Self-hosted SPA model weights (house standard §8.1b), fetched BEFORE the
-      # build — same fixed-key cache as CI. The build's `prebuild` hook verifies
+      # build — same fixed-key cache as Dagger. The build's `prebuild` hook verifies
       # them (sha256-pinned, fail-loud), and the built dist/ ships them under
       # /models/ so the live site never touches a model CDN at runtime. Every
       # file is under the Cloudflare Pages 25 MiB single-asset limit (the q8

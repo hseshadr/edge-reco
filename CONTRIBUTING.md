@@ -16,7 +16,7 @@ uv run mypy src
 uv run pytest --cov=edgereco --cov-fail-under=90
 ```
 
-All three must pass. The CI workflow (`.github/workflows/ci.yml`) runs the same commands.
+All three must pass. The Dagger module runs these commands through `dagger check`.
 
 ## Test layout
 
