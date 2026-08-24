@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Product, ScoreComponents } from "../api/types";
+import type { Product, RankingProofEvidence, SearchResult } from "../api/types";
 import { formatPrice } from "../format";
 import { ProductImage } from "./ProductImage";
 import { WhyPopover } from "./WhyPopover";
@@ -10,7 +10,8 @@ interface RailCardProps {
 	product: Product;
 	rank: number;
 	score: number;
-	components: ScoreComponents | null;
+	explanation?: SearchResult["score_explanation"];
+	proofEvidence?: RankingProofEvidence;
 	onPick: (product: Product) => void;
 }
 
@@ -18,7 +19,8 @@ export function RailCard({
 	product,
 	rank,
 	score,
-	components,
+	explanation,
+	proofEvidence,
 	onPick,
 }: RailCardProps) {
 	const { t } = useTranslation("storefront");
@@ -50,7 +52,7 @@ export function RailCard({
 				</div>
 			</button>
 
-			{components !== null && (
+			{explanation != null && (
 				<>
 					<button
 						type="button"
@@ -62,7 +64,18 @@ export function RailCard({
 					>
 						{showWhy ? t("rail.hide") : t("rail.why")}
 					</button>
-					<WhyPopover open={showWhy} components={components} />
+					<WhyPopover
+						open={showWhy}
+						explanation={explanation}
+						proofEvidence={
+							proofEvidence ?? {
+								status: "unavailable",
+								publisherSignature: "not_checked",
+								configHash: "not_checked",
+								reason: "missing",
+							}
+						}
+					/>
 				</>
 			)}
 		</motion.li>

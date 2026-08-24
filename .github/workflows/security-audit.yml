@@ -41,7 +41,9 @@ jobs:
       - name: Pin Python
         run: uv python install 3.13
       - name: Sync
-        run: uv sync --group dev
+        run: |
+          uv sync --group dev
+          uv pip install --no-cache --reinstall --no-deps 'assay-engine==0.5.0.dev2'
       # `poe audit` uses the portable invocation (house standard §4): export the
       # lock to a requirements file, then `pip-audit -r … --disable-pip --no-deps`.
       # pip-audit's default venv mode is fragile; the export path audits exactly

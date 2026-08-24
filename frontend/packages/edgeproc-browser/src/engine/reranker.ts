@@ -1,20 +1,18 @@
 // Session-aware reranker, ported from edge-reco's reco/scorer.py + reco/reranker.py.
-// score_product produces a personalized score plus a per-signal breakdown
-// (the demo's WhyPopover reads score_components); rerank re-scores a result set
-// and sorts it descending. The weights and the formula match scorer.py exactly:
+// scoreProduct produces a live Assay explanation; rerank re-scores a result set
+// and sorts it descending. The weights and ordered formula match scorer.py exactly:
 //
-//   search score = normalized RRF relevance + personalized score
-//   recommendation score = personalized score only
-//   personalized score = 0.40*popularity + 0.20*cat + 0.15*tag + 0.10*brand
-//                        + 0.10*fresh + sim_weight*similarity
-//                        - (0.25 if recently_viewed else 0)
+//   retrieval + w_popularity*popularity + w_category*category_match
+//   + w_tag*tag_match + w_brand*brand_match + w_freshness*freshness
+//   + w_similarity*similarity + w_cooccurrence*cooccurrence
+//   - w_repetition*was_recently_viewed
 //
 // tag_match is the MEAN tag affinity over the product's tags (0 if it has none).
-// `similarity` is the per-candidate cosine to a seed product, non-zero only for
-// the vector_similarity strategies; it is 0 on every other path, so the formula
-// reduces to the original Phase-1 score byte-for-byte.
+// Retrieval is normalized RRF for search and zero for recommendation-only rails.
 
+import type { ScoreResult } from "@edgeproc/assay";
 import type { Product, ScoreComponents, SearchResult } from "./domain";
+import { explainScore, type FormulaSignals } from "./formula";
 import { DEFAULT_RANKING_CONFIG, type ScoringWeights } from "./rankingConfig";
 import type { RankedHit } from "./rerank";
 import type { SessionProfile } from "./session";
@@ -109,6 +107,27 @@ export function retrievalEvidence(
 	return evidence;
 }
 
+function scoreComponents(explanation: ScoreResult): ScoreComponents {
+	const rows = new Map(
+		explanation.components.map((component) => [
+			component.id,
+			component.contribution,
+		]),
+	);
+	const value = (id: keyof ScoreComponents): number => rows.get(id) ?? 0;
+	return {
+		retrieval: value("retrieval"),
+		popularity: value("popularity"),
+		category_match: value("category_match"),
+		tag_match: value("tag_match"),
+		brand_match: value("brand_match"),
+		freshness: value("freshness"),
+		similarity: value("similarity"),
+		cooccurrence: value("cooccurrence"),
+		repetition_penalty: value("repetition_penalty"),
+	};
+}
+
 /**
  * Personalized score + signal breakdown for a product (scorer.score_product).
  * `weights` come from the synced bundle's ranking_config.json; they default to
@@ -142,42 +161,24 @@ export function scoreProduct(
 		? (profile.brandAffinity.get(product.brand) ?? 0)
 		: 0;
 
-	const isRecent = profile.recentlyViewed.includes(product.id);
-	const penalty = isRecent ? weights.repetition_penalty : 0;
-
-	const popularity = weights.popularity * product.popularity_score;
-	const category = weights.category * catMatch;
-	const tag = weights.tag * tagMatch;
-	const brand = weights.brand * brandMatch;
-	const freshness = weights.freshness * product.freshness_score;
-	const similarityTerm = weights.similarity * similarity;
-	const cooccurrenceTerm = weights.cooccurrence * cooccurrence;
-
-	const components: ScoreComponents = {
+	const signals: FormulaSignals = {
 		retrieval,
-		popularity,
-		category_match: category,
-		tag_match: tag,
-		brand_match: brand,
-		freshness,
-		similarity: similarityTerm,
-		cooccurrence: cooccurrenceTerm,
-		repetition_penalty: penalty,
+		popularity: product.popularity_score,
+		category_match: catMatch,
+		tag_match: tagMatch,
+		brand_match: brandMatch,
+		freshness: product.freshness_score,
+		similarity,
+		cooccurrence,
+		repetition_penalty: Number(profile.recentlyViewed.includes(product.id)),
 	};
+	const explanation = explainScore(signals, weights);
 
 	return {
 		product,
-		score:
-			retrieval +
-			popularity +
-			category +
-			tag +
-			brand +
-			freshness +
-			similarityTerm +
-			cooccurrenceTerm -
-			penalty,
-		score_components: components,
+		score: explanation.score,
+		score_components: scoreComponents(explanation),
+		score_explanation: explanation,
 	};
 }
 

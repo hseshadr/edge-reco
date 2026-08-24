@@ -112,6 +112,38 @@ def test_default_weights_reproduce_legacy_literal_score() -> None:
     assert abs(result.score - (0.40 * 0.8 + 0.10 * 0.4)) < 1e-10
 
 
+def test_should_expose_assay_terms_when_scoring_live_result() -> None:
+    # Given
+    product = _product(popularity_score=0.7, freshness_score=0.4)
+    profile = SessionProfile(
+        category_affinity={"Electronics": 0.6},
+        tag_affinity={"wireless": 0.8},
+        brand_affinity={"Sony": 0.5},
+        recently_viewed=["P1"],
+    )
+
+    # When
+    result = score_product(product, profile, _W)
+
+    # Then
+    explanation = result.score_explanation
+    assert explanation is not None
+    assert explanation.method.id == "additive"
+    assert explanation.score == result.score
+    assert tuple(component.id for component in explanation.components) == (
+        "retrieval",
+        "popularity",
+        "category_match",
+        "tag_match",
+        "brand_match",
+        "freshness",
+        "similarity",
+        "cooccurrence",
+        "repetition_penalty",
+    )
+    assert explanation.components[-1].operation.value == "subtract"
+
+
 def test_similarity_defaults_to_zero_so_phase1_formula_is_unchanged() -> None:
     """Omitting ``similarity`` leaves the score identical to the Phase-1 formula."""
     product = _product(popularity_score=0.8, freshness_score=0.4, tags=[], brand="")

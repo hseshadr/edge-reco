@@ -16,10 +16,11 @@ The bundle CONTRACT (what the consumer wave's ``from_synced`` relies on):
   Consumers read the scorer's weights from here; absent (a pre-config staging
   dir), the producer writes ``DEFAULT_RANKING_CONFIG``, the byte-identical legacy
   weights, so re-bundling never changes scores.
-- ``ranking_receipt.json`` — the ranking attestation (``reco.score_receipt``): the
-  staged weights sealed as a signed Assay composite receipt under the same
-  publisher key as the bundle. Regenerated every publish; older bundles simply
-  lack it (consumers read specific names and ignore extras).
+- ``ranking_receipt.json`` — EdgeReco's static ``edgereco.ranking-proof/v1``:
+  the complete staged-config hash plus Assay formula probes for search and every
+  strategy, sealed with Avow under the same publisher key as the bundle. It never
+  contains personalized results. Regenerated every publish; legacy receipts are
+  reported unavailable by v1 consumers.
 - ``cooccurrence.json`` — the item-to-item co-occurrence neighbour map
   (``reco.cooccurrence``). Co-occurrence strategies read it; absent, the producer
   writes an empty matrix so older bundles degrade gracefully.
@@ -144,17 +145,16 @@ def publish_bundle(
 
 
 def _ensure_ranking_config(staging_dir: Path, *, require_present: bool = False) -> None:
-    """Materialize ``ranking_config.json`` in the staging dir if it's absent.
+    """Materialize one canonical typed ``ranking_config.json``.
 
-    A staging dir carried over from a synced bundle keeps its config verbatim; a
-    fresh build gets ``DEFAULT_RANKING_CONFIG`` — the legacy weights — so a first
-    publish never silently changes ranking. When ``require_present`` (republishing a
-    CURRENT bundle), a missing file is a corruption signal and raises rather than
-    silently baking the default into a freshly-signed bundle.
+    Existing config is validated then rewritten from Pydantic so the signed bytes,
+    proof hash, and browser all consume the same default-expanded, extra-free shape.
+    A fresh build gets ``DEFAULT_RANKING_CONFIG``. A missing required file fails.
     """
     ranking_path = staging_dir / _RANKING_NAME
     if ranking_path.exists():
-        RankingConfig.model_validate_json(ranking_path.read_bytes())
+        config = RankingConfig.model_validate_json(ranking_path.read_bytes())
+        _write_json_no_follow(ranking_path, config.model_dump_json())
         return
     if require_present:
         raise FileNotFoundError(
@@ -165,12 +165,12 @@ def _ensure_ranking_config(staging_dir: Path, *, require_present: bool = False) 
 
 
 def _write_ranking_receipt(staging_dir: Path, private_key_path: Path) -> None:
-    """Seal the STAGED weights as ``ranking_receipt.json`` — regenerated every publish.
+    """Seal the static STAGED ranking proof — regenerated every publish.
 
     A derived artifact like ``catalog_meta.json``: always rewritten from the staged
     ``ranking_config.json`` plus the publisher key (the same raw Ed25519 seed that
-    signs the bundle), never carried over from a synced bundle, so the attestation
-    can never drift from the config this bundle actually ships.
+    signs the bundle), never carried over from a synced bundle. The payload binds the
+    complete config and deterministic formula probes, never a shopper-specific score.
     """
     config = RankingConfig.model_validate_json((staging_dir / _RANKING_NAME).read_bytes())
     receipt = sign_ranking_receipt(config, signing_key_from_seed(private_key_path))

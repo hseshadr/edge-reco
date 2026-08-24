@@ -41,27 +41,14 @@ dependencies = [
   # edgeproc_core.vector_mgmt.core.types in embeddings/index.py, so the
   # import is declared honestly here. Published on PyPI (0.2.1+).
   "edgeproc-core>=0.2.1",
-  # Trust kernel, used twice:
-  #   1. reco/score_receipt.py seals the bundle's scoring weights as a signed Assay
-  #      composite receipt at publish time.
-  #   2. reco/relevance_baseline.py scores the committed relevance export with
-  #      assay.ranking, which wraps ir_measures/trec_eval — the IR field's reference
-  #      implementation. Nothing here reimplements a metric.
-  # The [assay] extra pulls the scientific stack (scikit-learn — already transitive
-  # via sentence-transformers) plus ir-measures (>=0.4.3, declared by the extra).
-  #
-  # FROM PyPI, NOT GIT. `assay.ranking` shipped in avow 0.3.0, so the temporary git
-  # pin on the merge commit that first carried it (hseshadr/assay@1c382ce) is gone,
-  # along with its `[tool.uv.sources]` entry. That pin cost real coverage: pip-audit
-  # SKIPS any URL requirement ("URL requirements cannot be pinned to a specific
-  # package version"), so a CVE against avow or its transitive deps was invisible to
-  # `poe audit` while it stood. With a normal version requirement, avow is audited.
-  #
-  # Floor only, no ceiling. The pre-0.2 constraint here was `>=0.1.0,<0.2`, and that
-  # upper bound is exactly what excluded 0.2.0 and forced the detour through a git
-  # pin. A SemVer minor is not presumed breaking; if one ever is, pin the fix, don't
-  # pre-emptively fence off releases that do not exist yet.
-  "avow[assay]>=0.3.0",
+  # Assay owns deterministic score composition. Pin the independently verified
+  # 0.5 release candidate exactly so every deployment executes the same formula.
+  # The metrics extra retains the reference ranking metrics used by the relevance
+  # baseline; the additive face now also drives every live score.
+  "assay-engine[metrics]==0.5.0.dev2",
+  # Avow owns only the RFC-8785 + Ed25519 evidence envelope. EdgeReco signs one
+  # static ranking proof at catalog publish time and never signs shopper results.
+  "avow>=0.3.0",
   # Security floors on transitive deps (pulled via fastapi / edge-proc[bundles] /
   # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
   # where a fix exists. See `poe audit`.
@@ -188,6 +175,7 @@ module = [
   "edgereco.reco.audit",
   "edgereco.reco.cooccurrence",
   "edgereco.reco.ranking_config",
+  "edgereco.reco.score_receipt",
   "edgereco.reco.relevance_baseline",
   "edgereco.reco.retrain",
   "edgereco.republish",

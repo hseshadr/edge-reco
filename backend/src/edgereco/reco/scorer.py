@@ -8,7 +8,35 @@ the original hardcoded constants exactly, so threading config changes no scores.
 from __future__ import annotations
 
 from edgereco.catalog.models import Product, SearchResult, SessionProfile
+from edgereco.reco.formula import FormulaSignals, explain_score
 from edgereco.reco.ranking_config import ScoringWeights
+
+
+def _tag_match(product: Product, profile: SessionProfile) -> float:
+    if not product.tags:
+        return 0.0
+    return sum(profile.tag_affinity.get(tag, 0.0) for tag in product.tags) / len(product.tags)
+
+
+def _signals(
+    product: Product,
+    profile: SessionProfile,
+    *,
+    similarity: float,
+    cooccurrence: float,
+    retrieval: float,
+) -> FormulaSignals:
+    return FormulaSignals(
+        retrieval=retrieval,
+        popularity=product.popularity_score,
+        category_match=profile.category_affinity.get(product.category, 0.0),
+        tag_match=_tag_match(product, profile),
+        brand_match=profile.brand_affinity.get(product.brand, 0.0) if product.brand else 0.0,
+        freshness=product.freshness_score,
+        similarity=similarity,
+        cooccurrence=cooccurrence,
+        repetition_penalty=float(product.id in profile.recently_viewed),
+    )
 
 
 def score_product(
@@ -27,38 +55,18 @@ def score_product(
     (``co_occurrence``). Both default to 0.0 so every other path reduces to the
     original Phase-1 formula byte-for-byte.
     """
-    cat_match = profile.category_affinity.get(product.category, 0.0)
-
-    tag_match = 0.0
-    if product.tags:
-        tag_match = sum(profile.tag_affinity.get(t, 0.0) for t in product.tags) / len(product.tags)
-
-    brand_match = profile.brand_affinity.get(product.brand, 0.0) if product.brand else 0.0
-    penalty = weights.repetition_penalty if product.id in profile.recently_viewed else 0.0
-
-    components = {
-        "retrieval": retrieval,
-        "popularity": weights.popularity * product.popularity_score,
-        "category_match": weights.category * cat_match,
-        "tag_match": weights.tag * tag_match,
-        "brand_match": weights.brand * brand_match,
-        "freshness": weights.freshness * product.freshness_score,
-        "similarity": weights.similarity * similarity,
-        "cooccurrence": weights.cooccurrence * cooccurrence,
-        # Stored as the POSITIVE penalty magnitude so the breakdown mirrors the TS
-        # browser reranker byte-for-byte (reranker.ts:69 / reranker.test.ts: +0.25).
-        # The subtraction lives only in ``score`` below.
-        "repetition_penalty": penalty,
-    }
-    score = (
-        components["retrieval"]
-        + components["popularity"]
-        + components["category_match"]
-        + components["tag_match"]
-        + components["brand_match"]
-        + components["freshness"]
-        + components["similarity"]
-        + components["cooccurrence"]
-        - components["repetition_penalty"]
+    signals = _signals(
+        product,
+        profile,
+        similarity=similarity,
+        cooccurrence=cooccurrence,
+        retrieval=retrieval,
     )
-    return SearchResult(product=product, score=score, score_components=components)
+    explanation = explain_score(signals, weights)
+    components = {row.id: row.contribution for row in explanation.components}
+    return SearchResult(
+        product=product,
+        score=explanation.score,
+        score_components=components,
+        score_explanation=explanation,
+    )

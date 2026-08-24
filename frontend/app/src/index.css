@@ -1126,10 +1126,12 @@ input {
 
 .why {
 	overflow: hidden;
-	margin: 8px 0 2px 34px;
+	min-width: 0;
+	margin: 8px 0 2px;
 }
 
 .why__inner {
+	min-width: 0;
 	padding: 14px;
 	border-radius: var(--radius-sm);
 	background: var(--paper);
@@ -1145,6 +1147,25 @@ input {
 	margin-bottom: 12px;
 }
 
+.why__section + .why__section {
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px solid var(--line);
+}
+
+.why__intro,
+.why__limits,
+.why__unavailable {
+	margin: 0 0 12px;
+	color: var(--muted);
+	font-size: 11px;
+	line-height: 1.45;
+}
+
+.why__limits {
+	margin: 8px 0 0;
+}
+
 .why__row {
 	margin-bottom: 11px;
 }
@@ -1154,9 +1175,9 @@ input {
 }
 
 .why__label {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
+	display: grid;
+	min-width: 0;
+	gap: 2px;
 	font-size: 12px;
 	margin-bottom: 4px;
 }
@@ -1167,9 +1188,12 @@ input {
 }
 
 .why__label-val {
+	min-width: 0;
 	color: var(--muted);
 	font-variant-numeric: tabular-nums;
 	font-size: 11px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
 }
 
 .why__track {
@@ -1205,6 +1229,44 @@ input {
 
 .why__row--penalty .why__label-name {
 	color: var(--muted);
+}
+
+.why__total {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	padding-top: 2px;
+	font-size: 12px;
+	color: var(--ink);
+}
+
+.why__total strong {
+	font-variant-numeric: tabular-nums;
+}
+
+.why__checks {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 10px;
+	display: grid;
+	gap: 6px;
+	font-size: 11px;
+}
+
+.why__check::before {
+	display: inline-block;
+	width: 16px;
+	font-weight: 700;
+}
+
+.why__check--ok::before {
+	content: "✓";
+	color: var(--signal);
+}
+
+.why__check--bad::before {
+	content: "×";
+	color: #8a2515;
 }
 
 /* =========================================================================

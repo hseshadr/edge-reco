@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from assay import ScoreResult
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -61,6 +62,7 @@ class SearchResult(BaseModel):
     product: Product
     score: float
     score_components: dict[str, float] = {}
+    score_explanation: ScoreResult | None = None
 
 
 type EventType = Literal["click", "view", "favorite", "cart"]

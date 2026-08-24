@@ -5,11 +5,12 @@
 # torch/sentence-transformers stack.
 #
 # The comparison is TOLERANCE-AWARE, not byte-exact (scripts/compare_parity_fixtures.py):
-# floats get math.isclose(rel_tol=1e-6, abs_tol=1e-12); ids, ordering, counts, array
-# lengths, key sets and types are compared EXACTLY. That is deliberate — a fresh
-# environment can legally differ from the committed bytes in low-order digits, and
-# `git diff --exit-code` used to sit here and turn that legal difference into a red
-# run. Sub-tolerance drift is now absorbed instead of being triaged by a human.
+# floats get math.isclose(rel_tol=1e-6, abs_tol=1e-12), except the measured
+# embedding paths (`query_vector[*]` and `items[*].vector[*]`) which allow at most
+# 2e-7 absolute drift; ids, ordering, counts, array lengths, key sets and types are
+# compared EXACTLY. That is deliberate — a fresh environment can legally differ
+# from the committed bytes in low-order embedding digits, and `git diff --exit-code`
+# used to turn that legal difference into a red run.
 #
 # How to read a red run:
 #   - Float values outside tolerance (>1e-6 relative): a genuine numeric change, not
@@ -46,7 +47,9 @@ jobs:
         run: uv python install 3.13
       - name: Sync
         working-directory: backend
-        run: uv sync --group dev
+        run: |
+          uv sync --group dev
+          uv pip install --no-cache --reinstall --no-deps 'assay-engine==0.5.0.dev2'
       # Fixed-key cache: only the first run pays the MiniLM download; afterwards the
       # regen scripts read the local Hugging Face cache.
       - name: Cache MiniLM weights (Hugging Face)

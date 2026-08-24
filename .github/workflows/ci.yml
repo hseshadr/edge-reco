@@ -57,7 +57,9 @@ jobs:
       # Not --frozen: the substrate git sources are pinned to immutable release
       # tags, so a fresh resolve is deterministic without a committed cross-repo lock.
       - name: Sync
-        run: uv sync --group dev
+        run: |
+          uv sync --group dev
+          uv pip install --no-cache --reinstall --no-deps 'assay-engine==0.5.0.dev2'
       # CI runs the gate command ITSELF (house standard §3/§4): `poe gate` is
       # fmt-check -> lint -> typecheck -> complexity -> test-with-coverage, defined
       # once in backend/pyproject.toml. One definition, zero CI/local drift.
@@ -78,11 +80,13 @@ jobs:
   # weekly schedule instead (.github/workflows/parity-fixtures.yml).
   #
   # The comparison is TOLERANCE-AWARE, not byte-exact (scripts/compare_parity_fixtures.py):
-  # floats get math.isclose(rel_tol=1e-6, abs_tol=1e-12); ids, ordering, counts,
-  # array lengths, key sets and types are compared EXACTLY. `git diff --exit-code`
-  # used to sit here and went red intermittently on ~1e-7 relative wobble in score
-  # values — a different BLAS thread count / SIMD path on the runner, never a
-  # ranking change — which was papered over once by re-committing the fixtures.
+  # floats get math.isclose(rel_tol=1e-6, abs_tol=1e-12), except the measured
+  # embedding paths (`query_vector[*]` and `items[*].vector[*]`) which allow at
+  # most 2e-7 absolute drift; ids, ordering, counts, array lengths, key sets and
+  # types are compared EXACTLY. `git diff --exit-code`
+  # used to sit here and went red intermittently on low-order score wobble and
+  # measured ONNX embedding drift — different reduction paths on the runner,
+  # never a ranking change — which was papered over once by re-committing fixtures.
   #
   # How to read a red run now: sub-tolerance float drift no longer reaches you at
   # all, so a failure means something real moved. The report names the exact JSON
@@ -100,7 +104,9 @@ jobs:
         run: uv python install 3.13
       - name: Sync
         working-directory: backend
-        run: uv sync --group dev
+        run: |
+          uv sync --group dev
+          uv pip install --no-cache --reinstall --no-deps 'assay-engine==0.5.0.dev2'
       - name: Regenerate the model-free parity fixtures
         working-directory: backend
         run: |

@@ -32,6 +32,7 @@ import {
 	browse,
 	catalog,
 	catalogInfo,
+	rankingProofEvidence,
 	recommend,
 	recommendStrategy,
 	replayedSignalCount,
@@ -127,6 +128,15 @@ describe("backend-free data layer", () => {
 	it("catalogInfo() reports the catalog size", async () => {
 		const info = await catalogInfo();
 		expect(info.count).toBe((await browse({ limit: 10_000 })).total);
+	});
+
+	it("marks the committed legacy ranking receipt unavailable, never verified", () => {
+		expect(rankingProofEvidence()).toEqual({
+			status: "unavailable",
+			publisherSignature: "not_checked",
+			configHash: "not_checked",
+			reason: "legacy",
+		});
 	});
 
 	it("a click folds into the profile and re-ranks the next recommend (no network)", async () => {

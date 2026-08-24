@@ -175,11 +175,11 @@ Things this project does **not** do, stated plainly.
 
 **Resource floor.** A first launch downloads a roughly 23 MB quantized language model and a roughly 23 MB ONNX/WASM runtime, then allocates more memory while compiling and running them. The engine starts only after the shopper clicks Launch; simultaneous first searches share one model load, failed boots release both Workers, and the release test enforces cold-start, search, and Chromium-heap budgets. This is still a meaningful cost on low-memory phones and laptops. The app does not claim support for a particular minimum-memory device until physical-device measurements establish one.
 
-**1. There is no "verified" badge a user can see.** Signature checking genuinely runs, fail-closed, every time the catalog syncs — a tampered file *is* rejected and the app *does* refuse to load it (`frontend/packages/edgeproc-browser/src/engine/`: `crypto.ts`, `sync.ts`, `integrity.ts`). What does not exist is any screen that shows you that outcome. The landing page lists "verify (Ed25519 + SHA-256, fail-closed)" as a step, but that list is static text describing the pipeline — no checkmark, no pass/fail state, no live result. Don't read it as a user-visible verification result, because it isn't one.
+**1. Bundle-sync verification is not displayed.** Signature checking genuinely runs, fail-closed, every time the catalog syncs — a tampered file *is* rejected and the app *does* refuse to load it (`frontend/packages/edgeproc-browser/src/engine/`: `crypto.ts`, `sync.ts`, `integrity.ts`). What does not exist is a screen showing that bundle-sync outcome. The landing page's “verify (Ed25519 + SHA-256, fail-closed)” step is static pipeline copy, not a live result. The separate ranking-proof evidence below does not replace or claim to display bundle-sync verification.
 
-**2. The ranking attestation is written but never displayed.** Every catalog publish seals its ranking weights into a signed attestation, `ranking_receipt.json` (written unconditionally by `_write_ranking_receipt` in `backend/src/edgereco/catalog/publish.py`, signed in `backend/src/edgereco/reco/score_receipt.py`). An exhaustive search of the frontend finds **zero** code that reads or displays it. A user-facing "these are the weights that ranked your results, and here's the proof" badge is designed and signed but **unimplemented**.
+**2. Ranking proof is deliberately narrower than result truth.** The “why?” panel has two sibling sections. **How calculated — Assay** shows the live ordered formula for that result: every raw signal, coefficient, additive/subtractive contribution, and final score. **What verified — Avow** reports whether the publisher signature on a static `edgereco.ranking-proof/v1` payload verifies, its hash matches the complete `ranking_config.json`, and its formula probes match search plus every named strategy. It never signs a shopper’s personalized result, and it does not prove input truth, freshness, fairness, or recommendation quality.
 
-> Footnote: the committed demo catalog in `backend/examples/catalog/` predates that feature, so it does not carry `ranking_receipt.json` on disk today. Its manifest lists exactly `products.jsonl`, `catalog_meta.json`, `ranking_config.json`, `cooccurrence.json`, `vector/embeddings.f32`, `vector/index.faiss`, `vector/state.json`. Older catalogs simply lack the receipt by design.
+The currently committed catalog carries the older receipt shape. The browser labels that receipt **unavailable**, never verified. A v1 proof appears only after an authorized catalog republish with the maintainer signing key; this repository change does not silently republish or deploy catalog data.
 
 **3. The language model is not inside the signed catalog file.** It ships as ordinary same-origin static files instead — the build copies the model into `/models/` and its runtime into `/ort/`, each pinned to its exact content hash, so a first visit fetches everything from the app's own web address and no third-party CDN. But those files are not covered by the catalog's signature. The catalog format is just content-addressed bytes, so it *could* carry the model, signed and patched like the products; folding it in is a natural next step.
 
@@ -266,11 +266,18 @@ rrf_score = Σ 1/(k + rank_i)   summed over each method's rank for an item
 Affinities clamp at 1.0; the last 50 viewed product IDs carry a repetition penalty so the rail keeps surfacing new things. The re-ranker rescores the candidates against that live profile:
 
 ```
-score = 0.40·popularity + 0.20·category_aff + 0.15·tag_aff
-      + 0.10·brand_aff + 0.10·freshness − 0.25·repetition
+score = retrieval
+      + popularity_weight·popularity
+      + category_weight·category_aff
+      + tag_weight·tag_aff
+      + brand_weight·brand_aff
+      + freshness_weight·freshness
+      + similarity_weight·similarity
+      + cooccurrence_weight·cooccurrence
+      − repetition_penalty_weight·was_recently_viewed
 ```
 
-This loop is **zero-network**: a click folds straight into the in-memory session profile and the rail reorders on the spot — no fetch, no round trip. And it isn't a black box — each result carries a "Why?" breakdown showing exactly which signal moved it. It's in-memory and per-tab, so reloading starts fresh.
+Assay executes those nine terms in that exact left-to-right binary64 order; the seven positive ranking signals are strategy-weighted, retrieval has coefficient 1, and repetition is the only subtraction. This loop is **zero-network**: a click folds straight into the browser-local profile and the rail reorders on the spot — no fetch, no round trip. The activity log is durable in this browser until “Reset taste” clears it.
 
 ## Ranking is data, not code
 

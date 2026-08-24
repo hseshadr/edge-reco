@@ -4,6 +4,8 @@
 // re-exports them from here. The shapes are byte-identical to edge-reco's API
 // response models, so the demo components consume the engine output unchanged.
 
+import type { ScoreResult } from "@edgeproc/assay";
+
 /** One catalog product (a row of products.jsonl). */
 export interface Product {
 	id: string;
@@ -47,6 +49,7 @@ export interface SearchResult {
 	product: Product;
 	score: number;
 	score_components: ScoreComponents | null;
+	score_explanation?: ScoreResult | null;
 }
 
 /** Hybrid-search output (matches the /search route shape). */

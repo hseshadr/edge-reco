@@ -254,21 +254,85 @@ test("clicks record + re-rank the For-You rail (backend-free hero loop)", async 
 		)
 		.not.toBe(before.join(" | "));
 
-	// "why?" reveals the engine's score bars for a For-You pick. The in-app
+	// "why?" reveals the complete Assay formula and Avow evidence for a pick. The in-app
 	// Back now pops REAL history (v0.13.0), so the browser restores the browse
 	// scroll position — scroll home first to unstack the sticky rails before
 	// poking the For-You card's control.
 	await page.evaluate(() => window.scrollTo(0, 0));
 	const topCard = page.locator(`${FOR_YOU} li.rail-card`).first();
 	await topCard.getByRole("button", { name: "why?" }).click();
-	await expect(topCard.locator(".why__bar").first()).toBeVisible();
-	await expect(topCard.getByText("Why this ranks here")).toBeVisible();
+	await expect(
+		topCard.getByRole("heading", { name: "How calculated — Assay" }),
+	).toBeVisible();
+	await expect(topCard.locator(".why__row")).toHaveCount(9);
+	await expect(
+		topCard.getByRole("heading", { name: "What verified — Avow" }),
+	).toBeVisible();
 
 	await page.screenshot({
 		path: "test-results/storefront.png",
 		fullPage: true,
 	});
 });
+
+for (const viewport of [
+	{ name: "mobile", width: 320, height: 844 },
+	{ name: "desktop", width: 1280, height: 900 },
+] as const) {
+	test(`Why equations remain fully readable without horizontal clipping on ${viewport.name}`, async ({
+		page,
+	}) => {
+		await page.setViewportSize(viewport);
+		await launch(page);
+
+		const topCard = page.locator(`${FOR_YOU} li.rail-card`).first();
+		await topCard.getByRole("button", { name: "why?" }).click();
+		const equations = topCard.locator(".why__label-val");
+		await expect(equations).toHaveCount(9);
+		await expect(equations.first()).toBeVisible();
+		const binary64Equation =
+			"0.12345678901234568 × 0.9876543210987654 = +0.1219326311370218";
+		await equations.first().evaluate((element, text) => {
+			element.textContent = text;
+		}, binary64Equation);
+		await expect(equations.first()).toHaveText(binary64Equation);
+
+		const layout = await equations.evaluateAll((elements) =>
+			elements.map((element) => {
+				const popover = element.closest<HTMLElement>(".why");
+				const inner = element.closest<HTMLElement>(".why__inner");
+				const card = element.closest<HTMLElement>(".rail-card");
+				const range = document.createRange();
+				range.selectNodeContents(element);
+				const innerBounds = inner?.getBoundingClientRect();
+				return {
+					text: element.textContent ?? "",
+					cardWidth: card?.clientWidth ?? Number.POSITIVE_INFINITY,
+					noHorizontalOverflow:
+						popover !== null && popover.scrollWidth <= popover.clientWidth + 1,
+					linesInsidePopover:
+						innerBounds !== undefined &&
+						Array.from(range.getClientRects()).every(
+							(line) =>
+								line.left >= innerBounds.left - 1 &&
+								line.right <= innerBounds.right + 1,
+						),
+				};
+			}),
+		);
+
+		expect(layout.some(({ text }) => text === binary64Equation)).toBe(true);
+		for (const equationLayout of layout) {
+			expect(equationLayout.cardWidth, equationLayout.text).toBeLessThanOrEqual(
+				280,
+			);
+			expect(equationLayout.noHorizontalOverflow, equationLayout.text).toBe(
+				true,
+			);
+			expect(equationLayout.linesInsidePopover, equationLayout.text).toBe(true);
+		}
+	});
+}
 
 test("graded signals: favorite + cart count toward the For-You badge", async ({
 	page,

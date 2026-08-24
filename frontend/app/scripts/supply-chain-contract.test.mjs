@@ -15,6 +15,7 @@ const WORKSPACE = resolve(import.meta.dirname, "../../pnpm-workspace.yaml");
 // CI included. It has slipped into commits twice in this portfolio and been
 // reverted both times, so treat any committed exemption as a gate failure.
 const FORBIDDEN_KEY = "minimumReleaseAgeExclude";
+const SAFE_NANOID_RANGE = 'nanoid: ">=3.3.18 <4"';
 
 const REMEDIATION = `
 ${FORBIDDEN_KEY} is committed in frontend/pnpm-workspace.yaml. Remove it.
@@ -84,4 +85,9 @@ test("the guard ignores the key when it appears only in a comment", () => {
 			),
 		),
 	);
+});
+
+test("the workspace requires the patched nanoid 3.x line", async () => {
+	const yaml = await readFile(WORKSPACE, "utf8");
+	assert.ok(liveConfig(yaml).includes(SAFE_NANOID_RANGE));
 });

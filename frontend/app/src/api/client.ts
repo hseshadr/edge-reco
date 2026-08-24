@@ -27,6 +27,7 @@ import {
 	emptyProfile,
 	type InteractionWeights,
 	type OnStage,
+	type RankingProofEvidence,
 	type RuntimeConfig,
 	type RuntimeDeps,
 	type SearchEngine,
@@ -135,6 +136,7 @@ export interface DataClient {
 	): Promise<RecommendResponse>;
 	similar(productId: string, opts?: SimilarOptions): Promise<RecommendResponse>;
 	strategies(): Record<string, Strategy>;
+	rankingProofEvidence(): RankingProofEvidence;
 	catalog(): ReadonlyArray<Product>;
 	browse(opts?: BrowseOptions): Promise<BrowseResponse>;
 	sendEvent(evt: InteractionEvent): Promise<void>;
@@ -250,6 +252,9 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 		strategies(): Record<string, Strategy> {
 			return requireEngine().strategies();
 		},
+		rankingProofEvidence(): RankingProofEvidence {
+			return requireEngine().rankingProofEvidence();
+		},
 		catalog(): ReadonlyArray<Product> {
 			return requireEngine().catalog();
 		},
@@ -299,9 +304,11 @@ function resolveDeps(deps: Partial<RuntimeDeps>): RuntimeDeps {
 		typeof window !== "undefined"
 			? window.__edgeprocDemoTestHooks?.makeEmbedder
 			: undefined;
+	const loadPublisherKey = deps.loadPublisherKey ?? base.loadPublisherKey;
 	return {
 		spawnEngine: deps.spawnEngine ?? base.spawnEngine,
 		makeEmbedder: deps.makeEmbedder ?? hookEmbedder ?? base.makeEmbedder,
+		...(loadPublisherKey !== undefined ? { loadPublisherKey } : {}),
 	};
 }
 
@@ -366,6 +373,9 @@ export async function similar(
 }
 export function strategies(): Record<string, Strategy> {
 	return active.strategies();
+}
+export function rankingProofEvidence(): RankingProofEvidence {
+	return active.rankingProofEvidence();
 }
 export function catalog(): ReadonlyArray<Product> {
 	return active.catalog();

@@ -37,6 +37,10 @@ import {
 	type RankingConfig,
 	type Strategy,
 } from "./rankingConfig";
+import {
+	type RankingProofEvidence,
+	unavailableRankingProof,
+} from "./rankingProof";
 import { reciprocalRankFusion } from "./rerank";
 import {
 	rerank,
@@ -121,6 +125,8 @@ export interface SearchEngine {
 	 * bundle that predates ranking_config.json (parseRankingConfig handles that).
 	 */
 	interactionWeights(): InteractionWeights;
+	/** Static publisher evidence for the live ranking config and Assay formula. */
+	rankingProofEvidence(): RankingProofEvidence;
 }
 
 function hydrateFused(
@@ -144,6 +150,7 @@ class HybridSearchEngine implements SearchEngine {
 	readonly #catalog: ReadonlyArray<Product>;
 	readonly #config: RankingConfig;
 	readonly #cooccurrence: CooccurrenceMatrix;
+	readonly #proofEvidence: RankingProofEvidence;
 
 	public constructor(
 		index: VectorIndex,
@@ -151,6 +158,7 @@ class HybridSearchEngine implements SearchEngine {
 		embedder: Embedder,
 		config: RankingConfig,
 		cooccurrence: CooccurrenceMatrix,
+		proofEvidence: RankingProofEvidence,
 	) {
 		this.#index = index;
 		this.#keyword = keyword;
@@ -158,6 +166,7 @@ class HybridSearchEngine implements SearchEngine {
 		this.#catalog = index.products();
 		this.#config = config;
 		this.#cooccurrence = cooccurrence;
+		this.#proofEvidence = proofEvidence;
 	}
 
 	public get ntotal(): number {
@@ -174,6 +183,10 @@ class HybridSearchEngine implements SearchEngine {
 
 	public interactionWeights(): InteractionWeights {
 		return this.#config.interaction_weights;
+	}
+
+	public rankingProofEvidence(): RankingProofEvidence {
+		return this.#proofEvidence;
 	}
 
 	public async search(
@@ -415,10 +428,18 @@ export async function createSearchEngine(
 	embedder: Embedder,
 	config: RankingConfig = DEFAULT_RANKING_CONFIG,
 	cooccurrence: CooccurrenceMatrix = EMPTY_COOCCURRENCE,
+	proofEvidence: RankingProofEvidence = unavailableRankingProof("missing"),
 ): Promise<SearchEngine> {
 	const index = await loadVectorIndex(files);
 	const keyword = KeywordSearcher.fromProducts(index.products());
-	return new HybridSearchEngine(index, keyword, embedder, config, cooccurrence);
+	return new HybridSearchEngine(
+		index,
+		keyword,
+		embedder,
+		config,
+		cooccurrence,
+		proofEvidence,
+	);
 }
 
 /**

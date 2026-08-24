@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 
 import pytest
-from assay.receipt import ScoreReceipt
 from avow import content_hash, verify_signature
 from edgeproc.bundles.adapters import FilesystemAdapter
 from edgeproc.bundles.cas import FilesystemCacheStore
@@ -29,7 +28,7 @@ from edgereco.catalog.publish import BUNDLE_FILES, CURRENT_META_SCHEMA, publish_
 from edgereco.cli import app
 from edgereco.reco.cooccurrence import CooccurrenceMatrix, Neighbor
 from edgereco.reco.ranking_config import DEFAULT_RANKING_CONFIG, RankingConfig
-from edgereco.reco.score_receipt import RANKING_RECEIPT_NAME
+from edgereco.reco.score_receipt import RANKING_RECEIPT_NAME, RankingReceipt
 
 runner = CliRunner()
 
@@ -711,19 +710,25 @@ def test_bundle_carries_verifiable_ranking_receipt(tmp_path: Path) -> None:
     )
     manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, RANKING_RECEIPT_NAME)
-    receipt = ScoreReceipt.model_validate_json(raw)
+    receipt = RankingReceipt.model_validate_json(raw)
     verify_signature(receipt, expected_public_key=public.public_bytes_raw().hex())
-    governed = content_hash(tuned.scoring_weights.model_dump(mode="json"))
-    assert receipt.payload.metric_version == governed
+    governed = content_hash(tuned.model_dump(mode="json"))
+    assert receipt.payload.ranking_config_hash == governed
+    assert tuple(probe.id for probe in receipt.payload.formula_probes) == (
+        "search",
+        *sorted(tuned.strategies),
+    )
 
 
-def test_bundle_preserves_staged_ranking_config(tmp_path: Path) -> None:
-    """When the staging dir already carries a ranking_config.json (e.g. a retrain
-    re-staging a synced bundle), the producer keeps it verbatim, not the default."""
+def test_bundle_canonicalizes_staged_ranking_config(tmp_path: Path) -> None:
+    """The signed config and proof share Pydantic's one canonical typed shape."""
     staging = _staging(tmp_path)
     tuned = DEFAULT_RANKING_CONFIG.model_copy(deep=True)
     tuned.scoring_weights.popularity = 0.55
-    (staging / "ranking_config.json").write_text(tuned.model_dump_json(), encoding="utf-8")
+    noncanonical = json.loads(tuned.model_dump_json())
+    noncanonical["unexpected_top_level"] = 1
+    del noncanonical["strategies"]["for_you"]["co_occurrence_top_k"]
+    (staging / "ranking_config.json").write_text(json.dumps(noncanonical), encoding="utf-8")
     origin = tmp_path / "origin"
     private, public = generate_keypair()
     key_path = tmp_path / "private.key"
@@ -751,6 +756,7 @@ def test_bundle_preserves_staged_ranking_config(tmp_path: Path) -> None:
     manifest = _active_manifest(cache)
     raw = materialize_file(cache, manifest, "ranking_config.json")
     restored = RankingConfig.model_validate_json(raw)
+    assert raw == tuned.model_dump_json().encode()
     assert restored == tuned
     assert restored != DEFAULT_RANKING_CONFIG
 

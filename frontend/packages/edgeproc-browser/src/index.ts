@@ -38,6 +38,7 @@ export type {
 	ScoringWeights,
 	Strategy,
 } from "./engine/rankingConfig";
+export type { RankingProof, RankingProofEvidence } from "./engine/rankingProof";
 // --- runtime: bootstrap the engine over the synced bundle ---
 export {
 	type BootStage,

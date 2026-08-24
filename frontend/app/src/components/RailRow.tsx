@@ -1,6 +1,6 @@
 import { AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
-import type { Product, SearchResult } from "../api/types";
+import type { Product, RankingProofEvidence, SearchResult } from "../api/types";
 import { RailCard } from "./RailCard";
 
 interface RailRowProps {
@@ -24,6 +24,7 @@ interface RailRowProps {
 	 * durable in-browser activity log + live profile (wired by Storefront).
 	 */
 	onResetTaste?: () => void;
+	proofEvidence?: RankingProofEvidence;
 }
 
 /**
@@ -64,6 +65,7 @@ export function RailRow({
 	personalizing = false,
 	signalCount,
 	onResetTaste,
+	proofEvidence,
 }: RailRowProps) {
 	const { t } = useTranslation("storefront");
 	const headingId = `rail-${slug(railId)}`;
@@ -130,7 +132,8 @@ export function RailRow({
 								product={result.product}
 								rank={index + 1}
 								score={result.score}
-								components={result.score_components}
+								explanation={result.score_explanation ?? null}
+								{...(proofEvidence !== undefined ? { proofEvidence } : {})}
 								onPick={onPick}
 							/>
 						))}
