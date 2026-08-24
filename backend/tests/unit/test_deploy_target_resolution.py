@@ -78,6 +78,12 @@ _RUN_BODY_INDENT = "          "
 # What the runner injects into the step. Pinned here so the harness's model of the
 # step's inputs cannot silently drift from the committed step.
 _STEP_ENV_KEYS = frozenset({"GH_TOKEN", "REPO", "GATE_WORKFLOW", "TRIGGER_SHA"})
+_SHARED_STATE_ACTIONS = (
+    "actions/cache@",
+    "actions/download-artifact@",
+    "actions/upload-artifact@",
+)
+_CACHING_SETUP_ACTIONS = ("actions/setup-node@", "actions/setup-python@")
 
 _GIT_STUB = """#!/usr/bin/env bash
 if [ "$1" != "ls-remote" ]; then
@@ -229,6 +235,27 @@ def _named(name: str) -> Step:
     return matches[0]
 
 
+def _shared_state_access(step: Step) -> str | None:
+    action = _scalar(step.text.splitlines(), "uses") or ""
+    if action.startswith(_SHARED_STATE_ACTIONS):
+        return action
+    cache = _scalar(step.text.splitlines(), "cache")
+    return (
+        f"{action} cache={cache}" if action.startswith(_CACHING_SETUP_ACTIONS) and cache else None
+    )
+
+
+def _privileged_shared_state(workflow: str, steps: list[Step]) -> list[str]:
+    runtime = "\n".join(directives(workflow))
+    low_trust = any(("workflow_run:" in runtime, "workflow_dispatch:" in runtime))
+    if not low_trust:
+        return []
+    if "${{ secrets." not in runtime:
+        return []
+    accesses = map(_shared_state_access, steps)
+    return [access for access in accesses if access is not None]
+
+
 def _write_stub(path: Path, body: str) -> None:
     path.write_text(body, encoding="utf-8")
     path.chmod(0o755)
@@ -308,6 +335,11 @@ def test_deploy_waits_for_the_stable_dagger_workflow() -> None:
     """Deployment authority stays external but consumes the consolidated gate."""
     assert 'workflows: ["Dagger"]' in WORKFLOW
     assert "GATE_WORKFLOW: dagger.yml" in WORKFLOW
+
+
+def test_privileged_deploy_never_consumes_shared_cache_or_artifacts() -> None:
+    """Untrusted default-branch state must not cross into the secret-bearing job."""
+    assert _privileged_shared_state(WORKFLOW, STEPS) == []
 
 
 def test_a_trigger_that_still_matches_main_head_deploys_that_sha(tmp_path: Path) -> None:
