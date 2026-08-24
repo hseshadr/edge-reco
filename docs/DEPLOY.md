@@ -101,7 +101,7 @@ Create a Pages project (Cloudflare → Workers & Pages → Create → Pages → 
 | Root directory | `frontend` |
 | Build command | `pnpm -F frontend run build:pages` |
 | Build output directory | `app/dist` |
-| Node version | from `frontend/.nvmrc` (24.16.0) — the single pin CI, the audit workflow, the deploy build, and the local gate all install |
+| Node version | from `frontend/.nvmrc` (24.16.0) — the single pin Dagger, deploy, and the local gate all install |
 
 No build environment variables are required: `build:pages` defaults to `VITE_BASE=/`
 (apex root) and `VITE_BUNDLE_BASE_URL=bundle` (the same-origin copy), and leaves
@@ -145,7 +145,7 @@ certificate automatically. CF rebuilds and redeploys on every push to `main`.
 The Git-connected Pages build above lets Cloudflare build on every push. As an
 alternative — or for a repo where you'd rather drive the deploy from CI — the
 `.github/workflows/deploy.yml` workflow runs the same `build:pages` artifact through
-`wrangler pages deploy` after the `CI` workflow goes green on `main` (and on manual
+`wrangler pages deploy` after the `Dagger` workflow goes green on `main` (and on manual
 `workflow_dispatch`).
 
 **It fails loudly when it cannot deploy.** Until the two repository secrets below
@@ -155,13 +155,13 @@ exist, both automatic and manual runs stop at the credential guard with a red fa
 The first step reads `refs/heads/main` from the remote with `git ls-remote`; the
 checkout, `wrangler --commit-hash`, and every verification then key off that sha. The
 trigger's `workflow_run.head_sha` is a statement about the past. On 2026-08-08 three
-commits landed within ~30s, their CI runs finished out of commit order, and — because
+commits landed within ~30s, their gate runs finished out of order, and — because
 GitHub keeps only one pending run per concurrency group — the newest commit's deploy was
 cancelled while the oldest one's ran last and won. `edge-reco.com` served a stale commit
 with every run green. Resolving the target at execution time is what closes that.
 
-If `main` HEAD has no successful CI run, the workflow deploys nothing and exits
-**green**, logging why: that commit's own deploy fires when its CI passes. Skipping is
+If `main` HEAD has no successful Dagger run, the workflow deploys nothing and exits
+**green**, logging why: that commit's own deploy fires when Dagger passes. Skipping is
 safe because a cancelled deploy always has a successor (cancellation only happens when a
 newer run is queued), and the successor re-resolves `main` HEAD.
 

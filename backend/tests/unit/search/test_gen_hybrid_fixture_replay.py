@@ -1,6 +1,6 @@
 """Regression: the C3a hybrid fixture generator must replay /search's scoring.
 
-The weekly parity workflow (parity-fixtures.yml) went red on hybrid_parity.json
+The parity gate went red on hybrid_parity.json
 because scripts/gen_hybrid_fixture.py called the retrieval-less ``rerank`` while
 the /search route (api/routes/search.py) — and the browser engine the fixture
 arbitrates against — blend normalized RRF retrieval via ``rerank_search``. The

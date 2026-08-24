@@ -14,7 +14,7 @@
 
 # ---- stage 1: build the static bundle ----
 # Exact tag, kept in lockstep with frontend/.nvmrc (24.16.0) — the one Node pin
-# CI, security-audit, deploy, and the local gate all install. A floating
+# Dagger, deploy, and the local gate all install. A floating
 # `node:24-slim` would drift off that pin silently.
 FROM node:24.16.0-slim AS build
 

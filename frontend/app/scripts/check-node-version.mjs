@@ -5,9 +5,9 @@
  * WHY THIS EXISTS
  *
  * This repo carried TWO Node pins that disagreed, in the worst possible
- * direction: `.nvmrc` said 24 and `.node-version` said 22, `ci.yml` +
- * `security-audit.yml` hardcoded 24, and `deploy.yml` read `.node-version` — so
- * CI tested on Node 24 while the artifact shipped to edge-reco.com was BUILT on
+ * direction: `.nvmrc` said 24, legacy quality workflows hardcoded 24, and
+ * `deploy.yml` read `.node-version` — so
+ * legacy CI tested on Node 24 while the artifact shipped to edge-reco.com was BUILT on
  * Node 22. The deployed build ran on a runtime nothing tested against, and the
  * local gate enforced neither.
  *
@@ -28,15 +28,15 @@
  * A floor structurally cannot catch this. `engines.node: ">=22.12"` is already
  * satisfied by 24.16.0 — the bug WAS a behavioural change in a later major, so
  * any range that admits both runtimes admits the bug. `.nvmrc` pins one exact
- * build and `actions/setup-node` installs exactly that build, so "identical to
- * CI" is the only property worth asserting. Bumping Node is a deliberate act:
- * edit `frontend/.nvmrc`, and local, CI, and the deploy build move together.
+ * build and both Dagger and deploy install exactly that build, so runtime identity
+ * is the only property worth asserting. Bumping Node is a deliberate act: edit
+ * `frontend/.nvmrc`, and local, Dagger, and the deploy build move together.
  *
  * WHY .nvmrc IS THE ONLY PIN
  *
  * `.node-version` was deleted rather than kept in sync. Two files that must
  * agree are two files that can disagree; this one already had. Every consumer
- * now reads `frontend/.nvmrc`: `nvm use`, all three workflows, and this script.
+ * now reads `frontend/.nvmrc`: `nvm use`, Dagger, deploy, and this script.
  */
 import { readFileSync } from "node:fs";
 
@@ -60,14 +60,14 @@ export function nodeVersionVerdict(activeVersion, nvmrcSource) {
 		return {
 			ok: false,
 			message:
-				"Node preflight: frontend/.nvmrc is empty, so the gate cannot prove it is running the version CI uses. Pin an exact version (e.g. 24.16.0).",
+				"Node preflight: frontend/.nvmrc is empty, so the gate cannot prove it is running the version Dagger uses. Pin an exact version (e.g. 24.16.0).",
 		};
 	}
 
 	if (active === pinned) {
 		return {
 			ok: true,
-			message: `Node preflight: ${active} matches frontend/.nvmrc — same runtime as CI and as the deployed build.`,
+			message: `Node preflight: ${active} matches frontend/.nvmrc — same runtime as Dagger and as the deployed build.`,
 		};
 	}
 
@@ -76,7 +76,7 @@ export function nodeVersionVerdict(activeVersion, nvmrcSource) {
 		message: [
 			`Node preflight FAILED: this shell runs Node ${active}, but frontend/.nvmrc pins ${pinned}.`,
 			"",
-			`CI (ci.yml, security-audit.yml) and the production deploy (deploy.yml) all install ${pinned}`,
+			`Dagger and the production deploy (deploy.yml) both install ${pinned}`,
 			`from frontend/.nvmrc, so a gate run on ${active} proves nothing about either.`,
 			"That skew is exactly how three permanently-broken tests were reported green in a sibling repo.",
 			"",
@@ -84,7 +84,7 @@ export function nodeVersionVerdict(activeVersion, nvmrcSource) {
 			`  nvm install ${pinned} && nvm use ${pinned}   # from frontend/, 'nvm use' alone reads .nvmrc`,
 			"",
 			"Intentionally moving the project to a new Node? Edit frontend/.nvmrc — it is the ONLY pin,",
-			"and local, CI, and the deployed build all follow it together.",
+			"and local, Dagger, and the deployed build all follow it together.",
 		].join("\n"),
 	};
 }

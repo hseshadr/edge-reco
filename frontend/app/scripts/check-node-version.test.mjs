@@ -31,7 +31,7 @@ test("REJECTS an older major — the direction that ships an untested runtime", 
 
 test("REJECTS a patch-level difference — exact match, not a floor", () => {
 	// The decisive case: a `>=` floor would accept every one of these. Only an
-	// exact comparison proves "identical to the runtime CI installs".
+	// exact comparison proves "identical to the runtime Dagger installs".
 	for (const active of ["v24.16.1", "v24.17.0", "v25.0.0"]) {
 		const verdict = nodeVersionVerdict(active, "24.16.0");
 		assert.equal(verdict.ok, false, `${active} must not satisfy a 24.16.0 pin`);
@@ -67,7 +67,7 @@ test("the committed .nvmrc is an exact three-part version, not a bare major", ()
 
 test("the running Node matches the committed pin (the live preflight)", () => {
 	// This is the guard itself, executed as a test: if the suite is running on a
-	// runtime CI does not use, say so here too rather than only in the gate step.
+	// runtime Dagger does not use, say so here too rather than only in the gate step.
 	const verdict = nodeVersionVerdict(
 		process.version,
 		readFileSync(NVMRC, "utf8"),

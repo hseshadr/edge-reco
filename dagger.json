@@ -1,0 +1,19 @@
+{
+  "name": "edge-reco",
+  "engineVersion": "v0.21.8",
+  "sdk": {
+    "source": "python"
+  },
+  "include": [
+    ".dagger/pyproject.toml",
+    ".dagger/sdk/**",
+    ".dagger/src/**",
+    ".dagger/uv.lock",
+    ".github/workflows/**",
+    "README.md",
+    "backend/**",
+    "dagger.json",
+    "frontend/**"
+  ],
+  "source": ".dagger"
+}
