@@ -172,25 +172,17 @@ jobs:
           # runs no Node itself, so the build runtime is ours to choose — and the
           # only defensible choice is the one the tests ran on.
           node-version-file: frontend/.nvmrc
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install workspace
         if: steps.resolve.outputs.deploy == 'true'
         run: pnpm -C frontend install --frozen-lockfile
 
       # Self-hosted SPA model weights (house standard §8.1b), fetched BEFORE the
-      # build — same fixed-key cache as Dagger. The build's `prebuild` hook verifies
+      # build. The build's `prebuild` hook verifies
       # them (sha256-pinned, fail-loud), and the built dist/ ships them under
       # /models/ so the live site never touches a model CDN at runtime. Every
       # file is under the Cloudflare Pages 25 MiB single-asset limit (the q8
       # ONNX is ~22.97 MB; pinned by scripts/download-model.test.mjs).
-      - name: Cache self-hosted model weights
-        if: steps.resolve.outputs.deploy == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: frontend/app/public/models
-          key: model-weights-${{ runner.os }}-${{ hashFiles('frontend/app/scripts/download-model.mjs') }}
       - name: Fetch self-hosted model weights (idempotent, sha256-verified)
         if: steps.resolve.outputs.deploy == 'true'
         working-directory: frontend/app
