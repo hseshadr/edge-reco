@@ -47,7 +47,9 @@ jobs:
         run: uv python install 3.13
       - name: Sync
         working-directory: backend
-        run: uv sync --group dev
+        run: |
+          uv sync --group dev
+          uv pip install --no-cache --reinstall --no-deps 'assay-engine==0.5.0.dev2'
       # Fixed-key cache: only the first run pays the MiniLM download; afterwards the
       # regen scripts read the local Hugging Face cache.
       - name: Cache MiniLM weights (Hugging Face)
