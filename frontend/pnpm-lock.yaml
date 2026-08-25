@@ -111,8 +111,8 @@ importers:
   packages/edgeproc-browser:
     dependencies:
       '@edgeproc/assay':
-        specifier: 0.5.0-dev.2
-        version: 0.5.0-dev.2
+        specifier: 0.5.0-dev.3
+        version: 0.5.0-dev.3
       '@edgeproc/avow':
         specifier: 0.4.1
         version: 0.4.1
@@ -781,8 +781,8 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@edgeproc/assay@0.5.0-dev.2':
-    resolution: {integrity: sha512-R5uFYeU7l4UkAGRvY7HDcOlLBpSw10WAi2w14WtmkzhpcxYsJO43OsGc/jJ9JN0dxeZjucpFftcXJNRwsSeDJw==}
+  '@edgeproc/assay@0.5.0-dev.3':
+    resolution: {integrity: sha512-s0NBvvTvbc7Y6z50oqaIPraN0hd6RRd9vY4dPXkWpB3DTGKCuJ8c4Kz2eX1KjEqF7PecQ4FyqzAYvgxIrJsQYg==}
     engines: {node: '>=22.13'}
 
   '@edgeproc/avow@0.4.1':
@@ -3796,7 +3796,7 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@edgeproc/assay@0.5.0-dev.2': {}
+  '@edgeproc/assay@0.5.0-dev.3': {}
 
   '@edgeproc/avow@0.4.1':
     dependencies:

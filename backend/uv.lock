@@ -38,14 +38,14 @@ wheels = [
 
 [[package]]
 name = "assay-engine"
-version = "0.5.0.dev2"
+version = "0.5.0.dev3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/36/27a98dc24c10a6353b1a4b642e682e848debe36280d283a5ddfde462594d/assay_engine-0.5.0.dev2.tar.gz", hash = "sha256:661f132cd0fd1ec64668985bb150a563f627d690eb68d8ac8dd4dbe71a8a4713", size = 47102, upload-time = "2026-08-22T12:22:45.257Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/1c/cb5586101dffa8150979dbbfa36257b5258d2a7b575cc0785130ddeb2947/assay_engine-0.5.0.dev3.tar.gz", hash = "sha256:303ef50ee174ce3d7de1d2ab0401873eb5bc2d09668f47083a991fe7a3a84f62", size = 47168, upload-time = "2026-08-25T01:36:41.127Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/e7/adca66486f4d6c74607106b328b66324c5e737ec21df99658972e03248ec/assay_engine-0.5.0.dev2-py3-none-any.whl", hash = "sha256:9e112118987f48ad0b9132ad592e8674e853b1d0f1967a08255750f1619061e8", size = 55849, upload-time = "2026-08-22T12:22:43.925Z" },
+    { url = "https://files.pythonhosted.org/packages/45/05/22dad286c09d630661b5558b4ff79809ada6cb42c6360b42310e0ee6fc30/assay_engine-0.5.0.dev3-py3-none-any.whl", hash = "sha256:72beb0a3b33962147e5174c7b71feb629cd76b8b0efbd127f52ed6a43c1f2f43", size = 55883, upload-time = "2026-08-25T01:36:39.674Z" },
 ]
 
 [package.optional-dependencies]
@@ -572,7 +572,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "assay-engine", extras = ["metrics"], specifier = "==0.5.0.dev2" },
+    { name = "assay-engine", extras = ["metrics"], specifier = "==0.5.0.dev3" },
     { name = "avow", specifier = ">=0.3.0" },
     { name = "cryptography", specifier = ">=50" },
     { name = "edge-proc", extras = ["localvec", "bundles"], specifier = ">=0.2.0" },

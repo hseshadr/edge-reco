@@ -18,7 +18,7 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@edgeproc/assay": "0.5.0-dev.2",
+		"@edgeproc/assay": "0.5.0-dev.3",
 		"@edgeproc/avow": "0.4.1",
 		"@hpcc-js/wasm-zstd": "^1.15.0",
 		"@huggingface/transformers": "^4.2.0",

@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 
 const PACKAGE_NAME = "@edgeproc/assay";
-const VERSION = "0.5.0-dev.2";
+const VERSION = "0.5.0-dev.3";
 const INTEGRITY =
-	"sha512-R5uFYeU7l4UkAGRvY7HDcOlLBpSw10WAi2w14WtmkzhpcxYsJO43OsGc/jJ9JN0dxeZjucpFftcXJNRwsSeDJw==";
+	"sha512-s0NBvvTvbc7Y6z50oqaIPraN0hd6RRd9vY4dPXkWpB3DTGKCuJ8c4Kz2eX1KjEqF7PecQ4FyqzAYvgxIrJsQYg==";
 const PACKAGE_MANIFEST = resolve(
 	import.meta.dirname,
 	"../../packages/edgeproc-browser/package.json",

@@ -38,7 +38,7 @@ After the shadow head passes both implementations:
 ## Contracts
 
 - Dagger engine: exactly `v0.21.8`.
-- Python: pinned 3.13 image and `uv`; exact registry reinstall of `assay-engine==0.5.0.dev2` after sync.
+- Python: pinned 3.13 image and `uv`; exact registry reinstall of `assay-engine==0.5.0.dev3` after sync.
 - Node: exactly `24.16.0`; pnpm exactly `11.5.0`.
 - Browser: Playwright exactly `1.62.1` with Chromium.
 - No package publication and no registry writes.

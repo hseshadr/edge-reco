@@ -49,7 +49,7 @@
 - Produces: `backend-quality`, `backend-audit`, and `parity` checks.
 
 - [ ] Add a shared Python container from the digest-pinned Python 3.13 image with an uv `CacheVolume`.
-- [ ] Install pinned uv, copy the selected sources, run `uv sync --group dev`, and reinstall exact registry `assay-engine==0.5.0.dev2` without cache.
+- [ ] Install pinned uv, copy the selected sources, run `uv sync --group dev`, and reinstall exact registry `assay-engine==0.5.0.dev3` without cache.
 - [ ] Execute `uv run poe gate` for backend quality.
 - [ ] Execute `uv run poe audit` for dependency security without suppressions.
 - [ ] Regenerate all five fixture files in the container and compare each against a copied committed baseline with `scripts/compare_parity_fixtures.py`.
