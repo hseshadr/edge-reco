@@ -78,9 +78,19 @@ def test_should_keep_privileged_release_calls_out_of_unprivileged_checks() -> No
     # Given
     workflow = (_ROOT / ".github" / "workflows" / "dagger.yml").read_text()
     # When
+    job = re.search(r"(?ms)^  dagger:\n(?P<body>.*?)(?=^  \w[^\n]*:\n|\Z)", workflow)
     forbidden = ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "security-events: write")
     # Then
-    assert all(value not in workflow for value in forbidden)
+    assert job is not None
+    assert all(value not in job["body"] for value in forbidden)
+
+
+def test_should_project_dagger_sarif_from_a_fork_guarded_privileged_job() -> None:
+    workflow = (_ROOT / ".github" / "workflows" / "dagger.yml").read_text()
+    assert "security-events: write" in workflow
+    assert "head.repo.full_name == github.repository" in workflow
+    assert "codeql-upload" in workflow
+    assert "--github-token=env:GITHUB_TOKEN" in workflow
 
 
 def test_audit_reports_zero_refs_when_there_is_nothing_to_scan(tmp_path: Path) -> None:

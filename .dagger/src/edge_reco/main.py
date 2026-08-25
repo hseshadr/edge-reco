@@ -45,6 +45,8 @@ SOURCE_EXCLUDES: Final = [
 ]
 GITLEAKS_SNAPSHOT: Final = tuple(shell_split("gitleaks detect --source /snapshot --no-git --redact --no-banner"))
 GITLEAKS_HISTORY: Final = tuple(shell_split("gitleaks detect --source /repo --log-opts=--all --redact --no-banner"))
+CODEQL_UPLOAD: Final = ("/opt/codeql/codeql", "github", "upload-results", "--github-auth-stdin")
+AUTH_PIPE: Final = 'printf "%s" "$GITHUB_TOKEN" | exec "$@"'
 
 
 @object_type
@@ -166,8 +168,11 @@ class EdgeReco:
         container = self._codeql().with_directory("/src", self.source).with_workdir("/src")
         container = container.with_directory("/sarif", self.codeql_sarif())
         container = container.with_secret_variable("GITHUB_TOKEN", github_token)
-        args = ["sh", ".dagger/scripts/codeql-upload.sh", repository, ref, commit_sha]
-        return await container.with_exec(args).stdout()
+        for language in ("javascript-typescript", "python"):
+            args = [*CODEQL_UPLOAD, f"--repository={repository}", f"--ref={ref}", f"--commit={commit_sha}"]
+            command = ["sh", "-ceu", AUTH_PIPE, "upload", *args, f"--sarif=/sarif/{language}.sarif"]
+            container = container.with_exec(command)
+        return await container.stdout()
 
     @function
     async def verify_live(self, commit_sha: str) -> str:

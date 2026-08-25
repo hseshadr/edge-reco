@@ -1,5 +1,4 @@
 name: Deploy edge-reco.com
-
 on:
   workflow_run:
     workflows: ["Dagger"]
