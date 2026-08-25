@@ -33,7 +33,7 @@ export interface ObserveOptions {
 	readonly edgeOrigin: string;
 	/** The optional analytics uplink URL (VITE_EVENTS_URL); may be undefined. */
 	readonly eventsUrl?: string | null | undefined;
-	/** The app's own origin; same-origin /images/ assets are not backend calls. */
+	/** The app's own origin; release-owned static assets are not backend calls. */
 	readonly appOrigin?: string | null | undefined;
 }
 
@@ -78,8 +78,8 @@ export function toResourceEntries(
  * Pure counting helper (unit-tested directly). Given the resource entries seen
  * so far and the classify options, return the count of entries that represent a
  * real backend call: classified "edge" or "other", and starting at/after
- * `readyAt`. Images and the uplink beacon are excluded; pre-ready entries (the
- * sync itself, the model fetch) are ignored.
+ * `readyAt`. Static assets, images, and the uplink beacon are excluded;
+ * pre-ready entries (the sync itself, the model fetch) are ignored.
  */
 export function countBackendCalls(
 	entries: readonly ResourceEntryLike[],
