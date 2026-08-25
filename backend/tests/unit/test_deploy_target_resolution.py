@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[3]
 _MODULE = _ROOT / ".dagger" / "src" / "edge_reco" / "main.py"
+_CLOUDFLARE = _ROOT / ".dagger" / "scripts" / "cloudflare-pages.sh"
 
 
 def _source() -> str:
     return _MODULE.read_text(encoding="utf-8")
+
+
+def _cloudflare_source() -> str:
+    return _CLOUDFLARE.read_text(encoding="utf-8")
 
 
 def test_should_resolve_main_at_execution_time() -> None:
@@ -38,18 +44,31 @@ def test_should_mount_the_built_directory_without_exporting_it() -> None:
 
 def test_should_disable_cloudflare_git_before_direct_upload() -> None:
     source = _source()
+    cloudflare = _cloudflare_source()
     disable = "await self._disable_git_deployments"
     upload = "await self._deploy_artifact"
     assert disable in source
     assert source.index(disable) < source.index(upload)
-    assert '"production_deployments_enabled":false' in source
-    assert '"preview_deployment_setting":"none"' in source
-    assert "| curl -fsS -X PATCH --config -" in source
-    assert 'curl -fsS -X PATCH -H "Authorization' not in source
+    assert '"production_deployments_enabled":false' in cloudflare
+    assert '"preview_deployment_setting":"none"' in cloudflare
+    assert "curl -fsS --config -" in cloudflare
+    assert 'curl -fsS -H "Authorization' not in cloudflare
 
 
 def test_should_use_writable_api_response_scratch_paths() -> None:
     source = _source()
-    assert source.count("mktemp -d") == 2
-    assert "/work/runs.json" not in source
-    assert "/work/project.json" not in source
+    cloudflare = _cloudflare_source()
+    assert "mktemp -d" in source
+    assert cloudflare.count("mktemp") == 2
+    assert re.search(r"/work(?:/|\b)", source) is None
+    assert re.search(r"/work(?:/|\b)", cloudflare) is None
+
+
+def test_should_bound_exact_pages_api_verification() -> None:
+    cloudflare = _cloudflare_source()
+    assert "?env=production" in cloudflare
+    assert ".deployment_trigger.metadata.commit_hash == $sha" in cloudflare
+    assert '.latest_stage.status == "success"' in cloudflare
+    assert "DEPLOY_VERIFY_TIMEOUT_SECONDS" in cloudflare
+    assert 'sleep "$delay"' in cloudflare
+    assert "exit 1" in cloudflare
