@@ -46,3 +46,10 @@ def test_should_disable_cloudflare_git_before_direct_upload() -> None:
     assert '"preview_deployment_setting":"none"' in source
     assert "| curl -fsS -X PATCH --config -" in source
     assert 'curl -fsS -X PATCH -H "Authorization' not in source
+
+
+def test_should_use_writable_api_response_scratch_paths() -> None:
+    source = _source()
+    assert source.count("mktemp -d") == 2
+    assert "/work/runs.json" not in source
+    assert "/work/project.json" not in source

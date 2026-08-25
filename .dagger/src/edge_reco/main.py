@@ -203,12 +203,13 @@ class EdgeReco:
         tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
         tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
         script = (
+            "tmp=$(mktemp -d); "
             f'printf \'url = "{CF_API}/%s/pages/projects/edge-reco"\\nheader = "Authorization: Bearer %s"\\n\' '
             '"$CLOUDFLARE_ACCOUNT_ID" "$CLOUDFLARE_API_TOKEN" '
             f"| curl -fsS -X PATCH --config - -H \"Content-Type: application/json\" --data '{CF_GIT_OFF}' "
-            "-o /work/project.json; "
+            '-o "$tmp/project.json"; '
             "jq -e '.success and (.result.source.config.production_deployments_enabled == false) and "
-            '(.result.source.config.preview_deployment_setting == "none")\' /work/project.json'
+            '(.result.source.config.preview_deployment_setting == "none")\' "$tmp/project.json"'
         )
         await tools.with_exec(["sh", "-ceu", script]).sync()
 
@@ -241,10 +242,10 @@ class EdgeReco:
     def _github_probe(self, token: dagger.Secret, repository: str, commit: str) -> dagger.Container:
         url = f"https://api.github.com/repos/{repository}/actions/workflows/dagger.yml/runs?head_sha={commit}&event=push&per_page=20"
         script = (
-            'curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" '
-            f'-H "Accept: application/vnd.github+json" "{url}" -o /work/runs.json; '
+            'tmp=$(mktemp -d); curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" '
+            f'-H "Accept: application/vnd.github+json" "{url}" -o "$tmp/runs.json"; '
             'test "$(jq \'[.workflow_runs[]|select(.conclusion=="success")]|length\' '
-            '/work/runs.json)" -gt 0'
+            '"$tmp/runs.json")" -gt 0'
         )
         return self._release_tools().with_secret_variable("GITHUB_TOKEN", token).with_exec(["sh", "-ceu", script])
 
