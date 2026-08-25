@@ -49,6 +49,17 @@ def test_all_action_refs_are_pinned_to_full_commit_shas() -> None:
     assert total > 0, "workflow audit matched no action references — the scan is vacuous"
 
 
+def test_should_expose_canonical_secret_scan_context_when_dagger_runs() -> None:
+    """Branch protection and fleet audits rely on one stable caller display name."""
+    # Given
+    workflow = (_ROOT / ".github" / "workflows" / "dagger.yml").read_text(encoding="utf-8")
+    # When
+    secret_scan = re.search(r"(?ms)^  gitleaks:\n(?P<body>.*?)(?=^  \w[^\n]*:\n|\Z)", workflow)
+    # Then
+    assert secret_scan is not None, "Dagger workflow has no reusable secret-scan job"
+    assert re.search(r"(?m)^    name: Secret scan$", secret_scan["body"])
+
+
 def test_audit_reports_zero_refs_when_there_is_nothing_to_scan(tmp_path: Path) -> None:
     """Proves the non-vacuity assertion above has teeth: an empty dir yields a zero count."""
     assert _audit(tmp_path) == ([], 0)

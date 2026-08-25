@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   gitleaks:
+    name: Secret scan
     uses: hseshadr/ci/.github/workflows/secret-scan.yml@8166345c9355dde54c12fa95d0457c4ea97d3e64 # ci-v3.3.0
     with:
       full-history: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
