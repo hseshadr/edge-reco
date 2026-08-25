@@ -45,7 +45,7 @@ dependencies = [
   # 0.5 release candidate exactly so every deployment executes the same formula.
   # The metrics extra retains the reference ranking metrics used by the relevance
   # baseline; the additive face now also drives every live score.
-  "assay-engine[metrics]==0.5.0.dev2",
+  "assay-engine[metrics]==0.5.0.dev3",
   # Avow owns only the RFC-8785 + Ed25519 evidence envelope. EdgeReco signs one
   # static ranking proof at catalog publish time and never signs shopper results.
   "avow>=0.3.0",

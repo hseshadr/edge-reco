@@ -28,7 +28,7 @@ PREVIEW_ARGS: Final = tuple(
 ASSAY_INSTALL: Final = tuple(
     shell_split(
         "uv pip install --python /opt/venv --no-cache --reinstall "
-        "--no-deps assay-engine==0.5.0.dev2"
+        "--no-deps assay-engine==0.5.0.dev3"
     )
 )
 PLAYWRIGHT_INSTALL: Final = tuple(
