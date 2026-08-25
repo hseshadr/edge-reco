@@ -4,7 +4,7 @@
 
 **Goal:** Replace duplicated GitHub CI orchestration with a small native Dagger v0.21.8 check graph without changing EdgeReco's quality, security, deployment, or production contracts.
 
-**Architecture:** A root Dagger module lazily selects workspace directories and composes the repository's existing commands in pinned containers. One SHA-pinned GitHub job runs Gitleaks and `dagger check`; Cloudflare deployment and CodeQL remain independent authorities.
+**Architecture:** A root Dagger module accepts an explicit typed `Workspace`, stores an immutable `Directory`, and composes quality, security, build, deploy, and live verification in pinned containers. Thin SHA-pinned GitHub jobs only call Dagger; CodeQL Default Setup remains during the hosted SARIF shadow period.
 
 **Tech Stack:** Dagger v0.21.8 Python SDK, Python 3.13, uv, Node 24.16.0, pnpm 11.5.0, Playwright 1.62.1, GitHub Actions, Cloudflare Pages.
 
@@ -30,7 +30,7 @@
 - Create: `.dagger/uv.lock`
 
 **Interfaces:**
-- Consumes: the current checkout through `dag.current_workspace()`.
+- Consumes: the current checkout through an explicit typed `Workspace` constructor input.
 - Produces: discoverable `@check` functions named by the design spec.
 
 - [ ] Run `dagger --silent check -l` and assert that each required check name is present.

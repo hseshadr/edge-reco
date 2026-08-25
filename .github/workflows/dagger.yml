@@ -12,19 +12,13 @@ permissions:
   pull-requests: read
 
 jobs:
-  gitleaks:
-    name: Secret scan
-    uses: hseshadr/ci/.github/workflows/secret-scan.yml@8166345c9355dde54c12fa95d0457c4ea97d3e64 # ci-v3.3.0
-    with:
-      full-history: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-
   dagger:
     name: Dagger
-    needs: gitleaks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: dagger/dagger-for-github@496f1b3d8b0d823834c13e67cf8a8e08ca3b9602 # v8.4.0
         with:

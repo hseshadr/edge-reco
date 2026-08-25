@@ -5,7 +5,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = ["dagger-io"]
 
 [project.optional-dependencies]
-quality = ["mypy", "poethepoet", "ruff", "xenon"]
+quality = ["mypy", "poethepoet", "pytest", "ruff", "xenon"]
 
 [build-system]
 requires = ["uv_build>=0.8.4,<0.9.0"]
@@ -22,10 +22,10 @@ fmt = "ruff format src"
 lint = { shell = "ruff check src && ruff format --check src" }
 typecheck = "mypy --strict src"
 complexity = "xenon --max-absolute A --max-modules A --max-average A src"
-test = "dagger check -l"
+test = "pytest"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]

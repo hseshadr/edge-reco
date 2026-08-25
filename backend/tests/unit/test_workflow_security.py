@@ -49,15 +49,38 @@ def test_all_action_refs_are_pinned_to_full_commit_shas() -> None:
     assert total > 0, "workflow audit matched no action references — the scan is vacuous"
 
 
-def test_should_expose_canonical_secret_scan_context_when_dagger_runs() -> None:
-    """Branch protection and fleet audits rely on one stable caller display name."""
+def test_should_run_all_security_checks_inside_stable_dagger_context() -> None:
+    """Branch protection relies on one Dagger job while Dagger owns secret scanning."""
     # Given
     workflow = (_ROOT / ".github" / "workflows" / "dagger.yml").read_text(encoding="utf-8")
     # When
-    secret_scan = re.search(r"(?ms)^  gitleaks:\n(?P<body>.*?)(?=^  \w[^\n]*:\n|\Z)", workflow)
+    job = re.search(r"(?ms)^  dagger:\n(?P<body>.*?)(?=^  \w[^\n]*:\n|\Z)", workflow)
     # Then
-    assert secret_scan is not None, "Dagger workflow has no reusable secret-scan job"
-    assert re.search(r"(?m)^    name: Secret scan$", secret_scan["body"])
+    assert job is not None, "Dagger workflow has no stable Dagger job"
+    assert re.search(r"(?m)^    name: Dagger$", job["body"])
+    module = (_ROOT / ".dagger" / "src" / "edge_reco" / "main.py").read_text()
+    assert "def secret_scan(" in module
+
+
+def test_should_delegate_every_repo_authored_step_to_pinned_dagger() -> None:
+    """Workflow YAML may only check out source and call the pinned Dagger action."""
+    # Given
+    workflows = (_ROOT / ".github" / "workflows").glob("*.yml")
+    # When
+    texts = [path.read_text(encoding="utf-8") for path in workflows]
+    # Then
+    assert all(re.search(r"(?m)^\s+run:", text) is None for text in texts)
+    assert all("persist-credentials: false" in text for text in texts)
+
+
+def test_should_keep_privileged_release_calls_out_of_unprivileged_checks() -> None:
+    """Cloudflare and SARIF credentials never enter the unprivileged check job."""
+    # Given
+    workflow = (_ROOT / ".github" / "workflows" / "dagger.yml").read_text()
+    # When
+    forbidden = ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "security-events: write")
+    # Then
+    assert all(value not in workflow for value in forbidden)
 
 
 def test_audit_reports_zero_refs_when_there_is_nothing_to_scan(tmp_path: Path) -> None:

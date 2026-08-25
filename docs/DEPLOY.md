@@ -92,8 +92,10 @@ static files from Cloudflare Pages — no Caddy, no origin server. The build bun
 signed catalog **same-origin** (copied into `dist/bundle`), so the whole flywheel runs
 from one domain with zero CORS and zero application backend.
 
-Create a Pages project (Cloudflare → Workers & Pages → Create → Pages → Connect to Git
-→ `hseshadr/edge-reco`) with this build config:
+Create the existing `edge-reco` Pages project in Cloudflare with this build config. The
+production release authority is Dagger's checksum- and identity-verified Direct Upload;
+do not disconnect an existing Cloudflare Git integration until the Dagger deployment is
+green on hosted `main` and the exact live SHA has been independently verified:
 
 | Setting | Value |
 |---|---|
@@ -133,7 +135,8 @@ at one of these stable paths is not a supported deployment operation.
 
 Then add the apex domain in the Pages project → **Custom domains** → `edge-reco.com`.
 Cloudflare provisions the DNS record (CNAME-flattening at the apex) and the TLS
-certificate automatically. CF rebuilds and redeploys on every push to `main`.
+certificate automatically. Dagger builds and uploads the release after its exact `main`
+SHA has passed the canonical gate.
 
 > **Fork note:** to host your fork on a GitHub Pages *project* site instead (served
 > under `https://<you>.github.io/<repo>/`), run the same `build:pages` with
@@ -142,34 +145,35 @@ certificate automatically. CF rebuilds and redeploys on every push to `main`.
 
 ### CI-driven deploy (GitHub Actions → Cloudflare Pages)
 
-The Git-connected Pages build above lets Cloudflare build on every push. As an
-alternative — or for a repo where you'd rather drive the deploy from CI — the
-`.github/workflows/deploy.yml` workflow runs the same `build:pages` artifact through
-`wrangler pages deploy` after the `Dagger` workflow goes green on `main` (and on manual
-`workflow_dispatch`).
+`.github/workflows/deploy.yml` is a privilege-separated trigger: pinned checkout plus
+one pinned Dagger call. Dagger resolves the current remote `main`, requires that exact
+SHA's same-repository push run to be green, builds that remote tree into a typed
+`Directory`, validates it without credentials, passes the same directory to pinned
+Wrangler 4.x, verifies Cloudflare's authoritative Pages deployment metadata, and then
+drives the public site. A manual dispatch uses the same green-main guard and cannot
+bypass it.
 
 **It fails loudly when it cannot deploy.** Until the two repository secrets below
 exist, both automatic and manual runs stop at the credential guard with a red failure.
 
 **It deploys `main` HEAD as of the moment it runs — not the commit that triggered it.**
-The first step reads `refs/heads/main` from the remote with `git ls-remote`; the
-checkout, `wrangler --commit-hash`, and every verification then key off that sha. The
+The Dagger function reads the remote Git ref and constructs the build from that exact
+remote commit tree; `wrangler --commit-hash` and every verification key off that SHA. The
 trigger's `workflow_run.head_sha` is a statement about the past. On 2026-08-08 three
 commits landed within ~30s, their gate runs finished out of order, and — because
 GitHub keeps only one pending run per concurrency group — the newest commit's deploy was
 cancelled while the oldest one's ran last and won. `edge-reco.com` served a stale commit
 with every run green. Resolving the target at execution time is what closes that.
 
-If `main` HEAD has no successful Dagger run, the workflow deploys nothing and exits
-**green**, logging why: that commit's own deploy fires when Dagger passes. Skipping is
-safe because a cancelled deploy always has a successor (cancellation only happens when a
-newer run is queued), and the successor re-resolves `main` HEAD.
+If `main` HEAD has no successful same-repository Dagger push run, the Dagger deployment
+fails closed before Cloudflare credentials are used. The next successful main gate
+creates a new deployment trigger, and serialized deploys never cancel an upload in
+progress.
 
-So a green run means one of exactly two things: either Wrangler uploaded the build,
-Cloudflare reports a successful deployment whose
+So a green run means Wrangler uploaded the exact Dagger-built directory, Cloudflare
+reports a successful deployment whose
 `deployment_trigger.metadata.commit_hash` matches `main` HEAD, and the public, no-store
-`/build.json` artifact reports the same commit — or the run stated that it had nothing
-to deploy. The workflow does not depend on the incompatible Workers-style
+`/build.json` artifact reports the same commit. The workflow does not depend on the incompatible Workers-style
 `source.config.commit_hash` field.
 
 To go live:
@@ -201,8 +205,9 @@ To go live:
    workflow probes `/faq?source=deploy-check` and fails unless `www` returns 301/308
    to the identical apex path and query.
 
-The build emits `frontend/app/dist`; `wrangler pages deploy frontend/app/dist
---project-name=edge-reco --branch=main --commit-hash=<RESOLVED_MAIN_HEAD>` uploads it. The
+The build emits a Dagger `Directory` from `frontend/app/dist`; pinned Wrangler receives
+that exact directory mounted at `/artifact` and uploads it with the project, branch,
+resolved SHA, and clean-tree identity flags. The
 `frontend/app/public/_redirects` file intentionally has no SPA wildcard rewrite:
 the storefront has no client-side URL router, and unknown paths should retain
 the generated noindex 404 rather than serving the root shell.
