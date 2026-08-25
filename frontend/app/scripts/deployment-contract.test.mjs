@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const DAGGER = resolve(ROOT, ".dagger/src/edge_reco/main.py");
+const CLOUDFLARE_RELEASE = resolve(ROOT, ".dagger/scripts/cloudflare-pages.sh");
 const WRANGLER_RELEASE = resolve(import.meta.dirname, "wrangler-release.sh");
 const WORKFLOW = resolve(ROOT, ".github/workflows/deploy.yml");
 const FRONTEND_PACKAGE = resolve(import.meta.dirname, "../../package.json");
@@ -29,23 +30,25 @@ async function productionScripts(directory) {
 		.map(({ name }) => resolve(directory, name));
 }
 
-async function fakeReleaseTools(successOn) {
+async function fakeReleaseTools(successOn, responseSha = SHA) {
 	const directory = await mkdtemp(join(tmpdir(), "edge-reco-release-"));
 	const attempts = join(directory, "attempts");
 	const sleeps = join(directory, "sleeps");
-	const pnpm = `#!/bin/sh
+	const curl = `#!/bin/sh
+cat >/dev/null
+output=; while test "$#" -gt 0; do test "$1" != -o || { output=$2; shift; }; shift; done
 count=0; test ! -f "$ATTEMPTS" || count=$(cat "$ATTEMPTS")
 count=$((count + 1)); printf '%s' "$count" >"$ATTEMPTS"
-status=pending; test "$count" -lt "$SUCCESS_ON" || status=success
-printf '[{"latest_stage":{"status":"%s"},"deployment_trigger":{"metadata":{"commit_hash":"%s"}}}]' "$status" "$EXPECTED_TEST_SHA"
+status=active; test "$count" -lt "$SUCCESS_ON" || status=success
+printf '{"success":true,"result":[{"environment":"production","latest_stage":{"name":"deploy","status":"%s"},"deployment_trigger":{"metadata":{"commit_hash":"%s"}}}]}' "$status" "$RESPONSE_SHA" >"$output"
 `;
-	await writeFile(join(directory, "pnpm"), pnpm, { mode: 0o755 });
+	await writeFile(join(directory, "curl"), curl, { mode: 0o755 });
 	await writeFile(
 		join(directory, "sleep"),
 		'#!/bin/sh\nprintf \'%s\\n\' "$1" >>"$SLEEPS"\n',
 		{ mode: 0o755 },
 	);
-	return { attempts, directory, sleeps, successOn };
+	return { attempts, directory, responseSha, sleeps, successOn };
 }
 
 async function runRelease(tools, timeout = "60") {
@@ -53,27 +56,28 @@ async function runRelease(tools, timeout = "60") {
 		...process.env,
 		ATTEMPTS: tools.attempts,
 		DEPLOY_VERIFY_TIMEOUT_SECONDS: timeout,
-		EXPECTED_TEST_SHA: SHA,
+		CLOUDFLARE_ACCOUNT_ID: "account",
+		CLOUDFLARE_API_TOKEN: "token",
+		EXPECTED_SHA: SHA,
 		PATH: `${tools.directory}:${process.env.PATH}`,
+		RESPONSE_SHA: tools.responseSha,
 		SLEEPS: tools.sleeps,
 		SUCCESS_ON: tools.successOn,
 	};
-	delete env.NODE_TEST_CONTEXT;
-	delete env.NODE_TEST_WORKER_ID;
-	return execFile("sh", [WRANGLER_RELEASE, "verify", SHA], {
-		cwd: resolve(ROOT, "frontend"),
-		env,
-	});
+	return execFile("sh", [CLOUDFLARE_RELEASE, "verify"], { env });
 }
 
 test("Dagger owns exact artifact deployment and every live verification", async () => {
 	const dagger = await readFile(DAGGER, "utf8");
+	const cloudflare = await readFile(CLOUDFLARE_RELEASE, "utf8");
 	const wrangler = await readFile(WRANGLER_RELEASE, "utf8");
 	assert.match(dagger, /with_directory\("\/artifact", artifact\)/u);
 	assert.match(dagger, /wrangler-release\.sh/u);
+	assert.match(dagger, /cloudflare-pages\.sh/u);
 	assert.match(dagger, /playwright\.live\.config\.ts/u);
-	assert.match(wrangler, /pages deployment list/u);
-	assert.match(wrangler, /release-verify\.test\.mjs/u);
+	assert.doesNotMatch(wrangler, /pages deployment list/u);
+	assert.match(cloudflare, /curl -fsS --config -/u);
+	assert.doesNotMatch(cloudflare, /curl[^\n]*CLOUDFLARE_API_TOKEN/u);
 });
 
 test("every Dagger production script uses an existing or unique scratch path", async () => {
@@ -84,7 +88,7 @@ test("every Dagger production script uses an existing or unique scratch path", a
 		paths.map((path) => readFile(path, "utf8")),
 	);
 	for (const script of scripts) assert.doesNotMatch(script, /\/work(?:\/|\b)/u);
-	assert.match(await readFile(WRANGLER_RELEASE, "utf8"), /mktemp/u);
+	assert.match(await readFile(CLOUDFLARE_RELEASE, "utf8"), /mktemp/u);
 });
 
 test("deployment verification polls with bounded backoff until exact success", async () => {
@@ -95,6 +99,8 @@ test("deployment verification polls with bounded backoff until exact success", a
 	const stalled = await fakeReleaseTools("99");
 	await assert.rejects(() => runRelease(stalled, "0"));
 	assert.equal(await readFile(stalled.attempts, "utf8"), "1");
+	const wrongSha = await fakeReleaseTools("1", "b".repeat(40));
+	await assert.rejects(() => runRelease(wrongSha, "0"));
 });
 
 test("deploy workflow is only a pinned checkout and Dagger invocation", async () => {

@@ -24,8 +24,11 @@ async function assertArtifactIdentity(directory, expectedSha) {
 function assertDeploymentIdentity(deployments, expectedSha) {
 	const exact = deployments.some(
 		(value) =>
+			value?.environment === "production" &&
 			value?.deployment_trigger?.metadata?.commit_hash ===
-				assertSha(expectedSha) && value?.latest_stage?.status === "success",
+				assertSha(expectedSha) &&
+			value?.latest_stage?.name === "deploy" &&
+			value?.latest_stage?.status === "success",
 	);
 	if (!exact)
 		throw new Error(`no successful production deployment for ${expectedSha}`);
@@ -47,7 +50,8 @@ test("artifact identity must equal the exact release SHA", async () => {
 test("deployment identity uses the authoritative trigger metadata", () => {
 	const deployments = [
 		{
-			latest_stage: { status: "success" },
+			environment: "production",
+			latest_stage: { name: "deploy", status: "success" },
 			deployment_trigger: { metadata: { commit_hash: SHA } },
 		},
 	];
@@ -56,6 +60,14 @@ test("deployment identity uses the authoritative trigger metadata", () => {
 		() =>
 			assertDeploymentIdentity(
 				[{ source: { config: { commit_hash: SHA } } }],
+				SHA,
+			),
+		/deployment/u,
+	);
+	assert.throws(
+		() =>
+			assertDeploymentIdentity(
+				[{ Source: SHA.slice(0, 7), Status: "1 minute ago" }],
 				SHA,
 			),
 		/deployment/u,
@@ -76,7 +88,7 @@ test(
 		assertArtifactIdentity(process.env.ARTIFACT_DIR, process.env.EXPECTED_SHA),
 );
 
-test("Cloudflare list contains the exact successful deployment source", {
+test("Cloudflare Pages API contains the exact successful deployment source", {
 	skip: !process.env.DEPLOYMENTS_PATH,
 }, async () => {
 	const payload = JSON.parse(
