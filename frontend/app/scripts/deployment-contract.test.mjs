@@ -80,6 +80,15 @@ test("Dagger owns exact artifact deployment and every live verification", async 
 	assert.doesNotMatch(cloudflare, /curl[^\n]*CLOUDFLARE_API_TOKEN/u);
 });
 
+test("Dagger installs jq before running deployment contracts", async () => {
+	const dagger = await readFile(DAGGER, "utf8");
+	const quality = dagger.slice(
+		dagger.indexOf("def frontend_quality"),
+		dagger.indexOf("def browser_e2e"),
+	);
+	assert.match(quality, /apt-get[^\n]*install[^\n]*jq/u);
+});
+
 test("every Dagger production script uses an existing or unique scratch path", async () => {
 	const paths = (
 		await Promise.all(DAGGER_SCRIPT_DIRS.map(productionScripts))
