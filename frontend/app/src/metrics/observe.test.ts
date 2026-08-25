@@ -57,6 +57,19 @@ describe("countBackendCalls", () => {
 		expect(countBackendCalls(entries, OPTS)).toBe(0);
 	});
 
+	it("counts only the backend call in the live PDP's same-origin resource batch", () => {
+		// Production observation: opening a PDP can make Chromium fetch delayed
+		// PWA/favicon assets after readyAt. Those are static release files, while a
+		// same-origin API path is still a real backend call and must remain visible.
+		const entries = [
+			entry("http://localhost:4173/pwa-192x192.png", 150),
+			entry("http://localhost:4173/favicon.svg", 151),
+			entry("http://localhost:4173/favicon.ico", 152),
+			entry("http://localhost:4173/api/recommendations", 153),
+		];
+		expect(countBackendCalls(entries, OPTS)).toBe(1);
+	});
+
 	it("DOES count a remote host's /images/ path — the local rule must not mask it", () => {
 		// The security property behind the "0 backend calls" headline: only the app's
 		// OWN origin may claim the /images/ shortcut. A third-party backend that simply

@@ -3,7 +3,14 @@
  * Used to count "real backend calls" vs images, uplink beacons, and edge CDN syncs.
  */
 
-export type ResourceBucket = "edge" | "image" | "uplink" | "other";
+export type ResourceBucket = "asset" | "edge" | "image" | "uplink" | "other";
+
+/** Root assets browsers may request lazily after the storefront is ready. */
+const STATIC_ASSET_PATHS = new Set([
+	"/favicon.ico",
+	"/favicon.svg",
+	"/pwa-192x192.png",
+]);
 
 export interface ClassifyOptions {
 	/** The signed-bundle CDN origin (e.g. "https://cdn.example.com"). */
@@ -12,21 +19,22 @@ export interface ClassifyOptions {
 	readonly eventsUrl?: string | null;
 	/**
 	 * The app's own origin (e.g. `location.origin`). When set, same-origin
-	 * `/images/<id>.svg` requests are treated as local product-image assets
-	 * (bucket "image"), not backend calls. Omit to disable that rule.
+	 * release-owned static assets are excluded from backend calls. Omit to
+	 * disable that rule.
 	 */
 	readonly appOrigin?: string | null;
 }
 
 /**
- * Bucket a URL into one of four categories.
+ * Bucket a URL into one of five categories.
  * Matching order (first match wins):
- *   1. "image"  — a product image: a same-origin `/images/…` asset baked into
+ *   1. "asset"  — a known same-origin static/PWA root asset
+ *   2. "image"  — a product image: a same-origin `/images/…` asset baked into
  *                 the bundle and served locally, OR a host ending in
  *                 `media-amazon.com`
- *   2. "uplink" — URL starts with the origin of `opts.eventsUrl` (when set)
- *   3. "edge"   — URL's origin equals `opts.edgeOrigin`
- *   4. "other"  — everything else (including unparseable URLs)
+ *   3. "uplink" — URL starts with the origin of `opts.eventsUrl` (when set)
+ *   4. "edge"   — URL's origin equals `opts.edgeOrigin`
+ *   5. "other"  — everything else (including unparseable URLs)
  */
 export function classifyResource(
 	url: string,
@@ -39,7 +47,17 @@ export function classifyResource(
 		return "other";
 	}
 
-	// 1. Product images.
+	// 1. Release-owned root assets that browsers may load after readyAt. Exact
+	// paths keep same-origin API/backend calls visible to the counter.
+	if (
+		opts.appOrigin != null &&
+		parsed.origin === opts.appOrigin &&
+		STATIC_ASSET_PATHS.has(parsed.pathname)
+	) {
+		return "asset";
+	}
+
+	// 2. Product images.
 	//   a) Local images baked into the signed bundle and served same-origin as
 	//      /images/<id>.svg — static assets, not a backend call. Scoped to the
 	//      app's OWN origin so a remote host with an /images/ path can never mask
@@ -60,7 +78,7 @@ export function classifyResource(
 		return "image";
 	}
 
-	// 2. Optional flywheel uplink — off the inference path, never gates the rail.
+	// 3. Optional flywheel uplink — off the inference path, never gates the rail.
 	if (opts.eventsUrl != null) {
 		try {
 			const eventsOrigin = new URL(opts.eventsUrl).origin;
@@ -72,7 +90,7 @@ export function classifyResource(
 		}
 	}
 
-	// 3. Edge CDN — signed-bundle sync requests.
+	// 4. Edge CDN — signed-bundle sync requests.
 	if (parsed.origin === opts.edgeOrigin) {
 		return "edge";
 	}
