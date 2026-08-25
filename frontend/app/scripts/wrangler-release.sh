@@ -14,9 +14,9 @@ case "$mode" in
       --branch=main "--commit-hash=$commit" --commit-dirty=false
     ;;
   verify)
-		pnpm exec wrangler pages deployment list --project-name=edge-reco \
-			--environment=production --json >/work/deployments.json
-		DEPLOYMENTS_PATH=/work/deployments.json EXPECTED_SHA="$commit" node --test \
+		deployments=$(mktemp) && pnpm exec wrangler pages deployment list --project-name=edge-reco \
+			--environment=production --json >"$deployments"
+		DEPLOYMENTS_PATH="$deployments" EXPECTED_SHA="$commit" node --test \
 			--test-name-pattern='Cloudflare list' app/scripts/release-verify.test.mjs
     ;;
   *) echo "usage: wrangler-release.sh preflight|deploy|verify SHA" >&2; exit 2 ;;
