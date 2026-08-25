@@ -3,30 +3,42 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: "0 9 * * 1"
-  workflow_dispatch:
-
 permissions:
   contents: read
   pull-requests: read
-
 jobs:
-  gitleaks:
-    name: Secret scan
-    uses: hseshadr/ci/.github/workflows/secret-scan.yml@8166345c9355dde54c12fa95d0457c4ea97d3e64 # ci-v3.3.0
-    with:
-      full-history: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-
   dagger:
     name: Dagger
-    needs: gitleaks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: dagger/dagger-for-github@496f1b3d8b0d823834c13e67cf8a8e08ca3b9602 # v8.4.0
         with:
           version: "0.21.8"
           verb: check
+  sarif:
+    name: Dagger SARIF
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dagger/dagger-for-github@496f1b3d8b0d823834c13e67cf8a8e08ca3b9602 # v8.4.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          version: "0.21.8"
+          call: >-
+            codeql-upload
+            --github-token=env:GITHUB_TOKEN
+            --commit-sha=${{ github.sha }}
+            --ref=${{ github.ref }}
+            --repository=${{ github.repository }}

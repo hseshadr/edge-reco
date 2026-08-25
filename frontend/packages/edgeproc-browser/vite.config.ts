@@ -9,6 +9,7 @@ export default defineConfig({
 	test: {
 		environment: "jsdom",
 		globals: false,
+		maxWorkers: 2,
 		coverage: {
 			// Enforces the project's 90% standard on the parity-tested CORE LOGIC.
 			// Off by default (fast `vitest run`); turned on by `test:coverage`

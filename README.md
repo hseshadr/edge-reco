@@ -392,6 +392,8 @@ Vite auto-loads `frontend/.env`. The backend's `EDGERECO_*` vars are read from t
 dagger check                      # canonical full gate: same graph locally and on GitHub
 dagger check backend-quality      # run one independently cached contract
 dagger check -l                   # list the composable quality/security contracts
+dagger call build --commit-sha "$(git rev-parse HEAD)" export --path /tmp/edge-reco-dist
+dagger call release-preflight --commit-sha "$(git rev-parse HEAD)" # pinned Wrangler, no creds
 
 make gate                         # direct host-toolchain gate
 
@@ -411,6 +413,15 @@ pnpm -F frontend run build        # prove the workspace link resolves
 ```
 
 The repo follows strict test-first development: unit tests in `backend/tests/unit/`, behaviour scenarios in `backend/features/` with steps in `backend/tests/bdd/`, integration tests in `backend/tests/integration/`, end-to-end in `backend/tests/e2e/`.
+
+Dagger owns the complete repository-authored release graph: strict Python and frontend
+quality, both lockfile audits, parity, browser journeys, workflow lint, snapshot plus
+full-history Gitleaks, CodeQL SARIF generation, the immutable Pages artifact, Wrangler
+deployment, Cloudflare deployment identity, canonical routing, signed bundle/model
+identity, and the live zero-egress browser journey. GitHub workflows only check out the
+source and call the pinned Dagger engine. GitHub CodeQL Default Setup remains enabled
+until the Dagger SARIF check is green on hosted pull requests and its upload replacement
+can be cut over without a coverage gap.
 
 ## Data & attribution
 

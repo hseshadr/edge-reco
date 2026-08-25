@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-EdgeReco will have one native Dagger v0.21.8 check graph that runs the repository's existing Python, TypeScript, browser, parity, audit, and workflow-security commands. GitHub Actions will become a thin, SHA-pinned trigger. Cloudflare deployment and GitHub CodeQL remain independent authorities.
+EdgeReco has one native Dagger v0.21.8 graph that owns repository-authored CI, security analysis, artifact construction, Cloudflare Pages deployment, and live verification. GitHub Actions is a thin, SHA-pinned trigger. GitHub CodeQL Default Setup remains enabled only as the safe shadow authority until hosted Dagger SARIF is proven green.
 
 ## Why
 
@@ -10,7 +10,7 @@ The current CI behavior is correct but repeated across 503 lines of CI, parity, 
 
 ## Architecture
 
-The root `dagger.json` pins engine v0.21.8 and points to a Python module under `.dagger/`. The module uses `dag.current_workspace()` as the v0.21.8 `Workspace` input, selects narrow `Directory` snapshots, composes pinned `Container` images, shares dependency/model state through `CacheVolume`, and uses a `Service` for the production-preview browser check.
+The root `dagger.json` pins engine v0.21.8 and points to a Python module under `.dagger/`. Its explicit alternate constructor accepts a typed `Workspace` and stores the selected root as a typed `Directory`; repository code never reaches for an ambient workspace. The module composes pinned `Container` images, shares dependency/model state through `CacheVolume`, and uses a `Service` for the production-preview browser check.
 
 Every public validation is an argument-free `@check`:
 
@@ -21,19 +21,21 @@ Every public validation is an argument-free `@check`:
 - `backend-audit`: `uv run poe audit`, with no suppressions
 - `frontend-audit`: `pnpm audit`, with no suppressions
 - `workflow-security`: actionlint over the committed workflows
+- `secret-scan`: a detector canary, the exact snapshot, and complete canonical Git history
+- `codeql`: official JavaScript/TypeScript and Python CodeQL bundle analysis with validated SARIF 2.1.0
 
 `dagger check` discovers these checks and runs them concurrently. Shared container prefixes ensure Python sync, pnpm install, model download, and browser preparation are content-addressed once instead of repeated by YAML jobs.
 
 ## GitHub boundary
 
-During shadowing, `.github/workflows/dagger.yml` runs alongside all legacy required checks. It checks out full history, runs the existing pinned Gitleaks action, then invokes the pinned Dagger action at v0.21.8. Its single job is explicitly named `Dagger`, giving branch protection one stable context.
+`.github/workflows/dagger.yml` checks out full history without persisted credentials and invokes only the pinned Dagger action at v0.21.8. Its single unprivileged job is explicitly named `Dagger`, giving branch protection one stable context. `.github/workflows/deploy.yml` is separately privileged and likewise performs only checkout plus a typed Dagger deploy call.
 
 After the shadow head passes both implementations:
 
 1. Replace the legacy required contexts with `Dagger` while retaining `CodeQL`.
 2. Delete `ci.yml`, `parity-fixtures.yml`, and `security-audit.yml` in the same rollout.
 3. Keep the weekly schedule on `dagger.yml`, so audits and full parity remain recurring checks.
-4. Point `deploy.yml` at successful `Dagger` workflow runs and `dagger.yml`; retain its fork guard, exact-main resolution, credentials, Cloudflare deployment, and live identity verification unchanged.
+4. Keep `deploy.yml` pointed at successful same-repository Dagger push runs. Dagger itself owns exact-main resolution, typed artifact construction, Wrangler upload, Pages metadata verification, live identity, canonical redirect, and zero-egress browser proof.
 
 ## Contracts
 
@@ -45,7 +47,8 @@ After the shadow head passes both implementations:
 - No Dagger controller, adapter layer, service locator, or speculative ABI.
 - Module implementation target: 100–200 handwritten Python lines.
 - GitHub Dagger trigger target: 15–30 lines.
-- CodeQL remains GitHub-managed; deploy secrets remain confined to the existing deployment authority.
+- CodeQL Default Setup stays enabled until hosted Dagger SARIF is shadow-green; only then may its equivalent Dagger upload replace it.
+- Cloudflare and GitHub tokens are typed `Secret` inputs confined to the deploy function and are never CLI arguments.
 
 ## Failure behavior
 
