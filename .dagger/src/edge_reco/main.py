@@ -23,6 +23,10 @@ CODEQL_URL: Final = (
 CODEQL_CHECKSUM: Final = "sha256:0b152b004dec9fd57ccaf58d3fc410efa5be409e1b331cde280b0b8db7bc6dd6"
 REPOSITORY: Final = "hseshadr/edge-reco"
 REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
+CF_API: Final = "https://api.cloudflare.com/client/v4/accounts"
+CF_GIT_OFF: Final = (
+    '{"source":{"type":"github","config":{"production_deployments_enabled":false,"preview_deployment_setting":"none"}}}'
+)
 UV_VERSION: Final = "0.11.32"
 PNPM_VERSION: Final = "11.5.0"
 CHECK_SHA: Final = "0000000000000000000000000000000000000000"
@@ -191,8 +195,22 @@ class EdgeReco:
         commit_sha = await self._green_main(github_token, repository)
         source = dag.git(f"https://github.com/{repository}.git").commit(commit_sha).tree(depth=0)
         artifact = self._build_source(source, commit_sha)
+        await self._disable_git_deployments(cloudflare_api_token, cloudflare_account_id)
         await self._deploy_artifact(artifact, source, commit_sha, cloudflare_api_token, cloudflare_account_id)
         return await self._live_container(source, commit_sha).stdout()
+
+    async def _disable_git_deployments(self, token: dagger.Secret, account: dagger.Secret) -> None:
+        tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
+        tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
+        script = (
+            f'printf \'url = "{CF_API}/%s/pages/projects/edge-reco"\\nheader = "Authorization: Bearer %s"\\n\' '
+            '"$CLOUDFLARE_ACCOUNT_ID" "$CLOUDFLARE_API_TOKEN" '
+            f"| curl -fsS -X PATCH --config - -H \"Content-Type: application/json\" --data '{CF_GIT_OFF}' "
+            "-o /work/project.json; "
+            "jq -e '.success and (.result.source.config.production_deployments_enabled == false) and "
+            '(.result.source.config.preview_deployment_setting == "none")\' /work/project.json'
+        )
+        await tools.with_exec(["sh", "-ceu", script]).sync()
 
     def _build_source(self, source: dagger.Directory, commit_sha: str) -> dagger.Directory:
         self._require_sha(commit_sha)

@@ -5,25 +5,17 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
   actions: read
-
 concurrency:
   group: deploy-edge-reco-com
   cancel-in-progress: false
-
 jobs:
   deploy:
     name: Dagger deploy + live verify
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

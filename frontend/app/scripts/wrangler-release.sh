@@ -1,6 +1,5 @@
 #!/bin/sh
 set -eu
-
 mode=$1
 commit=$2
 case "$mode" in
@@ -20,8 +19,5 @@ case "$mode" in
 		DEPLOYMENTS_PATH=/work/deployments.json EXPECTED_SHA="$commit" node --test \
 			--test-name-pattern='Cloudflare list' app/scripts/release-verify.test.mjs
     ;;
-  *)
-    echo "usage: wrangler-release.sh preflight|deploy|verify SHA" >&2
-    exit 2
-    ;;
+  *) echo "usage: wrangler-release.sh preflight|deploy|verify SHA" >&2; exit 2 ;;
 esac

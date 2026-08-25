@@ -1,6 +1,5 @@
 #!/bin/sh
 set -eu
-
 for language in javascript-typescript python; do
   database="/db/$language"
   sarif="/sarif/$language.sarif"

@@ -34,3 +34,15 @@ def test_should_mount_the_built_directory_without_exporting_it() -> None:
     source = _source()
     assert 'with_directory("/artifact", artifact)' in source
     assert "export(" not in source
+
+
+def test_should_disable_cloudflare_git_before_direct_upload() -> None:
+    source = _source()
+    disable = "await self._disable_git_deployments"
+    upload = "await self._deploy_artifact"
+    assert disable in source
+    assert source.index(disable) < source.index(upload)
+    assert '"production_deployments_enabled":false' in source
+    assert '"preview_deployment_setting":"none"' in source
+    assert "| curl -fsS -X PATCH --config -" in source
+    assert 'curl -fsS -X PATCH -H "Authorization' not in source
