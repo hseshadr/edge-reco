@@ -51,8 +51,9 @@ def test_should_disable_cloudflare_git_before_direct_upload() -> None:
     assert source.index(disable) < source.index(upload)
     assert '"production_deployments_enabled":false' in cloudflare
     assert '"preview_deployment_setting":"none"' in cloudflare
-    assert "curl -fsS --config -" in cloudflare
-    assert 'curl -fsS -H "Authorization' not in cloudflare
+    assert "curl -sS --config -" in cloudflare
+    assert "--fail-with-body" in cloudflare
+    assert 'curl -sS -H "Authorization' not in cloudflare
 
 
 def test_should_use_writable_api_response_scratch_paths() -> None:
