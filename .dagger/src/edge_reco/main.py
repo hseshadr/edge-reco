@@ -83,7 +83,7 @@ class EdgeReco:
     def frontend_quality(self) -> dagger.Container:
         """Run frontend quality, artifact freshness, and production i18n."""
         quality = self._frontend(self.source).with_exec(["apt-get", "update"])
-        quality = quality.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "jq"])
+        quality = quality.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "curl", "jq"])
         quality = quality.with_exec(["pnpm", "run", "gate:quality"])
         quality = quality.with_exec(["cmp", self._relevance_path(), "/baseline/relevance.json"])
         preview = self._preview(quality)

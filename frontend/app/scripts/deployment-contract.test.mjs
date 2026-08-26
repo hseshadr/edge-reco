@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -67,6 +68,42 @@ async function runRelease(tools, timeout = "60") {
 	return execFile("sh", [CLOUDFLARE_RELEASE, "verify"], { env });
 }
 
+async function mockPagesApi() {
+	const requests = [];
+	const server = createServer((request, response) => {
+		requests.push(request.url);
+		response.setHeader("content-type", "application/json");
+		response.end(
+			JSON.stringify({
+				success: true,
+				result: [
+					{
+						environment: "production",
+						latest_stage: { name: "deploy", status: "success" },
+						deployment_trigger: { metadata: { commit_hash: SHA } },
+					},
+				],
+			}),
+		);
+	});
+	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const address = server.address();
+	assert(address && typeof address !== "string");
+	return { base: `http://127.0.0.1:${address.port}`, requests, server };
+}
+
+async function runAgainstMock(base) {
+	const env = {
+		...process.env,
+		CLOUDFLARE_ACCOUNT_ID: "account",
+		CLOUDFLARE_API_BASE: base,
+		CLOUDFLARE_API_TOKEN: "token",
+		DEPLOY_VERIFY_TIMEOUT_SECONDS: "0",
+		EXPECTED_SHA: SHA,
+	};
+	return execFile("sh", [CLOUDFLARE_RELEASE, "verify"], { env });
+}
+
 test("Dagger owns exact artifact deployment and every live verification", async () => {
 	const dagger = await readFile(DAGGER, "utf8");
 	const cloudflare = await readFile(CLOUDFLARE_RELEASE, "utf8");
@@ -110,6 +147,18 @@ test("deployment verification polls with bounded backoff until exact success", a
 	assert.equal(await readFile(stalled.attempts, "utf8"), "1");
 	const wrongSha = await fakeReleaseTools("1", "b".repeat(40));
 	await assert.rejects(() => runRelease(wrongSha, "0"));
+});
+
+test("deployment verification requests the raw Pages deployments API", async () => {
+	const mock = await mockPagesApi();
+	try {
+		await runAgainstMock(mock.base);
+	} finally {
+		await new Promise((resolve) => mock.server.close(resolve));
+	}
+	assert.deepEqual(mock.requests, [
+		"/accounts/account/pages/projects/edge-reco/deployments?env=production&per_page=100",
+	]);
 });
 
 test("deploy workflow is only a pinned checkout and Dagger invocation", async () => {
