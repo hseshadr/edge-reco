@@ -23,10 +23,6 @@ CODEQL_URL: Final = (
 CODEQL_CHECKSUM: Final = "sha256:0b152b004dec9fd57ccaf58d3fc410efa5be409e1b331cde280b0b8db7bc6dd6"
 REPOSITORY: Final = "hseshadr/edge-reco"
 REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
-CF_API: Final = "https://api.cloudflare.com/client/v4/accounts"
-CF_GIT_OFF: Final = (
-    '{"source":{"type":"github","config":{"production_deployments_enabled":false,"preview_deployment_setting":"none"}}}'
-)
 UV_VERSION: Final = "0.11.32"
 PNPM_VERSION: Final = "11.5.0"
 CHECK_SHA: Final = "0000000000000000000000000000000000000000"
@@ -38,15 +34,9 @@ ASSAY_INSTALL: Final = tuple(
 PLAYWRIGHT_INSTALL: Final = tuple(shell_split("pnpm -C app exec playwright install --with-deps chromium"))
 FIXTURES: Final = tuple(shell_split("search_parity cooccurrence_parity strategy_parity embedding_parity hybrid_parity"))
 FIXTURE_DIR: Final = "../frontend/packages/edgeproc-browser/src/engine/__fixtures__"
-SOURCE_EXCLUDES: Final = [
-    ".venv",
-    "**/.venv",
-    "**/node_modules",
-    "**/dist",
-    "**/coverage",
-    "frontend/app/public/models",
-    "frontend/app/public/ort",
-]
+SOURCE_EXCLUDES: Final = list(
+    shell_split(".venv **/.venv **/node_modules **/dist **/coverage frontend/app/public/models frontend/app/public/ort")
+)
 GITLEAKS_SNAPSHOT: Final = tuple(shell_split("gitleaks detect --source /snapshot --no-git --redact --no-banner"))
 GITLEAKS_HISTORY: Final = tuple(shell_split("gitleaks detect --source /repo --log-opts=--all --redact --no-banner"))
 CODEQL_UPLOAD: Final = ("/opt/codeql/codeql", "github", "upload-results", "--github-auth-stdin")
@@ -92,7 +82,9 @@ class EdgeReco:
     @check
     def frontend_quality(self) -> dagger.Container:
         """Run frontend quality, artifact freshness, and production i18n."""
-        quality = self._frontend(self.source).with_exec(["pnpm", "run", "gate:quality"])
+        quality = self._frontend(self.source).with_exec(["apt-get", "update"])
+        quality = quality.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "jq"])
+        quality = quality.with_exec(["pnpm", "run", "gate:quality"])
         quality = quality.with_exec(["cmp", self._relevance_path(), "/baseline/relevance.json"])
         preview = self._preview(quality)
         return quality.with_service_binding("preview", preview).with_exec(
@@ -202,16 +194,7 @@ class EdgeReco:
     async def _disable_git_deployments(self, token: dagger.Secret, account: dagger.Secret) -> None:
         tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
         tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
-        script = (
-            "tmp=$(mktemp -d); "
-            f'printf \'url = "{CF_API}/%s/pages/projects/edge-reco"\\nheader = "Authorization: Bearer %s"\\n\' '
-            '"$CLOUDFLARE_ACCOUNT_ID" "$CLOUDFLARE_API_TOKEN" '
-            f"| curl -fsS -X PATCH --config - -H \"Content-Type: application/json\" --data '{CF_GIT_OFF}' "
-            '-o "$tmp/project.json"; '
-            "jq -e '.success and (.result.source.config.production_deployments_enabled == false) and "
-            '(.result.source.config.preview_deployment_setting == "none")\' "$tmp/project.json"'
-        )
-        await tools.with_exec(["sh", "-ceu", script]).sync()
+        await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "disable"]).sync()
 
     def _build_source(self, source: dagger.Directory, commit_sha: str) -> dagger.Directory:
         self._require_sha(commit_sha)
@@ -237,7 +220,9 @@ class EdgeReco:
         script = "app/scripts/wrangler-release.sh"
         await container.with_exec(["sh", script, "preflight", commit]).sync()
         await container.with_exec(["sh", script, "deploy", commit]).sync()
-        await container.with_exec(["sh", script, "verify", commit]).sync()
+        tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
+        tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account).with_env_variable("EXPECTED_SHA", commit)
+        await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "verify"]).sync()
 
     def _github_probe(self, token: dagger.Secret, repository: str, commit: str) -> dagger.Container:
         url = f"https://api.github.com/repos/{repository}/actions/workflows/dagger.yml/runs?head_sha={commit}&event=push&per_page=20"
@@ -353,10 +338,10 @@ class EdgeReco:
             ["apt-get", "install", "-y", "--no-install-recommends", *packages]
         )
 
-    @staticmethod
-    def _release_tools() -> dagger.Container:
+    def _release_tools(self) -> dagger.Container:
         base = dag.container().from_(CODEQL_IMAGE).with_exec(["apt-get", "update"])
-        return base.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "ca-certificates", "curl", "jq"])
+        base = base.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "ca-certificates", "curl", "jq"])
+        return base.with_directory("/scripts", self.source.directory(".dagger/scripts"))
 
     @staticmethod
     def _require_sha(commit: str) -> None:

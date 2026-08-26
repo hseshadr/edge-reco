@@ -12,12 +12,5 @@ case "$mode" in
     pnpm exec wrangler pages deploy /artifact --project-name=edge-reco \
       --branch=main "--commit-hash=$commit" --commit-dirty=false
     ;;
-  verify)
-		deployments=$(mktemp); deadline=$(($(date +%s) + ${DEPLOY_VERIFY_TIMEOUT_SECONDS:-60})); delay=1
-		until pnpm exec wrangler pages deployment list --project-name=edge-reco --environment=production --json >"$deployments" && \
-			DEPLOYMENTS_PATH="$deployments" EXPECTED_SHA="$commit" node --test \
-				--test-name-pattern='Cloudflare list' app/scripts/release-verify.test.mjs; do
-			test "$(date +%s)" -lt "$deadline" || { echo "deployment list timed out for $commit" >&2; exit 1; }; sleep "$delay"; delay=$((delay < 8 ? delay * 2 : 8)); done
-    ;;
-  *) echo "usage: wrangler-release.sh preflight|deploy|verify SHA" >&2; exit 2 ;;
+  *) echo "usage: wrangler-release.sh preflight|deploy SHA" >&2; exit 2 ;;
 esac
