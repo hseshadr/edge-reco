@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 mode=$1
-base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/edge-reco"
+api="${CLOUDFLARE_API_BASE:-https://api.cloudflare.com/client/v4}"
+base="$api/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/edge-reco"
 request() {
 	path=$1; shift
 	printf 'url = "%s%s"\nheader = "Authorization: Bearer %s"\n' "$base" "$path" "$CLOUDFLARE_API_TOKEN" | curl -fsS --config - "$@"
@@ -13,7 +14,7 @@ case "$mode" in
     ;;
   verify)
 		result=$(mktemp); deadline=$(($(date +%s) + ${DEPLOY_VERIFY_TIMEOUT_SECONDS:-60})); delay=1
-		until request '?env=production' -o "$result" && jq -e --arg sha "$EXPECTED_SHA" '.success and any(.result[]; .environment == "production" and .deployment_trigger.metadata.commit_hash == $sha and .latest_stage.name == "deploy" and .latest_stage.status == "success")' "$result"; do
+		until request '/deployments?env=production&per_page=100' -o "$result" && jq -e --arg sha "$EXPECTED_SHA" '.success and any(.result[]; .environment == "production" and .deployment_trigger.metadata.commit_hash == $sha and .latest_stage.name == "deploy" and .latest_stage.status == "success")' "$result"; do
 			test "$(date +%s)" -lt "$deadline" || { echo "Pages API timed out for $EXPECTED_SHA" >&2; exit 1; }; sleep "$delay"; delay=$((delay < 8 ? delay * 2 : 8)); done
     ;;
   *) echo "usage: cloudflare-pages.sh disable|verify" >&2; exit 2 ;;
