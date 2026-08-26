@@ -14,6 +14,8 @@ const WRANGLER_RELEASE = resolve(import.meta.dirname, "wrangler-release.sh");
 const WORKFLOW = resolve(ROOT, ".github/workflows/deploy.yml");
 const FRONTEND_PACKAGE = resolve(import.meta.dirname, "../../package.json");
 const SHA = "a".repeat(40);
+const DEPLOYMENTS_PATH =
+	"/accounts/account/pages/projects/edge-reco/deployments?env=production&per_page=10";
 const execFile = promisify(execFileCallback);
 const DAGGER_SCRIPT_DIRS = [
 	resolve(ROOT, ".dagger/src/edge_reco"),
@@ -68,23 +70,31 @@ async function runRelease(tools, timeout = "60") {
 	return execFile("sh", [CLOUDFLARE_RELEASE, "verify"], { env });
 }
 
-async function mockPagesApi() {
+function deploymentResult() {
+	return [
+		{
+			environment: "production",
+			latest_stage: { name: "deploy", status: "success" },
+			deployment_trigger: { metadata: { commit_hash: SHA } },
+		},
+	];
+}
+
+async function mockPagesApi(
+	body = { success: true, result: deploymentResult() },
+	statusCode = 200,
+) {
 	const requests = [];
 	const server = createServer((request, response) => {
 		requests.push(request.url);
 		response.setHeader("content-type", "application/json");
-		response.end(
-			JSON.stringify({
-				success: true,
-				result: [
-					{
-						environment: "production",
-						latest_stage: { name: "deploy", status: "success" },
-						deployment_trigger: { metadata: { commit_hash: SHA } },
-					},
-				],
-			}),
-		);
+		if (request.url !== DEPLOYMENTS_PATH) {
+			response.statusCode = 400;
+			response.end(JSON.stringify({ success: false, errors: [] }));
+			return;
+		}
+		response.statusCode = statusCode;
+		response.end(JSON.stringify(body));
 	});
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const address = server.address();
@@ -92,7 +102,7 @@ async function mockPagesApi() {
 	return { base: `http://127.0.0.1:${address.port}`, requests, server };
 }
 
-async function runAgainstMock(base) {
+async function runAgainstMock(base, mode = "verify") {
 	const env = {
 		...process.env,
 		CLOUDFLARE_ACCOUNT_ID: "account",
@@ -101,7 +111,7 @@ async function runAgainstMock(base) {
 		DEPLOY_VERIFY_TIMEOUT_SECONDS: "0",
 		EXPECTED_SHA: SHA,
 	};
-	return execFile("sh", [CLOUDFLARE_RELEASE, "verify"], { env });
+	return execFile("sh", [CLOUDFLARE_RELEASE, mode], { env });
 }
 
 test("Dagger owns exact artifact deployment and every live verification", async () => {
@@ -113,8 +123,26 @@ test("Dagger owns exact artifact deployment and every live verification", async 
 	assert.match(dagger, /cloudflare-pages\.sh/u);
 	assert.match(dagger, /playwright\.live\.config\.ts/u);
 	assert.doesNotMatch(wrangler, /pages deployment list/u);
-	assert.match(cloudflare, /curl -fsS --config -/u);
+	assert.match(cloudflare, /curl -sS --config -/u);
+	assert.match(cloudflare, /--fail-with-body/u);
 	assert.doesNotMatch(cloudflare, /curl[^\n]*CLOUDFLARE_API_TOKEN/u);
+	const entrypoint = dagger.slice(
+		dagger.indexOf("async def deploy("),
+		dagger.indexOf("async def _disable_git_deployments"),
+	);
+	assert(
+		entrypoint.indexOf("_disable_git_deployments") <
+			entrypoint.indexOf("_deploy_artifact"),
+	);
+	const deployment = dagger.slice(
+		dagger.indexOf("async def _deploy_artifact"),
+		dagger.indexOf("def _github_probe"),
+	);
+	assert.match(deployment, /cloudflare-pages\.sh", "preflight"/u);
+	assert(
+		deployment.indexOf('cloudflare-pages.sh", "preflight"') <
+			deployment.indexOf('script, "deploy"'),
+	);
 });
 
 test("Dagger installs jq before running deployment contracts", async () => {
@@ -156,9 +184,44 @@ test("deployment verification requests the raw Pages deployments API", async () 
 	} finally {
 		await new Promise((resolve) => mock.server.close(resolve));
 	}
-	assert.deepEqual(mock.requests, [
-		"/accounts/account/pages/projects/edge-reco/deployments?env=production&per_page=100",
-	]);
+	assert.deepEqual(mock.requests, [DEPLOYMENTS_PATH]);
+});
+
+test("deployment preflight requires a successful raw result array", async () => {
+	const valid = await mockPagesApi();
+	try {
+		await runAgainstMock(valid.base, "preflight");
+	} finally {
+		await new Promise((resolve) => valid.server.close(resolve));
+	}
+	const malformed = await mockPagesApi({ success: true, result: {} });
+	try {
+		await assert.rejects(() => runAgainstMock(malformed.base, "preflight"));
+	} finally {
+		await new Promise((resolve) => malformed.server.close(resolve));
+	}
+	const failed = await mockPagesApi(
+		{
+			success: false,
+			errors: [{ code: 9000, message: "invalid pagination", debug: "hidden" }],
+		},
+		400,
+	);
+	try {
+		await assert.rejects(
+			() => runAgainstMock(failed.base, "preflight"),
+			(error) => {
+				assert.match(
+					error.stderr,
+					/Cloudflare Pages API error 9000: invalid pagination/u,
+				);
+				assert.doesNotMatch(error.stderr, /hidden/u);
+				return true;
+			},
+		);
+	} finally {
+		await new Promise((resolve) => failed.server.close(resolve));
+	}
 });
 
 test("deploy workflow is only a pinned checkout and Dagger invocation", async () => {

@@ -216,12 +216,14 @@ class EdgeReco:
         token: dagger.Secret,
         account: dagger.Secret,
     ) -> None:
+        tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
+        tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
+        await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "preflight"]).sync()
         container = self._wrangler(source, artifact, token, account)
         script = "app/scripts/wrangler-release.sh"
         await container.with_exec(["sh", script, "preflight", commit]).sync()
         await container.with_exec(["sh", script, "deploy", commit]).sync()
-        tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
-        tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account).with_env_variable("EXPECTED_SHA", commit)
+        tools = tools.with_env_variable("EXPECTED_SHA", commit)
         await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "verify"]).sync()
 
     def _github_probe(self, token: dagger.Secret, repository: str, commit: str) -> dagger.Container:
