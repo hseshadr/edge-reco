@@ -8,7 +8,9 @@
 // dwell hook already documents its silent no-op under jsdom).
 
 import {
+	act,
 	cleanup,
+	fireEvent,
 	render,
 	screen,
 	waitFor,
@@ -128,6 +130,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	vi.useRealTimers();
 	vi.clearAllMocks();
 });
 
@@ -273,23 +276,29 @@ describe("Storefront category + search", () => {
 	it("runs a hybrid search as the query settles", async () => {
 		render(<Storefront />);
 		await screen.findByText("Grid Gadget");
-		await userEvent.type(screen.getByLabelText("Search products"), "lamp");
+		vi.useFakeTimers();
+		fireEvent.change(screen.getByLabelText("Search products"), {
+			target: { value: "lamp" },
+		});
+		await act(() => vi.advanceTimersByTimeAsync(300));
 
-		expect(await screen.findByText("Lamp Deluxe")).toBeInTheDocument();
-		await waitFor(() =>
-			expect(mocks.search).toHaveBeenCalledWith("lamp", { limit: 24 }),
-		);
+		expect(screen.getByText("Lamp Deluxe")).toBeInTheDocument();
+		expect(mocks.search).toHaveBeenCalledWith("lamp", { limit: 24 });
 	});
 
 	it("surfaces search results above the rails with a labelled cue", async () => {
 		render(<Storefront />);
 		// Browse view first: the rail sits above the grid before any query.
 		await screen.findByText("Grid Gadget");
-		await userEvent.type(screen.getByLabelText("Search products"), "lamp");
+		vi.useFakeTimers();
+		fireEvent.change(screen.getByLabelText("Search products"), {
+			target: { value: "lamp" },
+		});
+		await act(() => vi.advanceTimersByTimeAsync(300));
 
 		// The matched product renders, surfaced beneath a labelled "Results for …"
 		// cue that echoes the query.
-		const hit = await screen.findByText("Lamp Deluxe");
+		const hit = screen.getByText("Lamp Deluxe");
 		const cue = screen.getByText("Results for “lamp”");
 		const rail = screen.getByRole("heading", { name: "Recommended for you" });
 		expect(
