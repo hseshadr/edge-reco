@@ -5,12 +5,6 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
-    inputs:
-      scope_production_secrets:
-        description: Relay existing Cloudflare credentials into the production environment
-        type: boolean
-        default: false
-        required: true
 permissions:
   contents: read
   actions: read
@@ -18,34 +12,11 @@ concurrency:
   group: deploy-edge-reco-com
   cancel-in-progress: false
 jobs:
-  scope-production-secrets:
-    name: Dagger scope production secrets
-    runs-on: ubuntu-latest
-    environment: production
-    if: github.event_name == 'workflow_dispatch' && inputs.scope_production_secrets
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: main
-          fetch-depth: 1
-          persist-credentials: false
-      - uses: dagger/dagger-for-github@496f1b3d8b0d823834c13e67cf8a8e08ca3b9602 # v8.4.0
-        env:
-          GITHUB_ADMIN_TOKEN: ${{ secrets.ENVIRONMENT_SECRET_MIGRATION_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        with:
-          version: "0.21.8"
-          call: >-
-            scope-production-secrets
-            --github-admin-token=env:GITHUB_ADMIN_TOKEN
-            --cloudflare-api-token=env:CLOUDFLARE_API_TOKEN
-            --cloudflare-account-id=env:CLOUDFLARE_ACCOUNT_ID
   deploy:
     name: Dagger deploy + live verify
     runs-on: ubuntu-latest
     environment: production
-    if: (github.event_name == 'workflow_dispatch' && !inputs.scope_production_secrets) || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
