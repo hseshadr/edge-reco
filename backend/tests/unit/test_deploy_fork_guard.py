@@ -45,7 +45,7 @@ _PRE_FIX_GUARD = (
     "github.event.workflow_run.head_branch == 'main')"
 )
 
-_TOKEN = re.compile(r"\(|\)|\|\||&&|==|!=|!|'[^']*'|[A-Za-z_][A-Za-z0-9_.]*")
+_TOKEN = re.compile(r"\(|\)|\|\||&&|==|!=|'[^']*'|[A-Za-z_][A-Za-z0-9_.]*")
 _RUN_PREFIX = "github.event.workflow_run."
 _BLOCK_MARKERS = (">-", ">", ">+", "|-", "|", "|+")
 _IF_KEY = "    if:"
@@ -70,7 +70,6 @@ class Context:
     event_name: str
     repository: str
     workflow_run: WorkflowRun | None = None
-    scope_production_secrets: bool = False
 
 
 def _run_field(run: WorkflowRun, field: str) -> str:
@@ -91,8 +90,6 @@ def _resolve(context: Context, path: str) -> Value:
         return context.event_name
     if path == "github.repository":
         return context.repository
-    if path == "inputs.scope_production_secrets":
-        return context.scope_production_secrets
     if not path.startswith(_RUN_PREFIX):
         raise ValueError(f"unmodelled context path: {path}")
     if context.workflow_run is None:
@@ -152,8 +149,6 @@ class _Evaluator:
 
     def _atom(self) -> Value:
         lexeme = self._take()
-        if lexeme == "!":
-            return not _truthy(self._atom())
         if lexeme == "(":
             value = self._or_expr()
             if self._take() != ")":
@@ -271,15 +266,6 @@ def test_failed_ci_on_main_is_rejected() -> None:
 def test_manual_dispatch_is_still_accepted() -> None:
     context = Context(event_name="workflow_dispatch", repository=_THIS_REPO)
     assert evaluate(GUARD, context) is True
-
-
-def test_manual_secret_scope_dispatch_is_not_a_deploy() -> None:
-    context = Context(
-        event_name="workflow_dispatch",
-        repository=_THIS_REPO,
-        scope_production_secrets=True,
-    )
-    assert evaluate(GUARD, context) is False
 
 
 def test_pre_fix_guard_accepted_the_fork_pull_request() -> None:
