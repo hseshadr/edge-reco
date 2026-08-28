@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from shlex import split as shell_split
-from typing import Final, Self
+from typing import Final, Self, cast
 
 import dagger
 from dagger import check, dag, field, function, object_type
+
+from edge_reco.targets import EdgeRecoTarget
 
 PYTHON_IMAGE: Final = "python:3.13.14-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6"
 NODE_IMAGE: Final = "node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203"
@@ -21,7 +23,8 @@ CODEQL_URL: Final = (
     "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.2/codeql-bundle-linux64.tar.zst"
 )
 CODEQL_CHECKSUM: Final = "sha256:0b152b004dec9fd57ccaf58d3fc410efa5be409e1b331cde280b0b8db7bc6dd6"
-REPOSITORY: Final = "hseshadr/edge-reco"
+TARGET: Final = EdgeRecoTarget.production()
+REPOSITORY: Final = TARGET.repository
 REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
 UV_VERSION: Final = "0.11.32"
 PNPM_VERSION: Final = "11.5.0"
@@ -111,7 +114,16 @@ class EdgeReco:
         return (
             self._actionlint()
             .with_directory("/repo/.github/workflows", workflows)
-            .with_exec(["sh", "-c", "actionlint .github/workflows/*.yml"])
+            .with_exec(
+                [
+                    "sh",
+                    "-c",
+                    (
+                        "find .github/workflows -maxdepth 1 -type f \\( "
+                        '-name "*.yml" -o -name "*.yaml" \\) -exec actionlint {} +'
+                    ),
+                ]
+            )
         )
 
     @function
@@ -148,6 +160,17 @@ class EdgeReco:
         """Analyze JavaScript/TypeScript and Python with the official CodeQL CLI."""
         return self._codeql_analysis(self.source).directory("/sarif")
 
+    @function
+    async def security(self) -> str:
+        """Run every credentialless scheduled security check through Dagger."""
+        checks = cast(
+            tuple[dagger.Container, ...],
+            (self.workflow_security(), self.secret_scan(), self.backend_audit(), self.frontend_audit(), self.codeql()),
+        )
+        for security_check in checks:
+            await security_check.sync()
+        return "security checks passed"
+
     def _codeql_analysis(self, source: dagger.Directory) -> dagger.Container:
         container = self._codeql().with_directory("/src", source).with_workdir("/src")
         return container.with_exec(["sh", ".dagger/scripts/codeql-analysis.sh"])
@@ -181,11 +204,10 @@ class EdgeReco:
         cloudflare_api_token: dagger.Secret,
         cloudflare_account_id: dagger.Secret,
         github_token: dagger.Secret,
-        repository: str = REPOSITORY,
     ) -> str:
         """Deploy current green main and verify source, artifact, and live identity."""
-        commit_sha = await self._green_main(github_token, repository)
-        source = dag.git(f"https://github.com/{repository}.git").commit(commit_sha).tree(depth=0)
+        commit_sha = await self._green_main(github_token, TARGET)
+        source = dag.git(f"https://github.com/{TARGET.repository}.git").commit(commit_sha).tree(depth=0)
         artifact = self._build_source(source, commit_sha)
         await self._disable_git_deployments(cloudflare_api_token, cloudflare_account_id)
         await self._deploy_artifact(artifact, source, commit_sha, cloudflare_api_token, cloudflare_account_id)
@@ -202,10 +224,10 @@ class EdgeReco:
         checked = built.with_exec(["pnpm", "-F", "frontend", "run", "test:artifacts"])
         return checked.directory("/src/frontend/app/dist")
 
-    async def _green_main(self, token: dagger.Secret, repository: str) -> str:
-        remote = dag.git(f"https://github.com/{repository}.git").branch("main")
+    async def _green_main(self, token: dagger.Secret, target: EdgeRecoTarget) -> str:
+        remote = dag.git(f"https://github.com/{target.repository}.git").branch(target.branch)
         commit = await remote.commit()
-        await self._github_probe(token, repository, commit).sync()
+        await self._github_probe(token, target.repository, commit).sync()
         return commit
 
     async def _deploy_artifact(
@@ -253,7 +275,7 @@ class EdgeReco:
 
     def _live_container(self, source: dagger.Directory, commit: str) -> dagger.Container:
         self._require_sha(commit)
-        verified = self._frontend(source, commit).with_env_variable("LIVE_BASE_URL", "https://edge-reco.com")
+        verified = self._frontend(source, commit).with_env_variable("LIVE_BASE_URL", f"https://{TARGET.domain}")
         return verified.with_exec(
             [
                 "pnpm",

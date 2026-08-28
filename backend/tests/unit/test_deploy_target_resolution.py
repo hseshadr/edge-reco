@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -18,10 +19,46 @@ def _cloudflare_source() -> str:
     return _CLOUDFLARE.read_text(encoding="utf-8")
 
 
-def test_should_resolve_main_at_execution_time() -> None:
-    source = _source()
-    assert '.branch("main")' in source
-    assert "commit = await remote.commit()" in source
+def _is_target_attribute(node: ast.AST, attribute: str) -> bool:
+    if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Name):
+        return False
+    return node.value.id == "target" and node.attr == attribute
+
+
+def _is_target_repository_git_call(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return False
+    repository = (_is_target_attribute(value, "repository") for value in ast.walk(node))
+    return node.func.attr == "git" and any(repository)
+
+
+def _green_main_uses_validated_target() -> bool:
+    tree = ast.parse(_source())
+    methods = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_green_main"
+    ]
+    assert len(methods) == 1
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "branch"
+        and len(node.args) == 1
+        and _is_target_attribute(node.args[0], "branch")
+        and _is_target_repository_git_call(node.func.value)
+        for node in ast.walk(methods[0])
+    )
+
+
+def test_should_resolve_validated_target_at_deploy_execution_time() -> None:
+    # Given
+    uses_validated_target = _green_main_uses_validated_target()
+    # When
+    commit = "commit = await remote.commit()"
+    # Then
+    assert uses_validated_target
+    assert commit in _source()
 
 
 def test_should_require_successful_dagger_run_for_exact_main() -> None:

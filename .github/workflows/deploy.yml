@@ -34,4 +34,3 @@ jobs:
             --cloudflare-api-token=env:CLOUDFLARE_API_TOKEN
             --cloudflare-account-id=env:CLOUDFLARE_ACCOUNT_ID
             --github-token=env:GITHUB_TOKEN
-            --repository=${{ github.repository }}

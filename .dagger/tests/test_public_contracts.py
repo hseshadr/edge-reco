@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import cast
 
 import dagger
+import pytest
 
 from edge_reco.main import EdgeReco
 
@@ -62,6 +63,43 @@ def test_should_require_typed_secrets_when_deploying_exact_artifact() -> None:
     }
     # Then
     assert set(secret_types.values()) == {dagger.Secret}
+
+
+def test_should_bind_edge_reco_repository_pages_and_domain() -> None:
+    # Given
+    from edge_reco.targets import EdgeRecoTarget
+
+    # When
+    target = EdgeRecoTarget.production()
+    # Then
+    assert target.repository == "hseshadr/edge-reco"
+    assert target.project == "edge-reco"
+    assert target.branch == "main"
+    assert target.domain == "edge-reco.com"
+
+
+def test_should_reject_mismatched_delivery_target_tuple() -> None:
+    # Given
+    from edge_reco.targets import EdgeRecoTarget
+
+    # When / Then
+    with pytest.raises(ValueError, match="validated production values"):
+        EdgeRecoTarget("hseshadr/another-repository", "edge-reco", "main", "edge-reco.com")
+
+
+def test_should_reject_unvalidated_repository_override() -> None:
+    # Given
+    deploy = inspect.signature(EdgeReco.deploy)
+    # Then
+    assert "repository" not in deploy.parameters
+
+
+def test_should_actionlint_yml_and_yaml() -> None:
+    # Given
+    source = inspect.getsource(EdgeReco.workflow_security)
+    # Then
+    assert "*.yml" in source
+    assert "*.yaml" in source
 
 
 def test_should_expose_security_and_live_release_functions() -> None:
