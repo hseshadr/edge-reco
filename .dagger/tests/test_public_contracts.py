@@ -19,22 +19,11 @@ import dagger
 import pytest
 
 import edge_reco.main as main_module
-from edge_reco.main import EdgeReco, ProviderIdentity, parse_release_evidence
+from edge_reco.main import EdgeReco, parse_release_evidence
 
 FOUNDATION_SHA = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
 VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
 VALID_DEPLOYMENT_URL = "https://f621dc42.edge-reco.pages.dev"
-INDEPENDENT_SHORT_ID_URL = "https://a1b2c3d4.edge-reco.pages.dev"
-MALFORMED_DEPLOYMENT_IDS = (
-    " malformed ",
-    "malformed",
-    VALID_DEPLOYMENT_ID.upper(),
-    "f621dc423cf94217b4fb0392c1d39020",
-    "f621dc42-3cf9-3217-b4fb-0392c1d39020",
-    "00000000-0000-0000-0000-000000000000",
-    "",
-    "f621dc42-3cf9-4217-b4fb-0392c1d390200",
-)
 RECORDING_ENVELOPE = object()
 RECORDING_GITHUB_TOKEN = object()
 RECORDING_CLOUDFLARE_TOKEN = object()
@@ -135,15 +124,11 @@ class RecordingProvider:
         self,
         events: list[str],
         created_id: str = VALID_DEPLOYMENT_ID,
-        verified_id: str = VALID_DEPLOYMENT_ID,
         created_url: str = VALID_DEPLOYMENT_URL,
-        verified_url: str = VALID_DEPLOYMENT_URL,
     ) -> None:
         self.events = events
         self.created_id = created_id
-        self.verified_id = verified_id
         self.created_url = created_url
-        self.verified_url = verified_url
         self.evidence_by_id: dict[str, dagger.CloudflarePagesDeploymentEvidence] = {}
 
     async def preflight(self, *arguments: object) -> str:
@@ -155,11 +140,6 @@ class RecordingProvider:
         self._require_exact_arguments(arguments)
         self.events.append("deploy")
         return self._record("created-evidence", self.created_id, self.created_url)
-
-    def verify(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
-        self._require_exact_arguments(arguments)
-        self.events.append("verify")
-        return self._record("verified-evidence", self.verified_id, self.verified_url)
 
     def load_evidence(self, object_id: str) -> dagger.CloudflarePagesDeploymentEvidence:
         return self.evidence_by_id[object_id]
@@ -363,6 +343,13 @@ class FailingPreflightProvider(RecordingProvider):
         self._require_exact_arguments(arguments)
         self.events.append("preflight")
         raise ValueError("preflight failed")
+
+
+class RejectingRedundantVerifyProvider(RecordingProvider):
+    """Prove the consumer does not repeat verification already completed by deploy."""
+
+    def verify(self, *_arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        raise AssertionError("provider deploy evidence is already converged")
 
 
 class GraphDirectory:
@@ -835,7 +822,7 @@ def test_should_consume_provider_deployment_id_and_unique_url_before_live_verifi
     )
 
 
-def test_should_materialize_each_noncacheable_provider_stage_once_when_reading_identity(
+def test_should_materialize_the_verified_provider_deploy_once_when_reading_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given
@@ -849,61 +836,24 @@ def test_should_materialize_each_noncacheable_provider_stage_once_when_reading_i
     # Then
     assert VALID_DEPLOYMENT_ID in result and VALID_DEPLOYMENT_URL in result
     assert events.count("construct:deploy") == events.count("deploy") == 1
-    assert events.count("construct:verify") == events.count("verify") == 1
-    assert events.count("load:deploy-evidence") == events.count("load:verify-evidence") == 1
+    assert events.count("construct:verify") == events.count("verify") == 0
+    assert events.count("load:deploy-evidence") == 1
 
 
-@pytest.mark.parametrize(
-    "foreign",
-    (
-        "https://foreign.edge-reco.pages.dev",
-        "http://a1b2c3d4.edge-reco.pages.dev",
-        "https://A1B2C3D4.edge-reco.pages.dev",
-        "https://a1b2c3d.edge-reco.pages.dev",
-        "https://a1b2c3d45.edge-reco.pages.dev",
-        "https://a1b2c3d4.edge-reco.pages.dev/path",
-        "https://a1b2c3d4.edge-reco.pages.dev?query=true",
-        "https://a1b2c3d4.edge-reco.pages.dev.evil.example",
-    ),
-)
-def test_should_reject_equal_noncanonical_provider_urls_before_live_verification(
-    monkeypatch: pytest.MonkeyPatch, foreign: str
+def test_should_not_repeat_provider_verification_after_verified_deploy_evidence(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given
     events: list[str] = []
-    provider = RecordingProvider(events, created_url=foreign, verified_url=foreign)
+    provider = RejectingRedundantVerifyProvider(events)
     edge_reco = _recording_edge_reco(monkeypatch, events, provider)
 
-    # When / Then
-    with pytest.raises(ValueError, match="provider deployment identity"):
-        asyncio.run(_deploy_with_fake_secrets(edge_reco))
-    assert "live" not in events
+    # When
+    result = asyncio.run(_deploy_with_fake_secrets(edge_reco))
 
-
-def test_should_accept_canonical_provider_url_when_short_id_differs_from_uuid_prefix() -> None:
-    # Given
-    evidence = ProviderIdentity(VALID_DEPLOYMENT_ID, INDEPENDENT_SHORT_ID_URL)
-
-    # When / Then
-    EdgeReco._require_provider_identity(evidence, evidence)
-
-
-def test_should_reject_unequal_canonical_provider_urls_before_live_verification() -> None:
-    # Given
-    created = ProviderIdentity(VALID_DEPLOYMENT_ID, INDEPENDENT_SHORT_ID_URL)
-    verified = ProviderIdentity(VALID_DEPLOYMENT_ID, VALID_DEPLOYMENT_URL)
-
-    # When / Then
-    with pytest.raises(ValueError, match="provider deployment identity"):
-        EdgeReco._require_provider_identity(created, verified)
-
-
-@pytest.mark.parametrize("identity", MALFORMED_DEPLOYMENT_IDS)
-def test_should_reject_equal_noncanonical_cloudflare_pages_deployment_identity(identity: str) -> None:
-    # Given / When / Then
-    with pytest.raises(ValueError, match="provider deployment identity"):
-        evidence = ProviderIdentity(identity, VALID_DEPLOYMENT_URL)
-        EdgeReco._require_provider_identity(evidence, evidence)
+    # Then
+    assert VALID_DEPLOYMENT_ID in result and VALID_DEPLOYMENT_URL in result
+    assert events.count("deploy") == 1
 
 
 def test_should_reject_a_wrong_envelope_at_the_provider_boundary() -> None:
@@ -941,13 +891,11 @@ def _wrong_provider_arguments(position: int, value: object) -> tuple[object, ...
 def _run_provider_stage(provider: RecordingProvider, stage: str, arguments: tuple[object, ...]) -> None:
     if stage == "preflight":
         asyncio.run(provider.preflight(*arguments))
-    elif stage == "deploy":
-        provider.deploy(*arguments)
     else:
-        provider.verify(*arguments)
+        provider.deploy(*arguments)
 
 
-@pytest.mark.parametrize("stage", ("preflight", "deploy", "verify"))
+@pytest.mark.parametrize("stage", ("preflight", "deploy"))
 @pytest.mark.parametrize(
     ("position", "wrong"),
     (
@@ -972,42 +920,6 @@ def test_should_reject_wrong_provider_argument_at_every_generated_stage(
     with pytest.raises(AssertionError):
         _run_provider_stage(provider, stage, _wrong_provider_arguments(position, wrong))
     assert events == []
-
-
-@pytest.mark.parametrize("verified_id", ("other-deployment", "", "malformed deployment id"))
-def test_should_reject_invalid_verified_deployment_identity_before_live_verification(
-    monkeypatch: pytest.MonkeyPatch, verified_id: str
-) -> None:
-    # Given
-    events: list[str] = []
-    edge_reco = _recording_edge_reco(monkeypatch, events, RecordingProvider(events, verified_id=verified_id))
-
-    # When / Then
-    with pytest.raises(ValueError, match="provider deployment identity"):
-        asyncio.run(_deploy_with_fake_secrets(edge_reco))
-    assert events.count("deploy") == 1
-    assert events.count("verify") == 1
-    assert events.count(f"identity:{VALID_DEPLOYMENT_ID}") == 1
-    assert events.count(f"identity:{verified_id}") == 1
-    assert "live" not in events
-
-
-@pytest.mark.parametrize("identity", MALFORMED_DEPLOYMENT_IDS)
-def test_should_reject_equal_malformed_provider_id_before_live_verification(
-    monkeypatch: pytest.MonkeyPatch, identity: str
-) -> None:
-    # Given
-    events: list[str] = []
-    provider = RecordingProvider(events, created_id=identity, verified_id=identity)
-    edge_reco = _recording_edge_reco(monkeypatch, events, provider)
-
-    # When / Then
-    with pytest.raises(ValueError, match="provider deployment identity"):
-        asyncio.run(_deploy_with_fake_secrets(edge_reco))
-    assert events.count("deploy") == 1
-    assert events.count("verify") == 1
-    assert events.count(f"identity:{identity}") == 2
-    assert "live" not in events
 
 
 def test_should_order_shared_provider_mutation_after_local_envelope_verification(
@@ -1039,11 +951,6 @@ def test_should_order_shared_provider_mutation_after_local_envelope_verification
         "deploy",
         "materialize:created-evidence",
         "load:created-evidence",
-        f"identity:{VALID_DEPLOYMENT_ID}",
-        f"url:{VALID_DEPLOYMENT_URL}",
-        "verify",
-        "materialize:verified-evidence",
-        "load:verified-evidence",
         f"identity:{VALID_DEPLOYMENT_ID}",
         f"url:{VALID_DEPLOYMENT_URL}",
         "live",

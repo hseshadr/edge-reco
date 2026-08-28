@@ -93,12 +93,12 @@ def test_should_delegate_only_after_shared_envelope_verification() -> None:
     assert '"wrangler-release.sh", "deploy"' not in source
 
 
-def test_should_require_provider_identity_before_local_live_verification() -> None:
+def test_should_materialize_verified_provider_deploy_before_local_live_verification() -> None:
     delivery = _top_level_calls("_deliver")
     deploy = _top_level_calls("deploy")
     assert delivery[0] == ["_provider_preflight"]
-    assert delivery[1] == ["_provider_identity", "_provider_deploy"]
-    assert delivery[2] == ["_provider_identity", "_provider_verify"]
-    assert delivery[3] == ["_require_provider_identity"]
+    assert delivery[1] == ["_provider_deploy"]
+    assert delivery[2] == ["_provider_identity"]
+    assert "_provider_verify" not in _source()
     assert deploy[5] == ["stdout", "_live_container"]
     assert deploy[6] == ["_deployment_result"]

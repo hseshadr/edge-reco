@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from shlex import split as shell_split
 from typing import Final, Self, cast
-from uuid import UUID
 
 import dagger
 from dagger import check, dag, field, function, object_type
@@ -22,7 +20,6 @@ CODEQL_URL: Final = (
 )
 CODEQL_CHECKSUM: Final = "sha256:0b152b004dec9fd57ccaf58d3fc410efa5be409e1b331cde280b0b8db7bc6dd6"
 TARGET: Final = EdgeRecoTarget.production()
-PAGES_DEPLOYMENT_URL_PATTERN: Final = re.compile(rf"https://[a-f0-9]{{8}}\.{re.escape(TARGET.project)}\.pages\.dev")
 REPOSITORY: Final = TARGET.repository
 REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
 UV_VERSION: Final = "0.11.32"
@@ -32,7 +29,6 @@ CENTRAL_MODULE_SHA: Final = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
 DEPLOY_ROOT: Final = "dist"
 PAGES_DOMAINS: Final = ()
 SHA_LENGTH: Final = 40
-CLOUDFLARE_PAGES_DEPLOYMENT_UUID_VERSION: Final = 4
 PREVIEW_ARGS: Final = tuple(shell_split("pnpm -C app exec vite preview --host --port 4173 --strictPort"))
 ASSAY_INSTALL: Final = tuple(
     shell_split("uv pip install --python /opt/venv --no-cache --reinstall --no-deps assay-engine==0.5.0.dev3")
@@ -126,15 +122,6 @@ def _valid_workflow_run_id(value: object) -> bool:
 
 def _valid_run_attempt(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
-
-
-def _valid_cloudflare_pages_deployment_id(value: str) -> bool:
-    """Accept only canonical lowercase Cloudflare Pages UUID v4 deployment IDs."""
-    try:
-        identity = UUID(value)
-    except ValueError:
-        return False
-    return identity.version == CLOUDFLARE_PAGES_DEPLOYMENT_UUID_VERSION and str(identity) == value
 
 
 def _is_sha(value: str) -> bool:
@@ -308,10 +295,8 @@ class EdgeReco:
         account: dagger.Secret,
     ) -> ProviderIdentity:
         await self._provider_preflight(provider, request, github_token, token, account)
-        created = await self._provider_identity(self._provider_deploy(provider, request, github_token, token, account))
-        verified = await self._provider_identity(self._provider_verify(provider, request, github_token, token, account))
-        self._require_provider_identity(created, verified)
-        return verified
+        evidence = self._provider_deploy(provider, request, github_token, token, account)
+        return await self._provider_identity(evidence)
 
     @staticmethod
     def _deployment_result(identity: ProviderIdentity, live: str) -> str:
@@ -413,33 +398,6 @@ class EdgeReco:
             [DEPLOY_ROOT],
         )
 
-    def _provider_verify(
-        self,
-        provider: dagger.CloudflarePages,
-        request: ProviderRequest,
-        github_token: dagger.Secret,
-        token: dagger.Secret,
-        account: dagger.Secret,
-    ) -> dagger.CloudflarePagesDeploymentEvidence:
-        """Request generated-provider convergence before product live verification."""
-        return provider.verify(
-            request.envelope,
-            github_token,
-            token,
-            account,
-            request.workflow_run_id,
-            request.run_attempt,
-            TARGET.repository,
-            TARGET.project,
-            TARGET.branch,
-            TARGET.domain,
-            DEPLOY_ROOT,
-            list(PAGES_DOMAINS),
-            request.consumer_identity,
-            request.producing_identity,
-            [DEPLOY_ROOT],
-        )
-
     @staticmethod
     async def _provider_identity(evidence: dagger.CloudflarePagesDeploymentEvidence) -> ProviderIdentity:
         """Consume exact non-secret deployment evidence without repeating a mutation."""
@@ -448,14 +406,6 @@ class EdgeReco:
         deployment_id = await stored.deployment_id()
         deployment_url = await stored.deployment_url()
         return ProviderIdentity(deployment_id, deployment_url)
-
-    @staticmethod
-    def _require_provider_identity(created: ProviderIdentity, verified: ProviderIdentity) -> None:
-        """Reject missing or mismatched created and converged deployment identities."""
-        canonical_id = _valid_cloudflare_pages_deployment_id(created.deployment_id)
-        canonical_url = PAGES_DEPLOYMENT_URL_PATTERN.fullmatch(created.deployment_url) is not None
-        if not canonical_id or not canonical_url or created != verified:
-            raise ValueError("provider deployment identity differs from the exact release context")
 
     def _wrangler_base(self, source: dagger.Directory, artifact: dagger.Directory) -> dagger.Container:
         container = self._dependencies(source)
