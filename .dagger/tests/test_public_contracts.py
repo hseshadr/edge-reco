@@ -24,6 +24,7 @@ from edge_reco.main import EdgeReco, ProviderIdentity, parse_release_evidence
 FOUNDATION_SHA = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
 VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
 VALID_DEPLOYMENT_URL = "https://f621dc42.edge-reco.pages.dev"
+INDEPENDENT_SHORT_ID_URL = "https://a1b2c3d4.edge-reco.pages.dev"
 MALFORMED_DEPLOYMENT_IDS = (
     " malformed ",
     "malformed",
@@ -852,12 +853,24 @@ def test_should_materialize_each_noncacheable_provider_stage_once_when_reading_i
     assert events.count("load:deploy-evidence") == events.count("load:verify-evidence") == 1
 
 
+@pytest.mark.parametrize(
+    "foreign",
+    (
+        "https://foreign.edge-reco.pages.dev",
+        "http://a1b2c3d4.edge-reco.pages.dev",
+        "https://A1B2C3D4.edge-reco.pages.dev",
+        "https://a1b2c3d.edge-reco.pages.dev",
+        "https://a1b2c3d45.edge-reco.pages.dev",
+        "https://a1b2c3d4.edge-reco.pages.dev/path",
+        "https://a1b2c3d4.edge-reco.pages.dev?query=true",
+        "https://a1b2c3d4.edge-reco.pages.dev.evil.example",
+    ),
+)
 def test_should_reject_equal_noncanonical_provider_urls_before_live_verification(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, foreign: str
 ) -> None:
     # Given
     events: list[str] = []
-    foreign = "https://foreign.edge-reco.pages.dev"
     provider = RecordingProvider(events, created_url=foreign, verified_url=foreign)
     edge_reco = _recording_edge_reco(monkeypatch, events, provider)
 
@@ -865,6 +878,24 @@ def test_should_reject_equal_noncanonical_provider_urls_before_live_verification
     with pytest.raises(ValueError, match="provider deployment identity"):
         asyncio.run(_deploy_with_fake_secrets(edge_reco))
     assert "live" not in events
+
+
+def test_should_accept_canonical_provider_url_when_short_id_differs_from_uuid_prefix() -> None:
+    # Given
+    evidence = ProviderIdentity(VALID_DEPLOYMENT_ID, INDEPENDENT_SHORT_ID_URL)
+
+    # When / Then
+    EdgeReco._require_provider_identity(evidence, evidence)
+
+
+def test_should_reject_unequal_canonical_provider_urls_before_live_verification() -> None:
+    # Given
+    created = ProviderIdentity(VALID_DEPLOYMENT_ID, INDEPENDENT_SHORT_ID_URL)
+    verified = ProviderIdentity(VALID_DEPLOYMENT_ID, VALID_DEPLOYMENT_URL)
+
+    # When / Then
+    with pytest.raises(ValueError, match="provider deployment identity"):
+        EdgeReco._require_provider_identity(created, verified)
 
 
 @pytest.mark.parametrize("identity", MALFORMED_DEPLOYMENT_IDS)

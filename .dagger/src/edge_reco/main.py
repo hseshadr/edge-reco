@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from shlex import split as shell_split
 from typing import Final, Self, cast
@@ -21,6 +22,7 @@ CODEQL_URL: Final = (
 )
 CODEQL_CHECKSUM: Final = "sha256:0b152b004dec9fd57ccaf58d3fc410efa5be409e1b331cde280b0b8db7bc6dd6"
 TARGET: Final = EdgeRecoTarget.production()
+PAGES_DEPLOYMENT_URL_PATTERN: Final = re.compile(rf"https://[a-f0-9]{{8}}\.{re.escape(TARGET.project)}\.pages\.dev")
 REPOSITORY: Final = TARGET.repository
 REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
 UV_VERSION: Final = "0.11.32"
@@ -451,13 +453,9 @@ class EdgeReco:
     def _require_provider_identity(created: ProviderIdentity, verified: ProviderIdentity) -> None:
         """Reject missing or mismatched created and converged deployment identities."""
         canonical_id = _valid_cloudflare_pages_deployment_id(created.deployment_id)
-        canonical_url = created.deployment_url == EdgeReco._provider_url(created.deployment_id)
+        canonical_url = PAGES_DEPLOYMENT_URL_PATTERN.fullmatch(created.deployment_url) is not None
         if not canonical_id or not canonical_url or created != verified:
             raise ValueError("provider deployment identity differs from the exact release context")
-
-    @staticmethod
-    def _provider_url(deployment_id: str) -> str:
-        return f"https://{deployment_id[:8]}.{TARGET.project}.pages.dev"
 
     def _wrangler_base(self, source: dagger.Directory, artifact: dagger.Directory) -> dagger.Container:
         container = self._dependencies(source)
