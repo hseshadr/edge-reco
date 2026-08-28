@@ -414,12 +414,14 @@ pnpm -F frontend run build        # prove the workspace link resolves
 
 The repo follows strict test-first development: unit tests in `backend/tests/unit/`, behaviour scenarios in `backend/features/` with steps in `backend/tests/bdd/`, integration tests in `backend/tests/integration/`, end-to-end in `backend/tests/e2e/`.
 
-Dagger owns the complete repository-authored release graph: strict Python and frontend
-quality, both lockfile audits, parity, browser journeys, workflow lint, snapshot plus
-full-history Gitleaks, CodeQL SARIF generation, the immutable Pages artifact, Wrangler
-deployment, Cloudflare deployment identity, canonical routing, signed bundle/model
-identity, and the live zero-egress browser journey. GitHub workflows only check out the
-source and call the pinned Dagger engine. GitHub CodeQL Default Setup remains enabled
+Dagger owns the complete repository-authored release graph. EdgeReco keeps its product
+build, audits, CodeQL, parity, browser journeys, signed bundle/model identity, and live
+zero-egress proof. Exact-SHA modules in `hseshadr/ci` own the common repository guard,
+artifact envelope, exact-green evidence, and Cloudflare Pages delivery. GitHub workflows
+only check out the source, select the protected `production` environment for deployment,
+and call the pinned Dagger engine. EdgeReco is the first graduated consumer; see the
+[Dagger lego adoption evidence](docs/dagger-lego-adoption.md) before applying the pattern
+to another repository. GitHub CodeQL Default Setup remains enabled
 until the Dagger SARIF check is green on hosted pull requests and its upload replacement
 can be cut over without a coverage gap.
 
@@ -442,6 +444,7 @@ This attribution is *not* a license to the underlying content: the product listi
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run the demo end to end.
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns.
 - [`docs/SECURITY-PRIVACY.md`](docs/SECURITY-PRIVACY.md) — threat model, privacy/egress inventory, retention, operator requirements.
+- [`docs/dagger-lego-adoption.md`](docs/dagger-lego-adoption.md) — reusable Dagger ownership, runnable proof, canary evidence, and current secret-boundary limitation.
 
 Every diagram in this repo is an inline Mermaid fence — no build step, no committed
 image that can drift from the text beside it.

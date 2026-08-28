@@ -8,9 +8,5 @@ case "$mode" in
 		ARTIFACT_DIR=/artifact EXPECTED_SHA="$commit" node --test \
 			--test-name-pattern='mounted artifact' app/scripts/release-verify.test.mjs
     ;;
-  deploy)
-    pnpm exec wrangler pages deploy /artifact --project-name=edge-reco \
-      --branch=main "--commit-hash=$commit" --commit-dirty=false
-    ;;
-  *) echo "usage: wrangler-release.sh preflight|deploy SHA" >&2; exit 2 ;;
+  *) echo "usage: wrangler-release.sh preflight SHA" >&2; exit 2 ;;
 esac

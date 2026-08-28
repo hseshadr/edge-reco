@@ -19,10 +19,11 @@ import dagger
 import pytest
 
 import edge_reco.main as main_module
-from edge_reco.main import EdgeReco, parse_release_evidence
+from edge_reco.main import EdgeReco, ProviderIdentity, parse_release_evidence
 
 FOUNDATION_SHA = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
 VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
+VALID_DEPLOYMENT_URL = "https://f621dc42.edge-reco.pages.dev"
 MALFORMED_DEPLOYMENT_IDS = (
     " malformed ",
     "malformed",
@@ -93,13 +94,6 @@ class RecordingWorkspace:
         return cast(dagger.Directory, object())
 
 
-class DeploymentIdOnly:
-    """Minimal non-cacheable provider result used to prove one identity read."""
-
-    async def deployment_id(self) -> str:
-        return VALID_DEPLOYMENT_ID
-
-
 class RecordingContainer:
     """Record the retained product-live boundary without invoking a browser."""
 
@@ -112,26 +106,44 @@ class RecordingContainer:
 
 
 class RecordingDeployment:
-    """Represent one generated provider result with one exact identity read."""
+    """Represent one generated provider result with exact non-secret evidence."""
 
-    def __init__(self, events: list[str], deployment_id: str) -> None:
+    def __init__(self, events: list[str], object_id: str, deployment_id: str, deployment_url: str) -> None:
         self.events = events
-        self.value = deployment_id
+        self.object_id = object_id
+        self.deployment_id_value = deployment_id
+        self.deployment_url_value = deployment_url
+
+    async def id(self) -> str:
+        self.events.append(f"materialize:{self.object_id}")
+        return self.object_id
 
     async def deployment_id(self) -> str:
-        self.events.append(f"identity:{self.value}")
-        return self.value
+        self.events.append(f"identity:{self.deployment_id_value}")
+        return self.deployment_id_value
+
+    async def deployment_url(self) -> str:
+        self.events.append(f"url:{self.deployment_url_value}")
+        return self.deployment_url_value
 
 
 class RecordingProvider:
     """Strict generated-client fake that records provider boundary calls."""
 
     def __init__(
-        self, events: list[str], created_id: str = VALID_DEPLOYMENT_ID, verified_id: str = VALID_DEPLOYMENT_ID
+        self,
+        events: list[str],
+        created_id: str = VALID_DEPLOYMENT_ID,
+        verified_id: str = VALID_DEPLOYMENT_ID,
+        created_url: str = VALID_DEPLOYMENT_URL,
+        verified_url: str = VALID_DEPLOYMENT_URL,
     ) -> None:
         self.events = events
         self.created_id = created_id
         self.verified_id = verified_id
+        self.created_url = created_url
+        self.verified_url = verified_url
+        self.evidence_by_id: dict[str, dagger.CloudflarePagesDeploymentEvidence] = {}
 
     async def preflight(self, *arguments: object) -> str:
         self._require_exact_arguments(arguments)
@@ -141,16 +153,93 @@ class RecordingProvider:
     def deploy(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
         self._require_exact_arguments(arguments)
         self.events.append("deploy")
-        return cast(dagger.CloudflarePagesDeploymentEvidence, RecordingDeployment(self.events, self.created_id))
+        return self._record("created-evidence", self.created_id, self.created_url)
 
     def verify(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
         self._require_exact_arguments(arguments)
         self.events.append("verify")
-        return cast(dagger.CloudflarePagesDeploymentEvidence, RecordingDeployment(self.events, self.verified_id))
+        return self._record("verified-evidence", self.verified_id, self.verified_url)
+
+    def load_evidence(self, object_id: str) -> dagger.CloudflarePagesDeploymentEvidence:
+        return self.evidence_by_id[object_id]
+
+    def _record(
+        self, object_id: str, deployment_id: str, deployment_url: str
+    ) -> dagger.CloudflarePagesDeploymentEvidence:
+        evidence = RecordingDeployment(self.events, object_id, deployment_id, deployment_url)
+        stored = cast(dagger.CloudflarePagesDeploymentEvidence, evidence)
+        self.evidence_by_id[object_id] = stored
+        return stored
 
     @staticmethod
     def _require_exact_arguments(arguments: tuple[object, ...]) -> None:
         assert arguments == _recording_provider_arguments()
+
+
+class IdBackedDeployment:
+    """Expose stored evidence scalars without replaying their producer."""
+
+    def __init__(self, events: list[str], deployment_id: str, deployment_url: str) -> None:
+        self.events = events
+        self.deployment_id_value = deployment_id
+        self.deployment_url_value = deployment_url
+
+    async def deployment_id(self) -> str:
+        self.events.append(f"identity:{self.deployment_id_value}")
+        return self.deployment_id_value
+
+    async def deployment_url(self) -> str:
+        self.events.append(f"url:{self.deployment_url_value}")
+        return self.deployment_url_value
+
+
+class NonCacheableDeployment:
+    """Replay its producer whenever a scalar is read from the lazy graph."""
+
+    def __init__(self, events: list[str], stage: str, object_id: str) -> None:
+        self.events = events
+        self.stage = stage
+        self.object_id = object_id
+
+    async def id(self) -> str:
+        self.events.append(self.stage)
+        return self.object_id
+
+    async def deployment_id(self) -> str:
+        self.events.append(self.stage)
+        return VALID_DEPLOYMENT_ID
+
+    async def deployment_url(self) -> str:
+        self.events.append(self.stage)
+        return VALID_DEPLOYMENT_URL
+
+
+class MaterializingProvider(RecordingProvider):
+    """Separate provider graph construction from cache-never execution."""
+
+    def __init__(self, events: list[str]) -> None:
+        super().__init__(events)
+        self.materialized_evidence: dict[str, IdBackedDeployment] = {}
+
+    def deploy(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        self._require_exact_arguments(arguments)
+        return self._construct("deploy")
+
+    def verify(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        self._require_exact_arguments(arguments)
+        return self._construct("verify")
+
+    def _construct(self, stage: str) -> dagger.CloudflarePagesDeploymentEvidence:
+        object_id = f"{stage}-evidence"
+        self.events.append(f"construct:{stage}")
+        self.materialized_evidence[object_id] = IdBackedDeployment(
+            self.events, VALID_DEPLOYMENT_ID, VALID_DEPLOYMENT_URL
+        )
+        lazy = NonCacheableDeployment(self.events, stage, object_id)
+        return cast(dagger.CloudflarePagesDeploymentEvidence, lazy)
+
+    def load_evidence(self, object_id: str) -> dagger.CloudflarePagesDeploymentEvidence:
+        return cast(dagger.CloudflarePagesDeploymentEvidence, self.materialized_evidence[object_id])
 
 
 class RecordingFoundation:
@@ -252,6 +341,12 @@ class RecordingDag:
         self.events.append("git")
         return RecordingGit(self.events)
 
+    def load_cloudflare_pages_deployment_evidence_from_id(
+        self, object_id: str
+    ) -> dagger.CloudflarePagesDeploymentEvidence:
+        self.events.append(f"load:{object_id}")
+        return self.provider.load_evidence(object_id)
+
 
 class RecordingDirectory:
     """Fake artifact package directory that preserves the Dagger method shape."""
@@ -267,6 +362,159 @@ class FailingPreflightProvider(RecordingProvider):
         self._require_exact_arguments(arguments)
         self.events.append("preflight")
         raise ValueError("preflight failed")
+
+
+class GraphDirectory:
+    """Minimal typed directory for constructing every local product graph."""
+
+    def directory(self, _path: str) -> dagger.Directory:
+        return cast(dagger.Directory, self)
+
+    def file(self, _path: str) -> dagger.File:
+        return cast(dagger.File, object())
+
+    def with_directory(self, _path: str, _directory: dagger.Directory) -> dagger.Directory:
+        return cast(dagger.Directory, self)
+
+    async def digest(self) -> str:
+        return "digest"
+
+
+class GraphContainer:
+    """Typed fluent container double for pure Dagger graph construction."""
+
+    def from_(self, _image: str) -> GraphContainer:
+        return self
+
+    def with_entrypoint(self, _entrypoint: list[str]) -> GraphContainer:
+        return self
+
+    def with_directory(self, _path: str, _directory: dagger.Directory) -> GraphContainer:
+        return self
+
+    def with_exec(self, _command: list[str]) -> GraphContainer:
+        return self
+
+    def with_file(self, _path: str, _file: dagger.File) -> GraphContainer:
+        return self
+
+    def file(self, _path: str) -> dagger.File:
+        return cast(dagger.File, object())
+
+    def with_workdir(self, _path: str) -> GraphContainer:
+        return self
+
+    def with_env_variable(self, _name: str, _value: str) -> GraphContainer:
+        return self
+
+    def with_mounted_cache(self, _path: str, _cache: object) -> GraphContainer:
+        return self
+
+    def with_exposed_port(self, _port: int) -> GraphContainer:
+        return self
+
+    def with_service_binding(self, _name: str, _service: dagger.Service) -> GraphContainer:
+        return self
+
+    def with_secret_variable(self, _name: str, _secret: dagger.Secret) -> GraphContainer:
+        return self
+
+    def as_service(self, *, args: list[str]) -> dagger.Service:
+        return cast(dagger.Service, self)
+
+    def directory(self, _path: str) -> dagger.Directory:
+        return cast(dagger.Directory, GraphDirectory())
+
+    async def sync(self) -> None:
+        return None
+
+    async def stdout(self) -> str:
+        return "live proof"
+
+
+class GraphGitRef:
+    async def commit(self) -> str:
+        return "a" * 40
+
+    def tree(self, *, depth: int, include_tags: bool = False) -> dagger.Directory:
+        return cast(dagger.Directory, GraphDirectory())
+
+
+class GraphGitRepository:
+    def branch(self, _branch: str) -> GraphGitRef:
+        return GraphGitRef()
+
+    def commit(self, _commit: str) -> GraphGitRef:
+        return GraphGitRef()
+
+
+class GraphFoundation:
+    def green_main(self, **_arguments: object) -> RecordingGreenEvidence:
+        return RecordingGreenEvidence([])
+
+    def guard(self, **_arguments: object) -> dagger.Container:
+        return cast(dagger.Container, GraphContainer())
+
+    def source(self, **_arguments: object) -> dagger.Directory:
+        return cast(dagger.Directory, GraphDirectory())
+
+    def envelope(self, *_arguments: object) -> dagger.Directory:
+        return cast(dagger.Directory, GraphDirectory())
+
+    def verify_envelope(self, *_arguments: object) -> dagger.Directory:
+        return cast(dagger.Directory, GraphDirectory())
+
+
+class GraphDeployment:
+    async def id(self) -> str:
+        return "graph-evidence"
+
+    async def deployment_id(self) -> str:
+        return VALID_DEPLOYMENT_ID
+
+    async def deployment_url(self) -> str:
+        return VALID_DEPLOYMENT_URL
+
+
+class GraphCloudflarePages:
+    async def preflight(self, *_arguments: object) -> str:
+        return "preflight"
+
+    def deploy(self, *_arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        return cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
+
+    def verify(self, *_arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        return cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
+
+
+class GraphDag:
+    """Generated-client facade covering each retained EdgeReco composition path."""
+
+    def container(self, *, platform: dagger.Platform | None = None) -> GraphContainer:
+        return GraphContainer()
+
+    def git(self, _repository: str) -> GraphGitRepository:
+        return GraphGitRepository()
+
+    def cache_volume(self, _name: str) -> object:
+        return object()
+
+    def cloudflare_pages(self) -> GraphCloudflarePages:
+        return GraphCloudflarePages()
+
+    def directory(self) -> GraphDirectory:
+        return GraphDirectory()
+
+    def http(self, _url: str, *, checksum: str) -> dagger.File:
+        return cast(dagger.File, object())
+
+    def load_cloudflare_pages_deployment_evidence_from_id(
+        self, _object_id: str
+    ) -> dagger.CloudflarePagesDeploymentEvidence:
+        return cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
+
+    def foundation(self) -> GraphFoundation:
+        return GraphFoundation()
 
 
 def _recording_edge_reco(
@@ -391,12 +639,15 @@ def test_should_reject_unvalidated_repository_override() -> None:
     assert "repository" not in deploy.parameters
 
 
-def test_should_actionlint_yml_and_yaml() -> None:
+def test_should_delegate_both_repository_guard_entrypoints_to_foundation() -> None:
     # Given
-    source = inspect.getsource(EdgeReco._legacy_workflow_security)
+    workflow_security = inspect.getsource(EdgeReco.workflow_security)
+    secret_scan = inspect.getsource(EdgeReco.secret_scan)
+
     # Then
-    assert "*.yml" in source
-    assert "*.yaml" in source
+    assert "_shared_guard" in workflow_security
+    assert "_shared_guard" in secret_scan
+    assert "_legacy" not in workflow_security + secret_scan
 
 
 def test_should_expose_security_and_live_release_functions() -> None:
@@ -413,6 +664,30 @@ def test_should_expose_security_and_live_release_functions() -> None:
     available = {name for name in expected if hasattr(EdgeReco, name)}
     # Then
     assert available == expected
+
+
+def test_should_construct_every_retained_product_graph_with_typed_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    edge_reco.source = cast(dagger.Directory, GraphDirectory())
+    monkeypatch.setattr(main_module, "dag", GraphDag())
+    secret = cast(dagger.Secret, object())
+
+    # When
+    edge_reco.backend_quality(), edge_reco.backend_audit(), edge_reco.parity()
+    edge_reco.frontend_quality(), edge_reco.browser_e2e(), edge_reco.frontend_audit()
+    asyncio.run(edge_reco.workflow_security()), asyncio.run(edge_reco.secret_scan())
+    edge_reco.build("a" * 40), edge_reco.release_preflight("a" * 40), edge_reco.codeql()
+    asyncio.run(edge_reco.security()), asyncio.run(edge_reco.codeql_upload(secret, "a" * 40))
+    asyncio.run(edge_reco.verify_live("a" * 40))
+    deployment = cast(str, asyncio.run(edge_reco.deploy(secret, secret, secret)))
+
+    # Then
+    assert edge_reco.codeql_sarif() is not None
+    assert VALID_DEPLOYMENT_ID in deployment
+    assert VALID_DEPLOYMENT_URL in deployment
 
 
 def test_should_run_bundled_codeql_code_scanning_queries() -> None:
@@ -432,6 +707,18 @@ def test_should_not_commit_a_secret_shaped_gitleaks_canary() -> None:
     assert module is not None
     module_source = inspect.getsource(module)
     assert "ghp_" not in module_source
+
+
+def test_should_not_retain_shared_provider_or_guard_implementations() -> None:
+    # Given
+    scripts = Path(__file__).parents[1] / "scripts"
+    duplicates = (
+        scripts / "cloudflare-pages.sh",
+        scripts / "gitleaks-canary.sh",
+    )
+
+    # Then
+    assert all(not path.exists() for path in duplicates)
 
 
 def test_should_pin_foundation_to_literal_central_sha() -> None:
@@ -506,6 +793,8 @@ def test_should_extract_one_exact_attempt_from_serialized_green_main_evidence() 
 @pytest.mark.parametrize(
     "evidence",
     (
+        "not json",
+        "[]",
         "{}",
         '{"commit_sha":"short","workflow_run_id":"123456","run_attempt":2}',
         '{"commit_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","workflow_run_id":"0","run_attempt":2}',
@@ -518,22 +807,72 @@ def test_should_reject_malformed_serialized_green_main_evidence(evidence: str) -
         parse_release_evidence(evidence)
 
 
-def test_should_consume_only_the_provider_deployment_id_before_live_verification() -> None:
+def test_should_reject_noncanonical_sha_at_product_build_boundary() -> None:
     # Given
-    evidence = cast(dagger.CloudflarePagesDeploymentEvidence, DeploymentIdOnly())
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    edge_reco.source = cast(dagger.Directory, GraphDirectory())
+
+    # When / Then
+    with pytest.raises(ValueError, match="lowercase 40-character Git SHA"):
+        edge_reco.build("A" * 40)
+
+
+def test_should_consume_provider_deployment_id_and_unique_url_before_live_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    evidence = cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
+    monkeypatch.setattr(main_module, "dag", GraphDag())
 
     # When
-    deployment_id = asyncio.run(EdgeReco._provider_identity(evidence))
+    identity = asyncio.run(EdgeReco._provider_identity(evidence))
 
     # Then
-    assert deployment_id == VALID_DEPLOYMENT_ID
+    assert (identity.deployment_id, identity.deployment_url) == (
+        VALID_DEPLOYMENT_ID,
+        VALID_DEPLOYMENT_URL,
+    )
+
+
+def test_should_materialize_each_noncacheable_provider_stage_once_when_reading_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    events: list[str] = []
+    provider = MaterializingProvider(events)
+    edge_reco = _recording_edge_reco(monkeypatch, events, provider)
+
+    # When
+    result = asyncio.run(_deploy_with_fake_secrets(edge_reco))
+
+    # Then
+    assert VALID_DEPLOYMENT_ID in result and VALID_DEPLOYMENT_URL in result
+    assert events.count("construct:deploy") == events.count("deploy") == 1
+    assert events.count("construct:verify") == events.count("verify") == 1
+    assert events.count("load:deploy-evidence") == events.count("load:verify-evidence") == 1
+
+
+def test_should_reject_equal_noncanonical_provider_urls_before_live_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    events: list[str] = []
+    foreign = "https://foreign.edge-reco.pages.dev"
+    provider = RecordingProvider(events, created_url=foreign, verified_url=foreign)
+    edge_reco = _recording_edge_reco(monkeypatch, events, provider)
+
+    # When / Then
+    with pytest.raises(ValueError, match="provider deployment identity"):
+        asyncio.run(_deploy_with_fake_secrets(edge_reco))
+    assert "live" not in events
 
 
 @pytest.mark.parametrize("identity", MALFORMED_DEPLOYMENT_IDS)
 def test_should_reject_equal_noncanonical_cloudflare_pages_deployment_identity(identity: str) -> None:
     # Given / When / Then
     with pytest.raises(ValueError, match="provider deployment identity"):
-        EdgeReco._require_provider_identity(identity, identity)
+        evidence = ProviderIdentity(identity, VALID_DEPLOYMENT_URL)
+        EdgeReco._require_provider_identity(evidence, evidence)
 
 
 def test_should_reject_a_wrong_envelope_at_the_provider_boundary() -> None:
@@ -651,7 +990,7 @@ def test_should_order_shared_provider_mutation_after_local_envelope_verification
     result = asyncio.run(_deploy_with_fake_secrets(edge_reco))
 
     # Then
-    assert result == "live proof"
+    assert result == (f"provider deployment verified: id={VALID_DEPLOYMENT_ID} url={VALID_DEPLOYMENT_URL}\nlive proof")
     assert events == [
         "green-main",
         "green-serialization",
@@ -667,9 +1006,15 @@ def test_should_order_shared_provider_mutation_after_local_envelope_verification
         "envelope-digest",
         "preflight",
         "deploy",
+        "materialize:created-evidence",
+        "load:created-evidence",
         f"identity:{VALID_DEPLOYMENT_ID}",
+        f"url:{VALID_DEPLOYMENT_URL}",
         "verify",
+        "materialize:verified-evidence",
+        "load:verified-evidence",
         f"identity:{VALID_DEPLOYMENT_ID}",
+        f"url:{VALID_DEPLOYMENT_URL}",
         "live",
     ]
 
