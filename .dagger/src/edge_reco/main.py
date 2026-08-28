@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, fields
 from shlex import split as shell_split
 from typing import Final, Self, cast
+from uuid import UUID
 
 import dagger
 from dagger import check, dag, field, function, object_type
@@ -30,8 +32,12 @@ REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
 UV_VERSION: Final = "0.11.32"
 PNPM_VERSION: Final = "11.5.0"
 CHECK_SHA: Final = "0000000000000000000000000000000000000000"
+CENTRAL_MODULE_SHA: Final = "2f4e5e67573be2c7a157871f40da48e187f30285"
+DEPLOY_ROOT: Final = "dist"
+PAGES_DOMAINS: Final = ()
 SHA_LENGTH: Final = 40
 DIGEST_LENGTH: Final = 64
+CLOUDFLARE_PAGES_DEPLOYMENT_UUID_VERSION: Final = 4
 PREVIEW_ARGS: Final = tuple(shell_split("pnpm -C app exec vite preview --host --port 4173 --strictPort"))
 ASSAY_INSTALL: Final = tuple(
     shell_split("uv pip install --python /opt/venv --no-cache --reinstall --no-deps assay-engine==0.5.0.dev3")
@@ -80,6 +86,88 @@ class GuardEvidence:
     manifest: str
     retains_git_history: bool
     commit_sha: str
+
+
+@dataclass(frozen=True)
+class ReleaseContext:
+    """Exact shared evidence and source binding for one delivery attempt."""
+
+    source: dagger.Directory
+    commit_sha: str
+    workflow_run_id: str
+    run_attempt: int
+
+
+@dataclass(frozen=True)
+class ProviderRequest:
+    """Closed provider inputs derived from the immutable release context."""
+
+    envelope: dagger.Directory
+    consumer_identity: str
+    producing_identity: str
+    workflow_run_id: str
+    run_attempt: int
+
+
+def parse_release_evidence(serialization: str) -> tuple[str, str, int]:
+    """Accept one exact serialized green-main attempt from the shared boundary."""
+    values = _release_evidence_values(serialization)
+    if not _valid_release_evidence(values):
+        raise ValueError("serialized green-main evidence is malformed")
+    commit_sha, workflow_run_id, run_attempt, _, _ = values
+    return cast(str, commit_sha), cast(str, workflow_run_id), cast(int, run_attempt)
+
+
+def _release_evidence_values(serialization: str) -> tuple[object, object, object, object, object]:
+    try:
+        value = json.loads(serialization)
+    except json.JSONDecodeError as error:
+        raise ValueError("serialized green-main evidence is malformed") from error
+    if not isinstance(value, dict):
+        raise ValueError("serialized green-main evidence is malformed")
+    return (
+        cast(object, value.get("commit_sha")),
+        cast(object, value.get("workflow_run_id")),
+        cast(object, value.get("run_attempt")),
+        cast(object, value.get("repository")),
+        cast(object, value.get("branch")),
+    )
+
+
+def _valid_release_evidence(values: tuple[object, object, object, object, object]) -> bool:
+    commit_sha, workflow_run_id, run_attempt, repository, branch = values
+    identity = _valid_release_identity(commit_sha, repository, branch)
+    return identity and _valid_release_attempt(workflow_run_id, run_attempt)
+
+
+def _valid_release_identity(commit_sha: object, repository: object, branch: object) -> bool:
+    return (
+        isinstance(commit_sha, str)
+        and _is_sha(commit_sha)
+        and repository == TARGET.repository
+        and branch == TARGET.branch
+    )
+
+
+def _valid_release_attempt(workflow_run_id: object, run_attempt: object) -> bool:
+    return _valid_workflow_run_id(workflow_run_id) and _valid_run_attempt(run_attempt)
+
+
+def _valid_workflow_run_id(value: object) -> bool:
+    return isinstance(value, str) and value.isdecimal() and value != "0"
+
+
+def _valid_run_attempt(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _valid_cloudflare_pages_deployment_id(value: str) -> bool:
+    """Accept only canonical lowercase Cloudflare Pages UUID v4 deployment IDs."""
+    try:
+        identity = UUID(value)
+    except ValueError:
+        return False
+    return identity.version == CLOUDFLARE_PAGES_DEPLOYMENT_UUID_VERSION and str(identity) == value
 
 
 def require_guard_parity(legacy: GuardEvidence, shared: GuardEvidence) -> None:
@@ -444,17 +532,21 @@ class EdgeReco:
         github_token: dagger.Secret,
     ) -> str:
         """Deploy current green main and verify source, artifact, and live identity."""
-        commit_sha = await self._green_main(github_token, TARGET)
-        source = dag.git(f"https://github.com/{TARGET.repository}.git").commit(commit_sha).tree(depth=0)
-        artifact = self._build_source(source, commit_sha)
-        await self._disable_git_deployments(cloudflare_api_token, cloudflare_account_id)
-        await self._deploy_artifact(artifact, source, commit_sha, cloudflare_api_token, cloudflare_account_id)
-        return await self._live_container(source, commit_sha).stdout()
-
-    async def _disable_git_deployments(self, token: dagger.Secret, account: dagger.Secret) -> None:
-        tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
-        tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
-        await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "disable"]).sync()
+        context = await self._release_context(github_token)
+        request = self._provider_request(self._build_source(context.source, context.commit_sha), context)
+        provider = dag.cloudflare_pages()
+        await self._verify_request_envelope(request)
+        await self._provider_preflight(provider, request, github_token, cloudflare_api_token, cloudflare_account_id)
+        created_deployment = self._provider_deploy(
+            provider, request, github_token, cloudflare_api_token, cloudflare_account_id
+        )
+        created = await self._provider_identity(created_deployment)
+        verified_deployment = self._provider_verify(
+            provider, request, github_token, cloudflare_api_token, cloudflare_account_id
+        )
+        verified = await self._provider_identity(verified_deployment)
+        self._require_provider_identity(created, verified)
+        return await self._live_container(context.source, context.commit_sha).stdout()
 
     def _build_source(self, source: dagger.Directory, commit_sha: str) -> dagger.Directory:
         self._require_sha(commit_sha)
@@ -462,11 +554,14 @@ class EdgeReco:
         checked = built.with_exec(["pnpm", "-F", "frontend", "run", "test:artifacts"])
         return checked.directory("/src/frontend/app/dist")
 
-    async def _green_main(self, token: dagger.Secret, target: EdgeRecoTarget) -> str:
-        remote = dag.git(f"https://github.com/{target.repository}.git").branch(target.branch)
-        commit = await remote.commit()
-        await self._github_probe(token, target.repository, commit).sync()
-        return commit
+    async def _release_context(self, github_token: dagger.Secret) -> ReleaseContext:
+        """Resolve exact green evidence and bind its source before artifact construction."""
+        evidence = dag.foundation().green_main(github_token=github_token, repository=TARGET.repository)
+        commit_sha, workflow_run_id, run_attempt = parse_release_evidence(await evidence.serialization())
+        self._require_sha(commit_sha)
+        source = dag.git(REPOSITORY_URL).commit(commit_sha).tree(depth=0, include_tags=True)
+        bound = dag.foundation().source(source=source, repository=TARGET.repository, commit_sha=commit_sha)
+        return ReleaseContext(bound, commit_sha, workflow_run_id, run_attempt)
 
     async def _canonical_guard_source(self) -> tuple[dagger.Directory, str]:
         """Fetch public EdgeReco bytes that can be bound to complete Git history."""
@@ -610,44 +705,112 @@ class EdgeReco:
             "git -C /repo fsck --full --no-dangling",
         )
 
-    async def _deploy_artifact(
+    def _provider_request(self, artifact: dagger.Directory, context: ReleaseContext) -> ProviderRequest:
+        """Create the closed central envelope and provider identity inputs."""
+        consumer = f"{TARGET.repository}@{context.commit_sha}"
+        producing = f"{CENTRAL_MODULE_SHA}:{context.workflow_run_id}"
+        packaged = dag.directory().with_directory(DEPLOY_ROOT, artifact)
+        envelope = dag.foundation().envelope(packaged, consumer, producing, [DEPLOY_ROOT])
+        return ProviderRequest(envelope, consumer, producing, context.workflow_run_id, context.run_attempt)
+
+    async def _verify_request_envelope(self, request: ProviderRequest) -> None:
+        """Require the central envelope verifier before every provider preflight."""
+        artifact = dag.foundation().verify_envelope(
+            request.envelope, request.consumer_identity, request.producing_identity, [DEPLOY_ROOT]
+        )
+        await artifact.digest()
+
+    async def _provider_preflight(
         self,
-        artifact: dagger.Directory,
-        source: dagger.Directory,
-        commit: str,
+        provider: dagger.CloudflarePages,
+        request: ProviderRequest,
+        github_token: dagger.Secret,
         token: dagger.Secret,
         account: dagger.Secret,
     ) -> None:
-        tools = self._release_tools().with_secret_variable("CLOUDFLARE_API_TOKEN", token)
-        tools = tools.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
-        await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "preflight"]).sync()
-        container = self._wrangler(source, artifact, token, account)
-        script = "app/scripts/wrangler-release.sh"
-        await container.with_exec(["sh", script, "preflight", commit]).sync()
-        await container.with_exec(["sh", script, "deploy", commit]).sync()
-        tools = tools.with_env_variable("EXPECTED_SHA", commit)
-        await tools.with_exec(["sh", "/scripts/cloudflare-pages.sh", "verify"]).sync()
-
-    def _github_probe(self, token: dagger.Secret, repository: str, commit: str) -> dagger.Container:
-        url = f"https://api.github.com/repos/{repository}/actions/workflows/dagger.yml/runs?head_sha={commit}&event=push&per_page=20"
-        script = (
-            'tmp=$(mktemp -d); curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" '
-            f'-H "Accept: application/vnd.github+json" "{url}" -o "$tmp/runs.json"; '
-            'test "$(jq \'[.workflow_runs[]|select(.conclusion=="success")]|length\' '
-            '"$tmp/runs.json")" -gt 0'
+        """Run the generated provider's non-cacheable read-only preflight."""
+        await provider.preflight(
+            request.envelope,
+            github_token,
+            token,
+            account,
+            request.workflow_run_id,
+            request.run_attempt,
+            TARGET.repository,
+            TARGET.project,
+            TARGET.branch,
+            TARGET.domain,
+            DEPLOY_ROOT,
+            list(PAGES_DOMAINS),
+            request.consumer_identity,
+            request.producing_identity,
+            [DEPLOY_ROOT],
         )
-        return self._release_tools().with_secret_variable("GITHUB_TOKEN", token).with_exec(["sh", "-ceu", script])
 
-    def _wrangler(
+    def _provider_deploy(
         self,
-        source: dagger.Directory,
-        artifact: dagger.Directory,
+        provider: dagger.CloudflarePages,
+        request: ProviderRequest,
+        github_token: dagger.Secret,
         token: dagger.Secret,
         account: dagger.Secret,
-    ) -> dagger.Container:
-        container = self._wrangler_base(source, artifact)
-        container = container.with_secret_variable("CLOUDFLARE_API_TOKEN", token)
-        return container.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
+    ) -> dagger.CloudflarePagesDeploymentEvidence:
+        """Request one generated-provider mutation after preflight succeeds."""
+        return provider.deploy(
+            request.envelope,
+            github_token,
+            token,
+            account,
+            request.workflow_run_id,
+            request.run_attempt,
+            TARGET.repository,
+            TARGET.project,
+            TARGET.branch,
+            TARGET.domain,
+            DEPLOY_ROOT,
+            list(PAGES_DOMAINS),
+            request.consumer_identity,
+            request.producing_identity,
+            [DEPLOY_ROOT],
+        )
+
+    def _provider_verify(
+        self,
+        provider: dagger.CloudflarePages,
+        request: ProviderRequest,
+        github_token: dagger.Secret,
+        token: dagger.Secret,
+        account: dagger.Secret,
+    ) -> dagger.CloudflarePagesDeploymentEvidence:
+        """Request generated-provider convergence before product live verification."""
+        return provider.verify(
+            request.envelope,
+            github_token,
+            token,
+            account,
+            request.workflow_run_id,
+            request.run_attempt,
+            TARGET.repository,
+            TARGET.project,
+            TARGET.branch,
+            TARGET.domain,
+            DEPLOY_ROOT,
+            list(PAGES_DOMAINS),
+            request.consumer_identity,
+            request.producing_identity,
+            [DEPLOY_ROOT],
+        )
+
+    @staticmethod
+    async def _provider_identity(evidence: dagger.CloudflarePagesDeploymentEvidence) -> str:
+        """Consume one exact deployment identity without repeating a mutation graph."""
+        return await evidence.deployment_id()
+
+    @staticmethod
+    def _require_provider_identity(created: str, verified: str) -> None:
+        """Reject missing or mismatched created and converged deployment identities."""
+        if not _valid_cloudflare_pages_deployment_id(created) or created != verified:
+            raise ValueError("provider deployment identity differs from the exact release context")
 
     def _wrangler_base(self, source: dagger.Directory, artifact: dagger.Directory) -> dagger.Container:
         container = self._dependencies(source)
@@ -741,11 +904,6 @@ class EdgeReco:
         return base.with_exec(["apt-get", "update"]).with_exec(
             ["apt-get", "install", "-y", "--no-install-recommends", *packages]
         )
-
-    def _release_tools(self) -> dagger.Container:
-        base = dag.container().from_(CODEQL_IMAGE).with_exec(["apt-get", "update"])
-        base = base.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "ca-certificates", "curl", "jq"])
-        return base.with_directory("/scripts", self.source.directory(".dagger/scripts"))
 
     @staticmethod
     def _require_sha(commit: str) -> None:

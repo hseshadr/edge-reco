@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import os
 import shutil
 import subprocess
@@ -24,6 +25,8 @@ from edge_reco.main import (
     require_guard_parity,
 )
 
+VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
+
 
 class FakeDirectory:
     def directory(self, _: str) -> dagger.Directory:
@@ -31,6 +34,12 @@ class FakeDirectory:
 
     def file(self, _: str) -> dagger.File:
         return cast(dagger.File, object())
+
+    def with_directory(self, _: str, __: dagger.Directory) -> dagger.Directory:
+        return cast(dagger.Directory, self)
+
+    async def digest(self) -> str:
+        return "digest"
 
 
 class FakeContainer:
@@ -103,11 +112,49 @@ class FakeGitRepository:
 
 
 class FakeFoundation:
+    def green_main(self, **_: object) -> FakeGreenEvidence:
+        return FakeGreenEvidence()
+
     def guard(self, **_: object) -> dagger.Container:
         return cast(dagger.Container, FakeContainer())
 
     def source(self, **_: object) -> dagger.Directory:
         return cast(dagger.Directory, FakeDirectory())
+
+    def envelope(self, *_: object) -> dagger.Directory:
+        return cast(dagger.Directory, FakeDirectory())
+
+    def verify_envelope(self, *_: object) -> dagger.Directory:
+        return cast(dagger.Directory, FakeDirectory())
+
+
+class FakeGreenEvidence:
+    async def serialization(self) -> str:
+        return json.dumps(
+            {
+                "branch": "main",
+                "commit_sha": "a" * 40,
+                "repository": "hseshadr/edge-reco",
+                "run_attempt": 1,
+                "workflow_run_id": "1",
+            }
+        )
+
+
+class FakeDeployment:
+    async def deployment_id(self) -> str:
+        return VALID_DEPLOYMENT_ID
+
+
+class FakeCloudflarePages:
+    async def preflight(self, *_: object) -> str:
+        return "preflight"
+
+    def deploy(self, *_: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        return cast(dagger.CloudflarePagesDeploymentEvidence, FakeDeployment())
+
+    def verify(self, *_: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        return cast(dagger.CloudflarePagesDeploymentEvidence, FakeDeployment())
 
 
 class FakeDag:
@@ -119,6 +166,12 @@ class FakeDag:
 
     def cache_volume(self, _: str) -> object:
         return object()
+
+    def cloudflare_pages(self) -> FakeCloudflarePages:
+        return FakeCloudflarePages()
+
+    def directory(self) -> FakeDirectory:
+        return FakeDirectory()
 
     def http(self, _: str, *, checksum: str) -> dagger.File:
         return cast(dagger.File, object())

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[3]
@@ -19,58 +18,49 @@ def _cloudflare_source() -> str:
     return _CLOUDFLARE.read_text(encoding="utf-8")
 
 
-def _is_target_attribute(node: ast.AST, attribute: str) -> bool:
-    if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Name):
-        return False
-    return node.value.id == "target" and node.attr == attribute
-
-
-def _is_target_repository_git_call(node: ast.AST) -> bool:
-    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-        return False
-    repository = (_is_target_attribute(value, "repository") for value in ast.walk(node))
-    return node.func.attr == "git" and any(repository)
-
-
-def _green_main_uses_validated_target() -> bool:
+def _deploy_method() -> ast.AsyncFunctionDef:
     tree = ast.parse(_source())
     methods = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_green_main"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "deploy"
     ]
     assert len(methods) == 1
-    return any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "branch"
-        and len(node.args) == 1
-        and _is_target_attribute(node.args[0], "branch")
-        and _is_target_repository_git_call(node.func.value)
-        for node in ast.walk(methods[0])
-    )
+    return methods[0]
+
+
+def _call_attributes(statement: ast.stmt) -> list[str]:
+    return [
+        node.func.attr
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    ]
+
+
+def _top_level_deploy_calls() -> list[list[str]]:
+    return [calls for statement in _deploy_method().body if (calls := _call_attributes(statement))]
 
 
 def test_should_resolve_validated_target_at_deploy_execution_time() -> None:
-    # Given
-    uses_validated_target = _green_main_uses_validated_target()
-    # When
-    commit = "commit = await remote.commit()"
-    # Then
-    assert uses_validated_target
-    assert commit in _source()
+    calls = _top_level_deploy_calls()
+    assert calls[0] == ["_release_context"]
+    assert calls[1] == ["_provider_request", "_build_source"]
+    assert calls[2] == ["cloudflare_pages"]
 
 
-def test_should_require_successful_dagger_run_for_exact_main() -> None:
+def test_should_delegate_exact_green_main_to_shared_foundation() -> None:
     source = _source()
-    assert "actions/workflows/dagger.yml/runs?head_sha={commit}" in source
-    assert 'select(.conclusion=="success")' in source
+    assert "dag.foundation().green_main(" in source
+    assert "github_token=github_token, repository=TARGET.repository" in source
+    assert "parse_release_evidence(await evidence.serialization())" in source
+    assert "actions/workflows/dagger.yml/runs?head_sha={commit}" not in source
+    assert 'select(.conclusion=="success")' not in source
 
 
 def test_should_build_the_exact_resolved_remote_tree() -> None:
     source = _source()
-    assert ".commit(commit_sha).tree(depth=0)" in source
-    assert "artifact = self._build_source(source, commit_sha)" in source
+    assert ".commit(commit_sha).tree(depth=0, include_tags=True)" in source
+    assert "self._build_source(context.source, context.commit_sha)" in source
 
 
 def test_should_mount_the_built_directory_without_exporting_it() -> None:
@@ -79,13 +69,21 @@ def test_should_mount_the_built_directory_without_exporting_it() -> None:
     assert "export(" not in source
 
 
-def test_should_disable_cloudflare_git_before_direct_upload() -> None:
+def test_should_delegate_only_after_shared_envelope_verification() -> None:
     source = _source()
     cloudflare = _cloudflare_source()
-    disable = "await self._disable_git_deployments"
-    upload = "await self._deploy_artifact"
-    assert disable in source
-    assert source.index(disable) < source.index(upload)
+    calls = _top_level_deploy_calls()
+    assert calls[3] == ["_verify_request_envelope"]
+    assert calls[4] == ["_provider_preflight"]
+    assert calls[5] == ["_provider_deploy"]
+    assert calls[7] == ["_provider_verify"]
+    assert "dag.foundation().envelope(" in source
+    assert "dag.foundation().verify_envelope(" in source
+    assert "dag.cloudflare_pages()" in source
+    assert "_disable_git_deployments" not in source
+    assert "_deploy_artifact" not in source
+    assert "_github_probe" not in source
+    assert '"wrangler-release.sh", "deploy"' not in source
     assert '"production_deployments_enabled":false' in cloudflare
     assert '"preview_deployment_setting":"none"' in cloudflare
     assert "curl -sS --config -" in cloudflare
@@ -93,13 +91,12 @@ def test_should_disable_cloudflare_git_before_direct_upload() -> None:
     assert 'curl -sS -H "Authorization' not in cloudflare
 
 
-def test_should_use_writable_api_response_scratch_paths() -> None:
-    source = _source()
-    cloudflare = _cloudflare_source()
-    assert "mktemp -d" in source
-    assert cloudflare.count("mktemp") == 2
-    assert re.search(r"/work(?:/|\b)", source) is None
-    assert re.search(r"/work(?:/|\b)", cloudflare) is None
+def test_should_require_provider_identity_before_local_live_verification() -> None:
+    calls = _top_level_deploy_calls()
+    assert calls[6] == ["_provider_identity"]
+    assert calls[8] == ["_provider_identity"]
+    assert calls[9] == ["_require_provider_identity"]
+    assert calls[10] == ["stdout", "_live_container"]
 
 
 def test_should_bound_exact_pages_api_verification() -> None:

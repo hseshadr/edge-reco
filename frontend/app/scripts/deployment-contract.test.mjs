@@ -114,35 +114,18 @@ async function runAgainstMock(base, mode = "verify") {
 	return execFile("sh", [CLOUDFLARE_RELEASE, mode], { env });
 }
 
-test("Dagger owns exact artifact deployment and every live verification", async () => {
+test("Dagger delegates the canonical Pages mutation while retaining local live verification", async () => {
 	const dagger = await readFile(DAGGER, "utf8");
 	const cloudflare = await readFile(CLOUDFLARE_RELEASE, "utf8");
 	const wrangler = await readFile(WRANGLER_RELEASE, "utf8");
-	assert.match(dagger, /with_directory\("\/artifact", artifact\)/u);
-	assert.match(dagger, /wrangler-release\.sh/u);
-	assert.match(dagger, /cloudflare-pages\.sh/u);
+	assert.match(dagger, /dag\.cloudflare_pages\(\)/u);
 	assert.match(dagger, /playwright\.live\.config\.ts/u);
+	assert.doesNotMatch(dagger, /async def _disable_git_deployments/u);
+	assert.doesNotMatch(dagger, /async def _deploy_artifact/u);
 	assert.doesNotMatch(wrangler, /pages deployment list/u);
 	assert.match(cloudflare, /curl -sS --config -/u);
 	assert.match(cloudflare, /--fail-with-body/u);
 	assert.doesNotMatch(cloudflare, /curl[^\n]*CLOUDFLARE_API_TOKEN/u);
-	const entrypoint = dagger.slice(
-		dagger.indexOf("async def deploy("),
-		dagger.indexOf("async def _disable_git_deployments"),
-	);
-	assert(
-		entrypoint.indexOf("_disable_git_deployments") <
-			entrypoint.indexOf("_deploy_artifact"),
-	);
-	const deployment = dagger.slice(
-		dagger.indexOf("async def _deploy_artifact"),
-		dagger.indexOf("def _github_probe"),
-	);
-	assert.match(deployment, /cloudflare-pages\.sh", "preflight"/u);
-	assert(
-		deployment.indexOf('cloudflare-pages.sh", "preflight"') <
-			deployment.indexOf('script, "deploy"'),
-	);
 });
 
 test("Dagger installs jq before running deployment contracts", async () => {
@@ -227,9 +210,28 @@ test("deployment preflight requires a successful raw result array", async () => 
 test("deploy workflow is only a pinned checkout and Dagger invocation", async () => {
 	const workflow = await readFile(WORKFLOW, "utf8");
 	assert.doesNotMatch(workflow, /^\s+run:/mu);
+	assert.match(
+		workflow,
+		/permissions:\n {2}contents: read\n {2}actions: read/u,
+	);
+	assert.doesNotMatch(
+		workflow,
+		/\b(?:id-token|packages|deployments): write\b/u,
+	);
+	assert.match(workflow, /workflow_run\.event == 'push'/u);
+	assert.match(workflow, /workflow_run\.conclusion == 'success'/u);
+	assert.match(workflow, /workflow_run\.head_branch == 'main'/u);
+	assert.match(
+		workflow,
+		/workflow_run\.head_repository\.full_name == github\.repository/u,
+	);
 	assert.match(workflow, /persist-credentials: false/u);
 	assert.match(workflow, /dagger\/dagger-for-github@[0-9a-f]{40}/u);
+	assert.match(workflow, /environment: production/u);
 	assert.match(workflow, /cloudflare-api-token=env:CLOUDFLARE_API_TOKEN/u);
+	assert.match(workflow, /cloudflare-account-id=env:CLOUDFLARE_ACCOUNT_ID/u);
+	assert.match(workflow, /github-token=env:GITHUB_TOKEN/u);
+	assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID): [^$]/u);
 });
 
 test("Wrangler is an exact repository dependency", async () => {

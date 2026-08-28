@@ -17,6 +17,11 @@
   ],
   "dependencies": [
     {
+      "name": "cloudflare-pages",
+      "source": "github.com/hseshadr/ci/modules/cloudflare-pages@2f4e5e67573be2c7a157871f40da48e187f30285",
+      "pin": "2f4e5e67573be2c7a157871f40da48e187f30285"
+    },
+    {
       "name": "foundation",
       "source": "github.com/hseshadr/ci/modules/portfolio-foundation@2f4e5e67573be2c7a157871f40da48e187f30285",
       "pin": "2f4e5e67573be2c7a157871f40da48e187f30285"
