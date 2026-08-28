@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import inspect
+import json
+import re
+import tomllib
 from pathlib import Path
 from typing import cast
 
@@ -10,6 +13,8 @@ import dagger
 import pytest
 
 from edge_reco.main import EdgeReco
+
+FOUNDATION_SHA = "2f4e5e67573be2c7a157871f40da48e187f30285"
 
 
 class RecordingWorkspace:
@@ -96,7 +101,7 @@ def test_should_reject_unvalidated_repository_override() -> None:
 
 def test_should_actionlint_yml_and_yaml() -> None:
     # Given
-    source = inspect.getsource(EdgeReco.workflow_security)
+    source = inspect.getsource(EdgeReco._legacy_workflow_security)
     # Then
     assert "*.yml" in source
     assert "*.yaml" in source
@@ -130,6 +135,40 @@ def test_should_run_bundled_codeql_code_scanning_queries() -> None:
 
 def test_should_not_commit_a_secret_shaped_gitleaks_canary() -> None:
     # Given
-    module_source = inspect.getsource(inspect.getmodule(EdgeReco))
+    module = inspect.getmodule(EdgeReco)
     # Then
+    assert module is not None
+    module_source = inspect.getsource(module)
     assert "ghp_" not in module_source
+
+
+def test_should_pin_foundation_to_literal_central_sha() -> None:
+    # Given
+    config = json.loads((Path(__file__).parents[2] / "dagger.json").read_text())
+    dependency = next(item for item in config.get("dependencies", ()) if item["name"] == "foundation")
+
+    # When
+    source = dependency["source"]
+    pin = dependency["pin"]
+
+    # Then
+    assert config["engineVersion"] == "v0.21.8"
+    assert source == f"github.com/hseshadr/ci/modules/portfolio-foundation@{FOUNDATION_SHA}"
+    assert pin == FOUNDATION_SHA
+    assert re.fullmatch(r"[0-9a-f]{40}", pin)
+
+
+def test_should_enforce_the_complete_dagger_quality_gate() -> None:
+    # Given
+    project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    tasks = project["tool"]["poe"]["tasks"]
+
+    # When
+    gate = tuple(tasks["gate"])
+
+    # Then
+    assert project["tool"]["coverage"]["run"]["branch"] is True
+    assert any(item.startswith("pytest-cov") for item in project["dependency-groups"]["dev"])
+    assert gate == ("lint", "typecheck", "complexity", "test", "branchrate")
+    assert "--cov-branch" in tasks["test"]
+    assert "--cov-fail-under=90" in tasks["test"]

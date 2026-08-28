@@ -265,8 +265,7 @@ def test_should_reject_mixed_case_checkout_without_credential_hardening(tmp_path
     # Given
     pinned = "a" * 40
     (tmp_path / "mixed-case.yaml").write_text(
-        "jobs:\n  audit:\n    steps:\n"
-        f"      - uses: Actions/Checkout@{pinned}\n",
+        f"jobs:\n  audit:\n    steps:\n      - uses: Actions/Checkout@{pinned}\n",
         encoding="utf-8",
     )
     # When
@@ -322,8 +321,7 @@ def test_should_allow_missing_steps_for_a_reusable_job(tmp_path: Path) -> None:
     # Given
     pinned = "a" * 40
     (tmp_path / "reusable.yaml").write_text(
-        "jobs:\n  audit:\n"
-        f"    uses: owner/repo/.github/workflows/security.yml@{pinned}\n",
+        f"jobs:\n  audit:\n    uses: owner/repo/.github/workflows/security.yml@{pinned}\n",
         encoding="utf-8",
     )
     # When
