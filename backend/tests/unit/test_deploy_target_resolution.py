@@ -7,23 +7,23 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[3]
 _MODULE = _ROOT / ".dagger" / "src" / "edge_reco" / "main.py"
-_CLOUDFLARE = _ROOT / ".dagger" / "scripts" / "cloudflare-pages.sh"
+_WRANGLER_RELEASE = _ROOT / "frontend" / "app" / "scripts" / "wrangler-release.sh"
 
 
 def _source() -> str:
     return _MODULE.read_text(encoding="utf-8")
 
 
-def _cloudflare_source() -> str:
-    return _CLOUDFLARE.read_text(encoding="utf-8")
+def _wrangler_release_source() -> str:
+    return _WRANGLER_RELEASE.read_text(encoding="utf-8")
 
 
-def _deploy_method() -> ast.AsyncFunctionDef:
+def _async_method(name: str) -> ast.AsyncFunctionDef:
     tree = ast.parse(_source())
     methods = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "deploy"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == name
     ]
     assert len(methods) == 1
     return methods[0]
@@ -37,12 +37,14 @@ def _call_attributes(statement: ast.stmt) -> list[str]:
     ]
 
 
-def _top_level_deploy_calls() -> list[list[str]]:
-    return [calls for statement in _deploy_method().body if (calls := _call_attributes(statement))]
+def _top_level_calls(name: str) -> list[list[str]]:
+    return [
+        calls for statement in _async_method(name).body if (calls := _call_attributes(statement))
+    ]
 
 
 def test_should_resolve_validated_target_at_deploy_execution_time() -> None:
-    calls = _top_level_deploy_calls()
+    calls = _top_level_calls("deploy")
     assert calls[0] == ["_release_context"]
     assert calls[1] == ["_provider_request", "_build_source"]
     assert calls[2] == ["cloudflare_pages"]
@@ -69,14 +71,19 @@ def test_should_mount_the_built_directory_without_exporting_it() -> None:
     assert "export(" not in source
 
 
+def test_should_not_retain_checkout_local_pages_mutation() -> None:
+    # Given / When
+    source = _wrangler_release_source()
+
+    # Then
+    assert "pages deploy /artifact" not in source
+
+
 def test_should_delegate_only_after_shared_envelope_verification() -> None:
     source = _source()
-    cloudflare = _cloudflare_source()
-    calls = _top_level_deploy_calls()
+    calls = _top_level_calls("deploy")
     assert calls[3] == ["_verify_request_envelope"]
-    assert calls[4] == ["_provider_preflight"]
-    assert calls[5] == ["_provider_deploy"]
-    assert calls[7] == ["_provider_verify"]
+    assert calls[4] == ["_deliver"]
     assert "dag.foundation().envelope(" in source
     assert "dag.foundation().verify_envelope(" in source
     assert "dag.cloudflare_pages()" in source
@@ -84,26 +91,14 @@ def test_should_delegate_only_after_shared_envelope_verification() -> None:
     assert "_deploy_artifact" not in source
     assert "_github_probe" not in source
     assert '"wrangler-release.sh", "deploy"' not in source
-    assert '"production_deployments_enabled":false' in cloudflare
-    assert '"preview_deployment_setting":"none"' in cloudflare
-    assert "curl -sS --config -" in cloudflare
-    assert "--fail-with-body" in cloudflare
-    assert 'curl -sS -H "Authorization' not in cloudflare
 
 
 def test_should_require_provider_identity_before_local_live_verification() -> None:
-    calls = _top_level_deploy_calls()
-    assert calls[6] == ["_provider_identity"]
-    assert calls[8] == ["_provider_identity"]
-    assert calls[9] == ["_require_provider_identity"]
-    assert calls[10] == ["stdout", "_live_container"]
-
-
-def test_should_bound_exact_pages_api_verification() -> None:
-    cloudflare = _cloudflare_source()
-    assert "?env=production" in cloudflare
-    assert ".deployment_trigger.metadata.commit_hash == $sha" in cloudflare
-    assert '.latest_stage.status == "success"' in cloudflare
-    assert "DEPLOY_VERIFY_TIMEOUT_SECONDS" in cloudflare
-    assert 'sleep "$delay"' in cloudflare
-    assert "exit 1" in cloudflare
+    delivery = _top_level_calls("_deliver")
+    deploy = _top_level_calls("deploy")
+    assert delivery[0] == ["_provider_preflight"]
+    assert delivery[1] == ["_provider_identity", "_provider_deploy"]
+    assert delivery[2] == ["_provider_identity", "_provider_verify"]
+    assert delivery[3] == ["_require_provider_identity"]
+    assert deploy[5] == ["stdout", "_live_container"]
+    assert deploy[6] == ["_deployment_result"]

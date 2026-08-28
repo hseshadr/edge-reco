@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from shlex import split as shell_split
 from typing import Final, Self, cast
 from uuid import UUID
@@ -15,12 +15,6 @@ from edge_reco.targets import EdgeRecoTarget
 
 PYTHON_IMAGE: Final = "python:3.13.14-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6"
 NODE_IMAGE: Final = "node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203"
-ACTIONLINT_IMAGE: Final = (
-    "rhysd/actionlint:1.7.10@sha256:ef8299f97635c4c30e2298f48f30763ab782a4ad2c95b744649439a039421e36"
-)
-GITLEAKS_IMAGE: Final = (
-    "ghcr.io/gitleaks/gitleaks:v8.29.1@sha256:aa036a2f4bdfe3cc3c55fa4326308efabb4a6be498c883c864fd1d0d5585438a"
-)
 CODEQL_IMAGE: Final = "ubuntu:24.04@sha256:353675e2a41babd526e2b837d7ec780c2a05bca0164f7ea5dbbd433d21d166fc"
 CODEQL_URL: Final = (
     "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.2/codeql-bundle-linux64.tar.zst"
@@ -36,7 +30,6 @@ CENTRAL_MODULE_SHA: Final = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
 DEPLOY_ROOT: Final = "dist"
 PAGES_DOMAINS: Final = ()
 SHA_LENGTH: Final = 40
-DIGEST_LENGTH: Final = 64
 CLOUDFLARE_PAGES_DEPLOYMENT_UUID_VERSION: Final = 4
 PREVIEW_ARGS: Final = tuple(shell_split("pnpm -C app exec vite preview --host --port 4173 --strictPort"))
 ASSAY_INSTALL: Final = tuple(
@@ -48,44 +41,8 @@ FIXTURE_DIR: Final = "../frontend/packages/edgeproc-browser/src/engine/__fixture
 SOURCE_EXCLUDES: Final = list(
     shell_split(".venv **/.venv **/node_modules **/dist **/coverage frontend/app/public/models frontend/app/public/ort")
 )
-GITLEAKS_SNAPSHOT: Final = tuple(shell_split("gitleaks detect --source /snapshot --no-git --redact --no-banner"))
-GITLEAKS_HISTORY: Final = tuple(shell_split("gitleaks detect --source /repo --log-opts=--all --redact --no-banner"))
-GUARD_MARKERS: Final = frozenset(("guard-canary-detected", "guard-snapshot-nonempty", "guard-history-verified"))
-WORKFLOW_SUFFIXES: Final = frozenset((".yml", ".yaml"))
-GUARD_EVIDENCE_KEYS: Final = frozenset(
-    (
-        "workflow_suffixes",
-        "actionlint",
-        "runtime_canary",
-        "snapshot_gitleaks",
-        "history_gitleaks",
-        "source_inventory",
-        "manifest",
-        "retains_git_history",
-        "commit_sha",
-    )
-)
 CODEQL_UPLOAD: Final = ("/opt/codeql/codeql", "github", "upload-results", "--github-auth-stdin")
 AUTH_PIPE: Final = 'printf "%s" "$GITHUB_TOKEN" | exec "$@"'
-
-
-class GuardParityError(ValueError):
-    """Raised when shared and legacy repository-guard semantics diverge."""
-
-
-@dataclass(frozen=True)
-class GuardEvidence:
-    """The security semantics that both repository-guard paths must prove."""
-
-    workflow_suffixes: frozenset[str]
-    actionlint: bool
-    runtime_canary: bool
-    snapshot_gitleaks: bool
-    history_gitleaks: bool
-    source_inventory: str
-    manifest: str
-    retains_git_history: bool
-    commit_sha: str
 
 
 @dataclass(frozen=True)
@@ -107,6 +64,14 @@ class ProviderRequest:
     producing_identity: str
     workflow_run_id: str
     run_attempt: int
+
+
+@dataclass(frozen=True)
+class ProviderIdentity:
+    """Non-secret provider identity safe to emit in hosted deployment logs."""
+
+    deployment_id: str
+    deployment_url: str
 
 
 def parse_release_evidence(serialization: str) -> tuple[str, str, int]:
@@ -170,184 +135,8 @@ def _valid_cloudflare_pages_deployment_id(value: str) -> bool:
     return identity.version == CLOUDFLARE_PAGES_DEPLOYMENT_UUID_VERSION and str(identity) == value
 
 
-def require_guard_parity(legacy: GuardEvidence, shared: GuardEvidence) -> None:
-    """Reject the first semantic difference between shadow guard evidence."""
-    for evidence_field in fields(GuardEvidence):
-        if getattr(legacy, evidence_field.name) != getattr(shared, evidence_field.name):
-            raise GuardParityError(f"legacy and shared guards disagree on {evidence_field.name}")
-
-
-def parse_guard_evidence(output: str) -> GuardEvidence:
-    """Deserialize complete observed evidence from one completed guard path."""
-    records = _evidence_records(output)
-    if frozenset(records) != GUARD_EVIDENCE_KEYS:
-        raise GuardParityError("guard evidence keys are incomplete or malformed")
-    return _guard_evidence_from_records(records)
-
-
-def _guard_evidence_from_records(records: dict[str, str]) -> GuardEvidence:
-    suffixes = frozenset(records["workflow_suffixes"].split(","))
-    if not _valid_guard_records(records, suffixes):
-        raise GuardParityError("guard evidence values are incomplete or malformed")
-    return _observed_guard_evidence(suffixes, records)
-
-
-def _observed_guard_evidence(suffixes: frozenset[str], records: dict[str, str]) -> GuardEvidence:
-    actionlint, canary, snapshot, history, retains_history = _stage_results(records)
-    return GuardEvidence(
-        suffixes,
-        actionlint,
-        canary,
-        snapshot,
-        history,
-        records["source_inventory"],
-        records["manifest"],
-        retains_history,
-        records["commit_sha"],
-    )
-
-
-def _evidence_records(output: str) -> dict[str, str]:
-    records: dict[str, str] = {}
-    for line in output.splitlines():
-        _add_evidence_record(records, line)
-    return records
-
-
-def _add_evidence_record(records: dict[str, str], line: str) -> None:
-    key, separator, value = line.partition("=")
-    if not all((separator, key, value)) or key in records:
-        raise GuardParityError("source evidence is malformed")
-    records[key] = value
-
-
-def _valid_guard_records(records: dict[str, str], suffixes: frozenset[str]) -> bool:
-    return _valid_suffixes(suffixes) and _completed_guard_stages(records) and _valid_source_records(records)
-
-
-def _valid_suffixes(suffixes: frozenset[str]) -> bool:
-    return bool(suffixes) and suffixes <= WORKFLOW_SUFFIXES
-
-
-def _valid_source_records(records: dict[str, str]) -> bool:
-    inventory = _is_digest(records["source_inventory"])
-    manifest = _is_digest(records["manifest"])
-    return inventory and manifest and _is_sha(records["commit_sha"])
-
-
-def _is_digest(value: str) -> bool:
-    return len(value) == DIGEST_LENGTH and all(character in "0123456789abcdef" for character in value)
-
-
-def _completed_guard_stages(records: dict[str, str]) -> bool:
-    stages = ("actionlint", "runtime_canary", "snapshot_gitleaks", "history_gitleaks", "retains_git_history")
-    return all(records[stage] == "passed" for stage in stages)
-
-
-def _stage_results(records: dict[str, str]) -> tuple[bool, bool, bool, bool, bool]:
-    return (
-        records["actionlint"] == "passed",
-        records["runtime_canary"] == "passed",
-        records["snapshot_gitleaks"] == "passed",
-        records["history_gitleaks"] == "passed",
-        records["retains_git_history"] == "passed",
-    )
-
-
 def _is_sha(value: str) -> bool:
     return len(value) == SHA_LENGTH and all(character in "0123456789abcdef" for character in value)
-
-
-EVIDENCE_RUNTIME_SCRIPT: Final = r"""
-import hashlib
-import os
-import stat
-
-ROOT = b"/snapshot"
-
-
-def frame(value):
-    return len(value).to_bytes(8, "big") + value
-
-
-def content_digest(path, entry):
-    if entry.is_symlink():
-        return hashlib.sha256(os.fsencode(os.readlink(path))).digest(), b"l"
-    if entry.is_file(follow_symlinks=False):
-        with open(path, "rb") as source:
-            return hashlib.file_digest(source, "sha256").digest(), b"f"
-    raise RuntimeError("unsupported source entry")
-
-
-def source_records(path=ROOT, relative=b""):
-    records = []
-    with os.scandir(path) as entries:
-        for entry in sorted(entries, key=lambda item: os.fsencode(item.name)):
-            name = os.fsencode(entry.name)
-            child_relative = relative + name
-            child_path = os.path.join(path, name)
-            if entry.is_dir(follow_symlinks=False):
-                records.extend(source_records(child_path, child_relative + b"/"))
-                continue
-            digest, kind = content_digest(child_path, entry)
-            mode = oct(stat.S_IMODE(entry.stat(follow_symlinks=False).st_mode)).encode()
-            inventory = frame(kind) + frame(child_relative) + frame(mode)
-            records.append((child_relative, inventory, inventory + frame(digest)))
-    return records
-
-
-def source_digests():
-    records = sorted(source_records(), key=lambda item: item[0])
-    inventory = b"".join(frame(record[1]) for record in records)
-    manifest = b"".join(frame(record[2]) for record in records)
-    return hashlib.sha256(inventory).hexdigest(), hashlib.sha256(manifest).hexdigest()
-
-
-def workflow_suffixes():
-    root = ROOT + b"/.github/workflows"
-    suffixes = set()
-    for directory, _, names in os.walk(root):
-        for name in names:
-            suffix = b".yaml" if name.endswith(b".yaml") else b".yml" if name.endswith(b".yml") else b""
-            if suffix:
-                suffixes.add(suffix.decode())
-    if not suffixes:
-        raise RuntimeError("no workflow files")
-    return ",".join(sorted(suffixes))
-
-
-def predecessor_records():
-    lines = open("/guard-proof", encoding="utf-8").read().splitlines()
-    records = {}
-    for line in lines:
-        key, separator, value = line.partition("=")
-        if not separator or not key or not value or key in records:
-            raise RuntimeError("malformed guard predecessor")
-        records[key] = value
-    expected = {
-        "actionlint", "runtime_canary", "snapshot_gitleaks",
-        "history_gitleaks", "retains_git_history", "commit_sha",
-    }
-    if set(records) != expected:
-        raise RuntimeError("unexpected guard predecessor")
-    return records
-
-
-def main():
-    if os.environ.get("DIGEST_ONLY") == "1":
-        inventory, manifest = source_digests()
-        print(f"inventory={inventory}")
-        print(f"manifest={manifest}")
-        return
-    evidence = predecessor_records()
-    inventory, manifest = source_digests()
-    evidence.update({"workflow_suffixes": workflow_suffixes(), "source_inventory": inventory, "manifest": manifest})
-    for key in sorted(evidence):
-        print(f"{key}={evidence[key]}")
-
-
-main()
-"""
 
 
 @object_type
@@ -413,44 +202,16 @@ class EdgeReco:
     @function
     @check
     async def workflow_security(self) -> dagger.Container:
-        """Validate every workflow with pinned actionlint."""
+        """Delegate the repository guard to the exact-SHA Foundation module."""
         source, commit_sha = await self._canonical_guard_source()
-        await self._require_shadow_parity(source, commit_sha)
-        return self._legacy_workflow_security(source)
-
-    def _legacy_workflow_security(self, source: dagger.Directory) -> dagger.Container:
-        """Retain the local actionlint behavior during shared-guard canarying."""
-        workflows = source.directory(".github/workflows")
-        return (
-            self._actionlint()
-            .with_directory("/repo/.github/workflows", workflows)
-            .with_exec(
-                [
-                    "sh",
-                    "-c",
-                    (
-                        "find .github/workflows -maxdepth 1 -type f \\( "
-                        '-name "*.yml" -o -name "*.yaml" \\) -exec actionlint {} +'
-                    ),
-                ]
-            )
-        )
+        return self._shared_guard(source, commit_sha)
 
     @function
     @check
     async def secret_scan(self) -> dagger.Container:
-        """Scan the snapshot and complete canonical Git history with Gitleaks."""
+        """Delegate snapshot and complete-history scanning to Foundation."""
         source, commit_sha = await self._canonical_guard_source()
-        await self._require_shadow_parity(source, commit_sha)
-        return self._legacy_secret_scan(source, commit_sha)
-
-    def _legacy_secret_scan(self, source: dagger.Directory, commit_sha: str) -> dagger.Container:
-        """Retain local canary, snapshot, and full-history Gitleaks behavior."""
-        history = dag.git(REPOSITORY_URL).commit(commit_sha).tree(depth=0, include_tags=True)
-        scan = self._gitleaks().with_directory("/snapshot", source)
-        scan = scan.with_exec(["sh", "/snapshot/.dagger/scripts/gitleaks-canary.sh"])
-        scan = scan.with_exec(list(GITLEAKS_SNAPSHOT)).with_directory("/repo", history)
-        return scan.with_exec(list(GITLEAKS_HISTORY))
+        return self._shared_guard(source, commit_sha)
 
     @function
     def build(self, commit_sha: str) -> dagger.Directory:
@@ -480,14 +241,10 @@ class EdgeReco:
     async def security(self) -> str:
         """Run every credentialless scheduled security check through Dagger."""
         source, commit_sha = await self._canonical_guard_source()
-        await self._require_shadow_parity(source, commit_sha)
-        legacy_workflows, legacy_secrets = self._legacy_guard(source, commit_sha)
         checks = cast(
             tuple[dagger.Container, ...],
             (
                 self._shared_guard(source, commit_sha),
-                legacy_workflows,
-                legacy_secrets,
                 self.backend_audit(),
                 self.frontend_audit(),
                 self.codeql(),
@@ -536,17 +293,28 @@ class EdgeReco:
         request = self._provider_request(self._build_source(context.source, context.commit_sha), context)
         provider = dag.cloudflare_pages()
         await self._verify_request_envelope(request)
-        await self._provider_preflight(provider, request, github_token, cloudflare_api_token, cloudflare_account_id)
-        created_deployment = self._provider_deploy(
-            provider, request, github_token, cloudflare_api_token, cloudflare_account_id
-        )
-        created = await self._provider_identity(created_deployment)
-        verified_deployment = self._provider_verify(
-            provider, request, github_token, cloudflare_api_token, cloudflare_account_id
-        )
-        verified = await self._provider_identity(verified_deployment)
+        identity = await self._deliver(provider, request, github_token, cloudflare_api_token, cloudflare_account_id)
+        live = await self._live_container(context.source, context.commit_sha).stdout()
+        return self._deployment_result(identity, live)
+
+    async def _deliver(
+        self,
+        provider: dagger.CloudflarePages,
+        request: ProviderRequest,
+        github_token: dagger.Secret,
+        token: dagger.Secret,
+        account: dagger.Secret,
+    ) -> ProviderIdentity:
+        await self._provider_preflight(provider, request, github_token, token, account)
+        created = await self._provider_identity(self._provider_deploy(provider, request, github_token, token, account))
+        verified = await self._provider_identity(self._provider_verify(provider, request, github_token, token, account))
         self._require_provider_identity(created, verified)
-        return await self._live_container(context.source, context.commit_sha).stdout()
+        return verified
+
+    @staticmethod
+    def _deployment_result(identity: ProviderIdentity, live: str) -> str:
+        evidence = f"provider deployment verified: id={identity.deployment_id} url={identity.deployment_url}"
+        return f"{evidence}\n{live}"
 
     def _build_source(self, source: dagger.Directory, commit_sha: str) -> dagger.Directory:
         self._require_sha(commit_sha)
@@ -571,139 +339,8 @@ class EdgeReco:
         return source, commit_sha
 
     def _shared_guard(self, source: dagger.Directory, commit_sha: str) -> dagger.Container:
-        """Build the generated exact-SHA foundation guard shadow."""
+        """Build the generated exact-SHA Foundation repository guard."""
         return dag.foundation().guard(source=source, repository=REPOSITORY, commit_sha=commit_sha)
-
-    def _legacy_guard(self, source: dagger.Directory, commit_sha: str) -> tuple[dagger.Container, dagger.Container]:
-        """Build both retained local security checks for shadow parity."""
-        return self._legacy_workflow_security(source), self._legacy_secret_scan(source, commit_sha)
-
-    async def _require_shadow_parity(self, source: dagger.Directory, commit_sha: str) -> None:
-        """Fail closed unless independently executed guard evidence agrees."""
-        legacy, shared = await self._guard_evidence_pair(source, commit_sha)
-        require_guard_parity(legacy, shared)
-
-    async def _guard_evidence_pair(
-        self, source: dagger.Directory, commit_sha: str
-    ) -> tuple[GuardEvidence, GuardEvidence]:
-        legacy = await self._legacy_evidence(source, commit_sha)
-        shared = await self._shared_evidence(source, commit_sha)
-        return legacy, shared
-
-    async def _legacy_evidence(self, source: dagger.Directory, commit_sha: str) -> GuardEvidence:
-        """Collect local evidence from its own actionlint and Gitleaks execution."""
-        history = self._guard_history(commit_sha)
-        guard = await self._validated_proof_guard(self._legacy_shadow_probe(source, history, commit_sha), commit_sha)
-        return await self._executed_evidence(guard, source, history, commit_sha)
-
-    async def _shared_evidence(self, source: dagger.Directory, commit_sha: str) -> GuardEvidence:
-        """Collect central evidence from the verified foundation binding and guard."""
-        bound_source = dag.foundation().source(source=source, repository=REPOSITORY, commit_sha=commit_sha)
-        history = self._guard_history(commit_sha)
-        guard = await self._validated_proof_guard(self._shared_guard(bound_source, commit_sha), commit_sha)
-        return await self._executed_evidence(guard, bound_source, history, commit_sha)
-
-    async def _executed_evidence(
-        self, guard: dagger.Container, source: dagger.Directory, history: dagger.Directory, commit_sha: str
-    ) -> GuardEvidence:
-        await guard.sync()
-        output = await self._evidence_runtime(guard, source, history, commit_sha).stdout()
-        return parse_guard_evidence(output)
-
-    async def _validated_proof_guard(self, guard: dagger.Container, commit_sha: str) -> dagger.Container:
-        await guard.sync()
-        self._guard_markers(await guard.stderr())
-        return self._proof_guard(guard, commit_sha)
-
-    @staticmethod
-    def _proof_guard(guard: dagger.Container, commit_sha: str) -> dagger.Container:
-        return guard.with_exec(["sh", "-ceu", EdgeReco._proof_command(commit_sha)])
-
-    @staticmethod
-    def _guard_markers(stderr: str) -> frozenset[str]:
-        markers = [line.strip() for line in stderr.splitlines() if line.strip().startswith("guard-")]
-        if frozenset(markers) != GUARD_MARKERS or len(markers) != len(GUARD_MARKERS):
-            raise GuardParityError("guard stage markers are incomplete or malformed")
-        return frozenset(markers)
-
-    def _guard_history(self, commit_sha: str) -> dagger.Directory:
-        self._require_sha(commit_sha)
-        return dag.git(REPOSITORY_URL).commit(commit_sha).tree(depth=0, include_tags=True)
-
-    def _legacy_shadow_probe(
-        self, source: dagger.Directory, history: dagger.Directory, commit_sha: str
-    ) -> dagger.Container:
-        actionlint = self._actionlint().file("/usr/local/bin/actionlint")
-        probe = self._gitleaks().with_file("/usr/local/bin/actionlint", actionlint)
-        probe = probe.with_directory("/snapshot", source).with_directory("/repo", history)
-        return probe.with_exec(["sh", "-ceu", self._legacy_evidence_command(commit_sha)])
-
-    def _evidence_runtime(
-        self, guard: dagger.Container, source: dagger.Directory, history: dagger.Directory, commit_sha: str
-    ) -> dagger.Container:
-        runtime = dag.container().from_(PYTHON_IMAGE).with_file("/guard-proof", guard.file("/guard-proof"))
-        runtime = runtime.with_directory("/snapshot", source).with_directory("/repo", history)
-        runtime = runtime.with_new_file("/evidence.py", EVIDENCE_RUNTIME_SCRIPT)
-        return runtime.with_exec(["python", "/evidence.py"])
-
-    @staticmethod
-    def _legacy_evidence_command(commit_sha: str) -> str:
-        EdgeReco._require_sha(commit_sha)
-        commands = EdgeReco._actionlint_evidence_commands() + EdgeReco._legacy_scan_commands(commit_sha)
-        return "\n".join(commands)
-
-    @staticmethod
-    def _actionlint_evidence_commands() -> tuple[str, ...]:
-        patterns = r"\( -name '*.yml' -o -name '*.yaml' \)"
-        return (
-            "test -d /snapshot/.github/workflows",
-            f'test -n "$(find /snapshot/.github/workflows -type f {patterns} -print -quit)"',
-            f"find /snapshot/.github/workflows -type f {patterns} -exec actionlint {{}} +",
-        )
-
-    @staticmethod
-    def _legacy_scan_commands(commit_sha: str) -> tuple[str, ...]:
-        history = EdgeReco._history_evidence_commands(commit_sha)
-        return (
-            "echo legacy-actionlint-passed >&2",
-            "sh /snapshot/.dagger/scripts/gitleaks-canary.sh",
-            "echo guard-canary-detected >&2",
-            'test -n "$(find /snapshot -type f -print -quit)"',
-            "echo guard-snapshot-nonempty >&2",
-            "gitleaks detect --source /snapshot --no-git --redact --no-banner",
-            *history,
-            "echo guard-history-verified >&2",
-            "gitleaks detect --source /repo --log-opts=--all --redact --no-banner",
-        )
-
-    @staticmethod
-    def _proof_command(commit_sha: str) -> str:
-        EdgeReco._require_sha(commit_sha)
-        records = EdgeReco._proof_records(commit_sha)
-        proof = "printf '%s\\n' " + " ".join(records) + " > /guard-proof"
-        lines = (*EdgeReco._history_evidence_commands(commit_sha), proof)
-        return "\n".join(lines)
-
-    @staticmethod
-    def _proof_records(commit_sha: str) -> tuple[str, ...]:
-        return (
-            "actionlint=passed",
-            "runtime_canary=passed",
-            "snapshot_gitleaks=passed",
-            "history_gitleaks=passed",
-            "retains_git_history=passed",
-            f"commit_sha={commit_sha}",
-        )
-
-    @staticmethod
-    def _history_evidence_commands(commit_sha: str) -> tuple[str, ...]:
-        return (
-            "test -d /repo/.git",
-            'test "$(git -C /repo rev-parse --is-shallow-repository)" = false',
-            f'test "$(git -C /repo rev-parse HEAD)" = {commit_sha}',
-            'test -n "$(git -C /repo rev-list --all)"',
-            "git -C /repo fsck --full --no-dangling",
-        )
 
     def _provider_request(self, artifact: dagger.Directory, context: ReleaseContext) -> ProviderRequest:
         """Create the closed central envelope and provider identity inputs."""
@@ -802,15 +439,25 @@ class EdgeReco:
         )
 
     @staticmethod
-    async def _provider_identity(evidence: dagger.CloudflarePagesDeploymentEvidence) -> str:
-        """Consume one exact deployment identity without repeating a mutation graph."""
-        return await evidence.deployment_id()
+    async def _provider_identity(evidence: dagger.CloudflarePagesDeploymentEvidence) -> ProviderIdentity:
+        """Consume exact non-secret deployment evidence without repeating a mutation."""
+        evidence_id = cast(dagger.CloudflarePagesDeploymentEvidenceID, await evidence.id())
+        stored = dag.load_cloudflare_pages_deployment_evidence_from_id(evidence_id)
+        deployment_id = await stored.deployment_id()
+        deployment_url = await stored.deployment_url()
+        return ProviderIdentity(deployment_id, deployment_url)
 
     @staticmethod
-    def _require_provider_identity(created: str, verified: str) -> None:
+    def _require_provider_identity(created: ProviderIdentity, verified: ProviderIdentity) -> None:
         """Reject missing or mismatched created and converged deployment identities."""
-        if not _valid_cloudflare_pages_deployment_id(created) or created != verified:
+        canonical_id = _valid_cloudflare_pages_deployment_id(created.deployment_id)
+        canonical_url = created.deployment_url == EdgeReco._provider_url(created.deployment_id)
+        if not canonical_id or not canonical_url or created != verified:
             raise ValueError("provider deployment identity differs from the exact release context")
+
+    @staticmethod
+    def _provider_url(deployment_id: str) -> str:
+        return f"https://{deployment_id[:8]}.{TARGET.project}.pages.dev"
 
     def _wrangler_base(self, source: dagger.Directory, artifact: dagger.Directory) -> dagger.Container:
         container = self._dependencies(source)
@@ -878,14 +525,6 @@ class EdgeReco:
     @staticmethod
     def _fixtures(source: dagger.Directory) -> dagger.Directory:
         return source.directory("frontend/packages/edgeproc-browser/src/engine/__fixtures__")
-
-    @staticmethod
-    def _actionlint() -> dagger.Container:
-        return dag.container().from_(ACTIONLINT_IMAGE).with_entrypoint([]).with_workdir("/repo")
-
-    @staticmethod
-    def _gitleaks() -> dagger.Container:
-        return dag.container().from_(GITLEAKS_IMAGE).with_entrypoint([])
 
     @staticmethod
     def _codeql() -> dagger.Container:
