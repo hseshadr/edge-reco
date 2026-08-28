@@ -323,8 +323,9 @@ class RecordingDag:
         return RecordingGit(self.events)
 
     def load_cloudflare_pages_deployment_evidence_from_id(
-        self, object_id: str
+        self, object_id: dagger.CloudflarePagesDeploymentEvidenceID
     ) -> dagger.CloudflarePagesDeploymentEvidence:
+        assert isinstance(object_id, dagger.CloudflarePagesDeploymentEvidenceID)
         self.events.append(f"load:{object_id}")
         return self.provider.load_evidence(object_id)
 
@@ -497,8 +498,9 @@ class GraphDag:
         return cast(dagger.File, object())
 
     def load_cloudflare_pages_deployment_evidence_from_id(
-        self, _object_id: str
+        self, _object_id: dagger.CloudflarePagesDeploymentEvidenceID
     ) -> dagger.CloudflarePagesDeploymentEvidence:
+        assert isinstance(_object_id, dagger.CloudflarePagesDeploymentEvidenceID)
         return cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
 
     def foundation(self) -> GraphFoundation:

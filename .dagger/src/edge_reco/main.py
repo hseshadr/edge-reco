@@ -401,7 +401,7 @@ class EdgeReco:
     @staticmethod
     async def _provider_identity(evidence: dagger.CloudflarePagesDeploymentEvidence) -> ProviderIdentity:
         """Consume exact non-secret deployment evidence without repeating a mutation."""
-        evidence_id = cast(dagger.CloudflarePagesDeploymentEvidenceID, await evidence.id())
+        evidence_id = dagger.CloudflarePagesDeploymentEvidenceID(await evidence.id())
         stored = dag.load_cloudflare_pages_deployment_evidence_from_id(evidence_id)
         deployment_id = await stored.deployment_id()
         deployment_url = await stored.deployment_url()
