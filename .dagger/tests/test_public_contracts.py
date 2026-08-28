@@ -21,7 +21,7 @@ import pytest
 import edge_reco.main as main_module
 from edge_reco.main import EdgeReco, parse_release_evidence
 
-FOUNDATION_SHA = "2f4e5e67573be2c7a157871f40da48e187f30285"
+FOUNDATION_SHA = "5f1854de5cd205f03e7a4a74177f321789f91843"
 VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
 MALFORMED_DEPLOYMENT_IDS = (
     " malformed ",
@@ -40,7 +40,7 @@ RECORDING_CLOUDFLARE_ACCOUNT = object()
 PRETRANSPORT_SOURCE = """\
 from dagger import dag, function, object_type
 
-SHA = "2f4e5e67573be2c7a157871f40da48e187f30285"
+SHA = "5f1854de5cd205f03e7a4a74177f321789f91843"
 COMMIT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 REPOSITORY = "hseshadr/edge-reco"
 
