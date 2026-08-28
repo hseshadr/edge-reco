@@ -13,6 +13,7 @@ from dagger import check, dag, field, function, object_type
 from edge_reco.targets import EdgeRecoTarget
 
 PYTHON_IMAGE: Final = "python:3.13.14-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6"
+UV_IMAGE: Final = "ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c"
 NODE_IMAGE: Final = "node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203"
 CODEQL_IMAGE: Final = "ubuntu:24.04@sha256:353675e2a41babd526e2b837d7ec780c2a05bca0164f7ea5dbbd433d21d166fc"
 CODEQL_URL: Final = (
@@ -269,6 +270,35 @@ class EdgeReco:
     async def verify_live(self, commit_sha: str) -> str:
         """Verify public identity, canonical routing, and zero-egress browser behavior."""
         return await self._live_container(self.source, commit_sha).stdout()
+
+    @function(cache="never")  # type: ignore[call-overload,untyped-decorator]  # SDK stub gap
+    async def scope_production_secrets(
+        self,
+        github_admin_token: dagger.Secret,
+        cloudflare_api_token: dagger.Secret,
+        cloudflare_account_id: dagger.Secret,
+    ) -> str:
+        """Relay existing Cloudflare credentials into the production environment."""
+        container = self._secret_scope_container(github_admin_token, cloudflare_api_token, cloudflare_account_id)
+        await container.sync()
+        return "production Cloudflare secret names scoped"
+
+    def _secret_scope_container(
+        self, github_admin_token: dagger.Secret, token: dagger.Secret, account: dagger.Secret
+    ) -> dagger.Container:
+        container = self._secret_scope_runtime()
+        container = container.with_secret_variable("GITHUB_ADMIN_TOKEN", github_admin_token)
+        container = container.with_secret_variable("CLOUDFLARE_API_TOKEN", token)
+        container = container.with_secret_variable("CLOUDFLARE_ACCOUNT_ID", account)
+        return container.with_exec(["uv", "run", "--no-sync", "python", "-m", "edge_reco.secret_scope"])
+
+    def _secret_scope_runtime(self) -> dagger.Container:
+        uv = dag.container().from_(UV_IMAGE).file("/uv")
+        sdk = dag.current_module().source().directory("sdk")
+        container = dag.container().from_(PYTHON_IMAGE).with_file("/usr/local/bin/uv", uv)
+        container = container.with_directory("/module", self.source.directory(".dagger"))
+        container = container.with_directory("/module/sdk", sdk).with_workdir("/module")
+        return container.with_exec(["uv", "sync", "--frozen", "--all-groups"])
 
     @function
     async def deploy(
