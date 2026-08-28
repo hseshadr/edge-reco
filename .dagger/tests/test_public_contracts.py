@@ -84,6 +84,17 @@ class RecordingWorkspace:
         return cast(dagger.Directory, object())
 
 
+class RecordingSyncContainer:
+    """Observe exactly one migration-container materialization."""
+
+    def __init__(self) -> None:
+        self.syncs = 0
+
+    async def sync(self) -> RecordingSyncContainer:
+        self.syncs += 1
+        return self
+
+
 class RecordingContainer:
     """Record the retained product-live boundary without invoking a browser."""
 
@@ -598,6 +609,39 @@ def test_should_require_typed_secrets_when_deploying_exact_artifact() -> None:
     }
     # Then
     assert set(secret_types.values()) == {dagger.Secret}
+
+
+def test_should_require_typed_secrets_when_scoping_production_credentials() -> None:
+    # Given
+    scope = inspect.signature(EdgeReco.scope_production_secrets, eval_str=True)
+
+    # When
+    secret_types = {
+        name: scope.parameters[name].annotation
+        for name in ("github_admin_token", "cloudflare_api_token", "cloudflare_account_id")
+    }
+
+    # Then
+    assert set(secret_types.values()) == {dagger.Secret}
+    assert scope.return_annotation is str
+
+
+def test_should_materialize_secret_scope_once_without_returning_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    edge_reco.source = cast(dagger.Directory, object())
+    container = RecordingSyncContainer()
+    secrets = tuple(cast(dagger.Secret, object()) for _ in range(3))
+    monkeypatch.setattr(edge_reco, "_secret_scope_container", lambda *_secrets: container, raising=False)
+
+    # When
+    result = asyncio.run(edge_reco.scope_production_secrets(*secrets))
+
+    # Then
+    assert result == "production Cloudflare secret names scoped"
+    assert container.syncs == 1
 
 
 def test_should_bind_edge_reco_repository_pages_and_domain() -> None:
