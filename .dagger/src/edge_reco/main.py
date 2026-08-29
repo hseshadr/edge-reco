@@ -25,9 +25,9 @@ REPOSITORY_URL: Final = f"https://github.com/{REPOSITORY}.git"
 UV_VERSION: Final = "0.11.32"
 PNPM_VERSION: Final = "11.5.0"
 CHECK_SHA: Final = "0000000000000000000000000000000000000000"
-CENTRAL_MODULE_SHA: Final = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
+CENTRAL_MODULE_SHA: Final = "068c3c08c4d342b3dc2784cdc3804f2b2d51d622"
 DEPLOY_ROOT: Final = "dist"
-PAGES_DOMAINS: Final = ()
+PAGES_DOMAINS: Final = ("www.edge-reco.com",)
 SHA_LENGTH: Final = 40
 PREVIEW_ARGS: Final = tuple(shell_split("pnpm -C app exec vite preview --host --port 4173 --strictPort"))
 ASSAY_INSTALL: Final = tuple(
@@ -37,7 +37,11 @@ PLAYWRIGHT_INSTALL: Final = tuple(shell_split("pnpm -C app exec playwright insta
 FIXTURES: Final = tuple(shell_split("search_parity cooccurrence_parity strategy_parity embedding_parity hybrid_parity"))
 FIXTURE_DIR: Final = "../frontend/packages/edgeproc-browser/src/engine/__fixtures__"
 SOURCE_EXCLUDES: Final = list(
-    shell_split(".venv **/.venv **/node_modules **/dist **/coverage frontend/app/public/models frontend/app/public/ort")
+    shell_split(
+        ".git .venv .dagger/.venv .dagger/sdk **/.venv **/.coverage "
+        "**/.mypy_cache **/.pytest_cache **/.ruff_cache **/__pycache__ "
+        "**/node_modules **/dist **/coverage frontend/app/public/models frontend/app/public/ort"
+    )
 )
 CODEQL_UPLOAD: Final = ("/opt/codeql/codeql", "github", "upload-results", "--github-auth-stdin")
 AUTH_PIPE: Final = 'printf "%s" "$GITHUB_TOKEN" | exec "$@"'
@@ -70,6 +74,25 @@ class ProviderIdentity:
 
     deployment_id: str
     deployment_url: str
+
+
+@dataclass(frozen=True)
+class ProviderCredentials:
+    """Typed secret bundle confined to the privileged deployment boundary."""
+
+    github_token: dagger.Secret
+    api_token: dagger.Secret
+    account_id: dagger.Secret
+
+
+@dataclass(frozen=True)
+class SarifUploadRequest:
+    """Typed SARIF upload identity and credential boundary."""
+
+    github_token: dagger.Secret
+    commit_sha: str
+    ref: str
+    repository: str
 
 
 def parse_release_evidence(serialization: str) -> tuple[str, str, int]:
@@ -142,61 +165,51 @@ class EdgeReco:
         return instance
 
     @function
-    @check
     def backend_quality(self) -> dagger.Container:
         """Run the strict Python gate with coverage and complexity floors."""
-        return self._python(self.source).with_exec(["uv", "run", "poe", "gate"])
+        return self._backend_quality(self.source)
 
     @function
-    @check
     def backend_audit(self) -> dagger.Container:
         """Audit the exact Python lock without vulnerability suppressions."""
-        return self._python(self.source).with_exec(["uv", "run", "poe", "audit"])
+        return self._backend_audit(self.source)
 
     @function
-    @check
     def parity(self) -> dagger.Container:
         """Regenerate and compare all Python-to-browser parity fixtures."""
-        container = self._python(self.source).with_directory("/baseline", self._fixtures(self.source))
-        for name in FIXTURES:
-            script = f"scripts/gen_{name.removesuffix('_parity')}_fixture.py"
-            container = container.with_exec(["uv", "run", "python", script])
-        return container.with_exec(["sh", "-ceu", self._parity_command()])
+        return self._parity(self.source)
 
     @function
-    @check
     def frontend_quality(self) -> dagger.Container:
         """Run frontend quality, artifact freshness, and production i18n."""
-        quality = self._frontend(self.source).with_exec(["apt-get", "update"])
-        quality = quality.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "curl", "jq"])
-        quality = quality.with_exec(["pnpm", "run", "gate:quality"])
-        quality = quality.with_exec(["cmp", self._relevance_path(), "/baseline/relevance.json"])
-        preview = self._preview(quality)
-        return quality.with_service_binding("preview", preview).with_exec(
-            ["node", "app/scripts/verify-i18n.mjs", "http://preview:4173"]
-        )
+        return self._frontend_quality(self.source)
 
     @function(name="browser")
-    @check
     def browser_e2e(self) -> dagger.Container:
         """Run storefront, real-model, offline, and cold-network browser proofs."""
-        return self._frontend(self.source).with_exec(["pnpm", "run", "gate:e2e"])
+        return self._browser_e2e(self.source)
 
     @function
-    @check
     def frontend_audit(self) -> dagger.Container:
         """Audit the exact pnpm lock without vulnerability suppressions."""
-        return self._node(self.source).with_exec(["pnpm", "audit"])
+        return self._frontend_audit(self.source)
 
     @function
     @check
+    async def ci(self, commit_sha: str) -> str:
+        """Run every product gate only after the exact caller source is guarded."""
+        source = await self._verified_source(self.source, commit_sha)
+        for product in self._product_checks(source):
+            await product.sync()
+        return "EdgeReco canonical Dagger gate passed"
+
+    @function
     async def workflow_security(self) -> dagger.Container:
         """Delegate the repository guard to the exact-SHA Foundation module."""
         source, commit_sha = await self._canonical_guard_source()
         return self._shared_guard(source, commit_sha)
 
     @function
-    @check
     async def secret_scan(self) -> dagger.Container:
         """Delegate snapshot and complete-history scanning to Foundation."""
         source, commit_sha = await self._canonical_guard_source()
@@ -216,7 +229,6 @@ class EdgeReco:
         )
 
     @function
-    @check
     def codeql(self) -> dagger.Container:
         """Run both official CodeQL analyses as a shadow gate before SARIF cutover."""
         return self._codeql_analysis(self.source)
@@ -256,14 +268,24 @@ class EdgeReco:
         repository: str = REPOSITORY,
     ) -> str:
         """Upload Dagger-generated SARIF after GitHub default setup is retired."""
-        container = self._codeql().with_directory("/src", self.source).with_workdir("/src")
-        container = container.with_directory("/sarif", self.codeql_sarif())
-        container = container.with_secret_variable("GITHUB_TOKEN", github_token)
+        source = await self._verified_source(self.source, commit_sha)
+        request = SarifUploadRequest(github_token, commit_sha, ref, repository)
+        return await self._upload_sarif(source, request)
+
+    async def _upload_sarif(self, source: dagger.Directory, request: SarifUploadRequest) -> str:
+        sarif = self._codeql_analysis(source).directory("/sarif")
+        container = self._codeql().with_directory("/src", source).with_workdir("/src")
+        container = container.with_directory("/sarif", sarif)
+        container = container.with_secret_variable("GITHUB_TOKEN", request.github_token)
         for language in ("javascript-typescript", "python"):
-            args = [*CODEQL_UPLOAD, f"--repository={repository}", f"--ref={ref}", f"--commit={commit_sha}"]
-            command = ["sh", "-ceu", AUTH_PIPE, "upload", *args, f"--sarif=/sarif/{language}.sarif"]
-            container = container.with_exec(command)
+            container = container.with_exec(self._codeql_upload_command(request, language))
         return await container.stdout()
+
+    @staticmethod
+    def _codeql_upload_command(request: SarifUploadRequest, language: str) -> list[str]:
+        args = [*CODEQL_UPLOAD, f"--repository={request.repository}", f"--ref={request.ref}"]
+        args.extend((f"--commit={request.commit_sha}", f"--sarif=/sarif/{language}.sarif"))
+        return ["sh", "-ceu", AUTH_PIPE, "upload", *args]
 
     @function
     async def verify_live(self, commit_sha: str) -> str:
@@ -271,18 +293,24 @@ class EdgeReco:
         return await self._live_container(self.source, commit_sha).stdout()
 
     @function
-    async def deploy(
+    async def deploy(  # noqa: PLR0913,PLR0917 -- generated CLI requires explicit typed inputs.
         self,
         cloudflare_api_token: dagger.Secret,
         cloudflare_account_id: dagger.Secret,
         github_token: dagger.Secret,
+        commit_sha: str,
+        workflow_run_id: str,
+        run_attempt: int,
     ) -> str:
-        """Deploy current green main and verify source, artifact, and live identity."""
-        context = await self._release_context(github_token)
+        """Deploy one exact protected attempt and verify provider and live identity."""
+        context = await self._release_context(commit_sha, workflow_run_id, run_attempt)
+        credentials = ProviderCredentials(github_token, cloudflare_api_token, cloudflare_account_id)
+        return await self._deploy_context(context, credentials)
+
+    async def _deploy_context(self, context: ReleaseContext, credentials: ProviderCredentials) -> str:
         request = self._provider_request(self._build_source(context.source, context.commit_sha), context)
         provider = dag.cloudflare_pages()
-        await self._verify_request_envelope(request)
-        identity = await self._deliver(provider, request, github_token, cloudflare_api_token, cloudflare_account_id)
+        identity = await self._deliver(provider, request, credentials)
         live = await self._live_container(context.source, context.commit_sha).stdout()
         return self._deployment_result(identity, live)
 
@@ -290,12 +318,9 @@ class EdgeReco:
         self,
         provider: dagger.CloudflarePages,
         request: ProviderRequest,
-        github_token: dagger.Secret,
-        token: dagger.Secret,
-        account: dagger.Secret,
+        credentials: ProviderCredentials,
     ) -> ProviderIdentity:
-        await self._provider_preflight(provider, request, github_token, token, account)
-        evidence = self._provider_deploy(provider, request, github_token, token, account)
+        evidence = self._provider_deploy(provider, request, credentials)
         return await self._provider_identity(evidence)
 
     @staticmethod
@@ -309,14 +334,19 @@ class EdgeReco:
         checked = built.with_exec(["pnpm", "-F", "frontend", "run", "test:artifacts"])
         return checked.directory("/src/frontend/app/dist")
 
-    async def _release_context(self, github_token: dagger.Secret) -> ReleaseContext:
-        """Resolve exact green evidence and bind its source before artifact construction."""
-        evidence = dag.foundation().green_main(github_token=github_token, repository=TARGET.repository)
-        commit_sha, workflow_run_id, run_attempt = parse_release_evidence(await evidence.serialization())
-        self._require_sha(commit_sha)
-        source = dag.git(REPOSITORY_URL).commit(commit_sha).tree(depth=0, include_tags=True)
-        bound = dag.foundation().source(source=source, repository=TARGET.repository, commit_sha=commit_sha)
+    async def _release_context(self, commit_sha: str, workflow_run_id: str, run_attempt: int) -> ReleaseContext:
+        """Bind the triggering checkout and its exact protected attempt."""
+        self._require_release_attempt(workflow_run_id, run_attempt)
+        bound = await self._verified_source(self.source, commit_sha)
         return ReleaseContext(bound, commit_sha, workflow_run_id, run_attempt)
+
+    async def _verified_source(self, source: dagger.Directory, commit_sha: str) -> dagger.Directory:
+        """Bind and guard one caller snapshot before any product evaluation."""
+        self._require_sha(commit_sha)
+        foundation = dag.foundation()
+        bound = foundation.source(source, REPOSITORY, commit_sha)
+        await foundation.guard(bound, REPOSITORY, commit_sha).sync()
+        return bound
 
     async def _canonical_guard_source(self) -> tuple[dagger.Directory, str]:
         """Fetch public EdgeReco bytes that can be bound to complete Git history."""
@@ -337,66 +367,20 @@ class EdgeReco:
         envelope = dag.foundation().envelope(packaged, consumer, producing, [DEPLOY_ROOT])
         return ProviderRequest(envelope, consumer, producing, context.workflow_run_id, context.run_attempt)
 
-    async def _verify_request_envelope(self, request: ProviderRequest) -> None:
-        """Require the central envelope verifier before every provider preflight."""
-        artifact = dag.foundation().verify_envelope(
-            request.envelope, request.consumer_identity, request.producing_identity, [DEPLOY_ROOT]
-        )
-        await artifact.digest()
-
-    async def _provider_preflight(
-        self,
-        provider: dagger.CloudflarePages,
-        request: ProviderRequest,
-        github_token: dagger.Secret,
-        token: dagger.Secret,
-        account: dagger.Secret,
-    ) -> None:
-        """Run the generated provider's non-cacheable read-only preflight."""
-        await provider.preflight(
-            request.envelope,
-            github_token,
-            token,
-            account,
-            request.workflow_run_id,
-            request.run_attempt,
-            TARGET.repository,
-            TARGET.project,
-            TARGET.branch,
-            TARGET.domain,
-            DEPLOY_ROOT,
-            list(PAGES_DOMAINS),
-            request.consumer_identity,
-            request.producing_identity,
-            [DEPLOY_ROOT],
-        )
-
+    # fmt: off
     def _provider_deploy(
-        self,
-        provider: dagger.CloudflarePages,
-        request: ProviderRequest,
-        github_token: dagger.Secret,
-        token: dagger.Secret,
-        account: dagger.Secret,
+        self, provider: dagger.CloudflarePages, request: ProviderRequest,
+        credentials: ProviderCredentials,
     ) -> dagger.CloudflarePagesDeploymentEvidence:
-        """Request one generated-provider mutation after preflight succeeds."""
+        """Request one generated-provider verified deployment transaction."""
         return provider.deploy(
-            request.envelope,
-            github_token,
-            token,
-            account,
-            request.workflow_run_id,
-            request.run_attempt,
-            TARGET.repository,
-            TARGET.project,
-            TARGET.branch,
-            TARGET.domain,
-            DEPLOY_ROOT,
-            list(PAGES_DOMAINS),
-            request.consumer_identity,
-            request.producing_identity,
-            [DEPLOY_ROOT],
+            request.envelope, credentials.github_token, credentials.api_token,
+            credentials.account_id, request.workflow_run_id, request.run_attempt,
+            TARGET.repository, TARGET.project, TARGET.branch, TARGET.domain,
+            DEPLOY_ROOT, list(PAGES_DOMAINS), request.consumer_identity,
+            request.producing_identity, [DEPLOY_ROOT],
         )
+    # fmt: on
 
     @staticmethod
     async def _provider_identity(evidence: dagger.CloudflarePagesDeploymentEvidence) -> ProviderIdentity:
@@ -436,6 +420,45 @@ class EdgeReco:
         base = dag.container().from_(PYTHON_IMAGE).with_exec(["apt-get", "update"])
         base = base.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "build-essential", "git"])
         return base.with_exec(["python", "-m", "pip", "install", f"uv=={UV_VERSION}"])
+
+    def _product_checks(self, source: dagger.Directory) -> tuple[dagger.Container, ...]:
+        return (
+            self._backend_quality(source),
+            self._backend_audit(source),
+            self._parity(source),
+            self._frontend_quality(source),
+            self._browser_e2e(source),
+            self._frontend_audit(source),
+            self._codeql_analysis(source),
+        )
+
+    def _backend_quality(self, source: dagger.Directory) -> dagger.Container:
+        return self._python(source).with_exec(["uv", "run", "poe", "gate"])
+
+    def _backend_audit(self, source: dagger.Directory) -> dagger.Container:
+        return self._python(source).with_exec(["uv", "run", "poe", "audit"])
+
+    def _parity(self, source: dagger.Directory) -> dagger.Container:
+        container = self._python(source).with_directory("/baseline", self._fixtures(source))
+        for name in FIXTURES:
+            script = f"scripts/gen_{name.removesuffix('_parity')}_fixture.py"
+            container = container.with_exec(["uv", "run", "python", script])
+        return container.with_exec(["sh", "-ceu", self._parity_command()])
+
+    def _frontend_quality(self, source: dagger.Directory) -> dagger.Container:
+        quality = self._frontend(source).with_exec(["apt-get", "update"])
+        packages = ["apt-get", "install", "-y", "--no-install-recommends", "curl", "jq"]
+        quality = quality.with_exec(packages).with_exec(["pnpm", "run", "gate:quality"])
+        quality = quality.with_exec(["cmp", self._relevance_path(), "/baseline/relevance.json"])
+        return quality.with_service_binding("preview", self._preview(quality)).with_exec(
+            ["node", "app/scripts/verify-i18n.mjs", "http://preview:4173"]
+        )
+
+    def _browser_e2e(self, source: dagger.Directory) -> dagger.Container:
+        return self._frontend(source).with_exec(["pnpm", "run", "gate:e2e"])
+
+    def _frontend_audit(self, source: dagger.Directory) -> dagger.Container:
+        return self._node(source).with_exec(["pnpm", "audit"])
 
     def _node(self, source: dagger.Directory, commit: str = CHECK_SHA) -> dagger.Container:
         base = dag.container().from_(NODE_IMAGE).with_exec(["corepack", "enable", "pnpm"])
@@ -496,6 +519,11 @@ class EdgeReco:
     def _require_sha(commit: str) -> None:
         if len(commit) != SHA_LENGTH or any(char not in "0123456789abcdef" for char in commit):
             raise ValueError("commit_sha must be a lowercase 40-character Git SHA")
+
+    @staticmethod
+    def _require_release_attempt(workflow_run_id: str, run_attempt: int) -> None:
+        if not _valid_release_attempt(workflow_run_id, run_attempt):
+            raise ValueError("workflow run identity is malformed")
 
     @staticmethod
     def _relevance_path() -> str:

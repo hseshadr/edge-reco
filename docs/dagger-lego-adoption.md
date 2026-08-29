@@ -4,7 +4,7 @@
 
 EdgeReco is the first—and currently the only—graduated consumer of the shared Dagger
 delivery modules. It pins both central modules to the literal commit
-`daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1`, delegates common guard and provider
+`068c3c08c4d342b3dc2784cdc3804f2b2d51d622`, delegates common guard and provider
 mechanics to them, and keeps only product-specific checks locally.
 
 The canary reached production at EdgeReco commit
@@ -23,7 +23,8 @@ cd edge-reco
 test "$(jq -r '.engineVersion' dagger.json)" = v0.21.8
 dagger develop
 uv sync --frozen --all-groups --directory .dagger
-DAGGER_NO_NAG=1 dagger check
+DAGGER_NO_NAG=1 dagger call ci \
+  --commit-sha="$(git rev-parse HEAD)"
 DAGGER_NO_NAG=1 dagger call release-preflight \
   --commit-sha="$(git rev-parse HEAD)"
 ```

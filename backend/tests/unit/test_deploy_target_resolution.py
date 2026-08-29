@@ -1,4 +1,4 @@
-"""The Dagger deploy function must resolve and release current green main."""
+"""The Dagger deploy function must release the exact protected trigger identity."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[3]
 _MODULE = _ROOT / ".dagger" / "src" / "edge_reco" / "main.py"
 _WRANGLER_RELEASE = _ROOT / "frontend" / "app" / "scripts" / "wrangler-release.sh"
+_DEPLOY_DOC = _ROOT / "docs" / "DEPLOY.md"
+_ADOPTION_DOC = _ROOT / "docs" / "dagger-lego-adoption.md"
 
 
 def _source() -> str:
@@ -43,25 +45,32 @@ def _top_level_calls(name: str) -> list[list[str]]:
     ]
 
 
-def test_should_resolve_validated_target_at_deploy_execution_time() -> None:
-    calls = _top_level_calls("deploy")
-    assert calls[0] == ["_release_context"]
-    assert calls[1] == ["_provider_request", "_build_source"]
-    assert calls[2] == ["cloudflare_pages"]
+def test_should_require_the_triggering_protected_run_identity() -> None:
+    deploy = _async_method("deploy")
+    parameters = [argument.arg for argument in deploy.args.args]
+
+    assert parameters[-3:] == ["commit_sha", "workflow_run_id", "run_attempt"]
 
 
-def test_should_delegate_exact_green_main_to_shared_foundation() -> None:
+def test_should_bind_the_triggering_checkout_before_building_product_bytes() -> None:
+    deploy = _top_level_calls("deploy")
+    delivery = _top_level_calls("_deploy_context")
+    assert deploy == [["_release_context"], ["_deploy_context"]]
+    assert delivery[0] == ["_provider_request", "_build_source"]
+    assert delivery[1] == ["cloudflare_pages"]
+
+
+def test_should_leave_green_run_validation_to_the_attempt_bound_provider() -> None:
     source = _source()
-    assert "dag.foundation().green_main(" in source
-    assert "github_token=github_token, repository=TARGET.repository" in source
-    assert "parse_release_evidence(await evidence.serialization())" in source
+    assert "dag.foundation().green_main(" not in source
+    assert "_verified_source(self.source, commit_sha)" in source
+    assert "ReleaseContext(bound, commit_sha, workflow_run_id, run_attempt)" in source
     assert "actions/workflows/dagger.yml/runs?head_sha={commit}" not in source
     assert 'select(.conclusion=="success")' not in source
 
 
-def test_should_build_the_exact_resolved_remote_tree() -> None:
+def test_should_build_the_exact_foundation_bound_trigger_tree() -> None:
     source = _source()
-    assert ".commit(commit_sha).tree(depth=0, include_tags=True)" in source
     assert "self._build_source(context.source, context.commit_sha)" in source
 
 
@@ -79,13 +88,11 @@ def test_should_not_retain_checkout_local_pages_mutation() -> None:
     assert "pages deploy /artifact" not in source
 
 
-def test_should_delegate_only_after_shared_envelope_verification() -> None:
+def test_should_delegate_the_closed_envelope_to_one_shared_provider_transaction() -> None:
     source = _source()
-    calls = _top_level_calls("deploy")
-    assert calls[3] == ["_verify_request_envelope"]
-    assert calls[4] == ["_deliver"]
+    calls = _top_level_calls("_deploy_context")
+    assert calls[2] == ["_deliver"]
     assert "dag.foundation().envelope(" in source
-    assert "dag.foundation().verify_envelope(" in source
     assert "dag.cloudflare_pages()" in source
     assert "_disable_git_deployments" not in source
     assert "_deploy_artifact" not in source
@@ -95,10 +102,24 @@ def test_should_delegate_only_after_shared_envelope_verification() -> None:
 
 def test_should_materialize_verified_provider_deploy_before_local_live_verification() -> None:
     delivery = _top_level_calls("_deliver")
-    deploy = _top_level_calls("deploy")
-    assert delivery[0] == ["_provider_preflight"]
-    assert delivery[1] == ["_provider_deploy"]
-    assert delivery[2] == ["_provider_identity"]
+    deploy = _top_level_calls("_deploy_context")
+    assert delivery[0] == ["_provider_deploy"]
+    assert delivery[1] == ["_provider_identity"]
     assert "_provider_verify" not in _source()
-    assert deploy[5] == ["stdout", "_live_container"]
-    assert deploy[6] == ["_deployment_result"]
+    assert deploy[3] == ["stdout", "_live_container"]
+    assert deploy[4] == ["_deployment_result"]
+
+
+def test_should_document_the_exact_trigger_attempt_delivery_contract() -> None:
+    deploy = " ".join(_DEPLOY_DOC.read_text(encoding="utf-8").split())
+    adoption = _ADOPTION_DOC.read_text(encoding="utf-8")
+
+    assert "exact triggering protected Dagger run" in deploy
+    assert "revalidates that attempt as the latest protected green `main` run" in deploy
+    assert "A manual dispatch" not in deploy
+    assert "manual runs" not in deploy
+    assert "current remote `main`" not in deploy
+    assert "`068c3c08c4d342b3dc2784cdc3804f2b2d51d622`" in adoption
+    assert "dagger call ci" in adoption
+    assert '--commit-sha="$(git rev-parse HEAD)"' in adoption
+    assert "DAGGER_NO_NAG=1 dagger check" not in adoption

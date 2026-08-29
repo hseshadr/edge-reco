@@ -146,33 +146,33 @@ SHA has passed the canonical gate.
 ### CI-driven deploy (GitHub Actions → Cloudflare Pages)
 
 `.github/workflows/deploy.yml` is a privilege-separated trigger: pinned checkout plus
-one pinned Dagger call. Dagger resolves the current remote `main`, requires that exact
-SHA's same-repository push run to be green, builds that remote tree into a typed
-`Directory`, validates it without credentials, passes the same directory to pinned
-Wrangler 4.x, verifies Cloudflare's authoritative Pages deployment metadata, and then
-drives the public site. A manual dispatch uses the same green-main guard and cannot
-bypass it.
+one pinned Dagger call. It accepts only a successful same-repository `main` push from
+the protected Dagger workflow, checks out that run's exact `head_sha`, and passes the
+exact triggering protected Dagger run SHA, run ID, and attempt to the typed deployment
+function. Foundation binds the caller snapshot to complete Git history and runs the
+shared guard before EdgeReco builds any product bytes. The central Cloudflare provider
+then verifies the closed artifact envelope and revalidates that attempt as the latest
+protected green `main` run before its credential preflight, direct upload, deployment
+convergence, and EdgeReco's public live proof.
 
 **It fails loudly when it cannot deploy.** Until the two repository secrets below
-exist, both automatic and manual runs stop at the credential guard with a red failure.
+exist, the automatic deployment stops with a red failure before upload.
 
-**It deploys `main` HEAD as of the moment it runs — not the commit that triggered it.**
-The Dagger function reads the remote Git ref and constructs the build from that exact
-remote commit tree; `wrangler --commit-hash` and every verification key off that SHA. The
-trigger's `workflow_run.head_sha` is a statement about the past. On 2026-08-08 three
-commits landed within ~30s, their gate runs finished out of order, and — because
-GitHub keeps only one pending run per concurrency group — the newest commit's deploy was
-cancelled while the oldest one's ran last and won. `edge-reco.com` served a stale commit
-with every run green. Resolving the target at execution time is what closes that.
+**It deploys only the commit that passed the protected gate and triggered this run.**
+The checkout, caller snapshot, Foundation source identity, provider green-run evidence,
+Wrangler commit hash, provider deployment evidence, and public `/build.json` must all
+agree on that SHA. If a newer `main` run becomes the latest protected green attempt
+before delivery reaches the provider boundary, the older attempt fails closed instead
+of racing a newer release.
 
-If `main` HEAD has no successful same-repository Dagger push run, the Dagger deployment
-fails closed before Cloudflare credentials are used. The next successful main gate
-creates a new deployment trigger, and serialized deploys never cancel an upload in
+If the triggering attempt is not the latest successful same-repository Dagger push run,
+the provider transaction fails closed before upload. The next successful main gate
+creates its own deployment trigger, and serialized deploys never cancel an upload in
 progress.
 
 So a green run means Wrangler uploaded the exact Dagger-built directory, Cloudflare
-reports a successful deployment whose
-`deployment_trigger.metadata.commit_hash` matches `main` HEAD, and the public, no-store
+reports a successful deployment whose `deployment_trigger.metadata.commit_hash`
+matches the triggering protected SHA, and the public, no-store
 `/build.json` artifact reports the same commit. The workflow does not depend on the incompatible Workers-style
 `source.config.commit_hash` field.
 
@@ -215,7 +215,7 @@ the generated noindex 404 rather than serving the root shell.
 Each Pages build also emits `/build.json` with the CI source commit, application
 version, and signed catalog manifest hash. It is served with `Cache-Control:
 no-store`; the deploy workflow compares its `commit` to the exact `EXPECTED_SHA`
-(`main` HEAD, as resolved from the remote at the start of the run) after Cloudflare
+passed from the protected triggering run after Cloudflare
 reports the Pages deployment as successful. This gives a public,
 machine-readable identity check without trusting a mutable README, an incompatible
 Workers-style source field, or an unversioned bundle pointer.

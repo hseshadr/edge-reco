@@ -43,6 +43,23 @@ def test_should_keep_unprivileged_dagger_checks_free_of_release_credentials() ->
     assert "security-events: write" not in job
 
 
+def test_should_bind_the_protected_dagger_job_to_the_exact_checkout_sha() -> None:
+    # Given / When
+    workflow = _load_workflow("dagger.yml")
+    steps = workflow["jobs"]["dagger"]["steps"]
+
+    # Then
+    assert steps[0]["with"] == {
+        "fetch-depth": 0,
+        "persist-credentials": False,
+        "ref": "${{ github.sha }}",
+    }
+    assert steps[1]["with"] == {
+        "version": "0.21.8",
+        "call": "ci --commit-sha=${{ github.sha }}",
+    }
+
+
 def test_should_project_sarif_only_from_the_fork_guarded_privileged_job() -> None:
     workflow = (_ROOT / ".github" / "workflows" / "dagger.yml").read_text(encoding="utf-8")
     assert "security-events: write" in workflow
@@ -51,18 +68,16 @@ def test_should_project_sarif_only_from_the_fork_guarded_privileged_job() -> Non
     assert "--github-token=env:GITHUB_TOKEN" in workflow
 
 
-def test_should_keep_scheduled_security_as_thin_dagger_ingress() -> None:
+def test_should_consolidate_manual_and_weekly_security_into_the_protected_dagger_job() -> None:
     # Given / When
-    workflow = _load_workflow("security-audit.yml")
-    steps = workflow["jobs"]["security"]["steps"]
+    workflow = _load_workflow("dagger.yml")
+    triggers = workflow[True]
 
     # Then
-    assert workflow[True] == {"workflow_dispatch": None, "schedule": [{"cron": "0 9 * * 1"}]}
+    assert triggers["workflow_dispatch"] is None
+    assert triggers["schedule"] == [{"cron": "0 9 * * 1"}]
     assert workflow["permissions"] == {"contents": "read"}
-    assert len(steps) == 2
-    assert steps[0]["with"] == {"fetch-depth": 0, "persist-credentials": False}
-    assert steps[1]["with"]["call"] == "security"
-    assert all("run" not in step for step in steps)
+    assert not (_ROOT / ".github" / "workflows" / "security-audit.yml").exists()
 
 
 def test_should_call_deploy_without_repository_override() -> None:
