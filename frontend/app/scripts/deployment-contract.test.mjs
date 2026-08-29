@@ -24,6 +24,13 @@ async function productionScripts(directory) {
 		.map(({ name }) => resolve(directory, name));
 }
 
+function assertDeployPermissions(workflow) {
+	assert.match(
+		workflow,
+		/permissions:\n {2}contents: read\n {2}actions: read\n {2}checks: read/u,
+	);
+}
+
 test("Dagger delegates Pages delivery while retaining local live verification", async () => {
 	const dagger = await readFile(DAGGER, "utf8");
 	const wrangler = await readFile(WRANGLER_RELEASE, "utf8");
@@ -38,8 +45,8 @@ test("Dagger delegates Pages delivery while retaining local live verification", 
 test("Dagger installs jq before running deployment contracts", async () => {
 	const dagger = await readFile(DAGGER, "utf8");
 	const quality = dagger.slice(
-		dagger.indexOf("def frontend_quality"),
-		dagger.indexOf("def browser_e2e"),
+		dagger.indexOf("def _frontend_quality"),
+		dagger.indexOf("def _browser_e2e"),
 	);
 	assert.match(quality, /apt-get[^\n]*install[^\n]*jq/u);
 });
@@ -57,10 +64,7 @@ test("every retained production script uses an existing or unique scratch path",
 test("deploy workflow is only a pinned checkout and Dagger invocation", async () => {
 	const workflow = await readFile(WORKFLOW, "utf8");
 	assert.doesNotMatch(workflow, /^\s+run:/mu);
-	assert.match(
-		workflow,
-		/permissions:\n {2}contents: read\n {2}actions: read/u,
-	);
+	assertDeployPermissions(workflow);
 	assert.doesNotMatch(
 		workflow,
 		/\b(?:id-token|packages|deployments): write\b/u,
@@ -73,12 +77,35 @@ test("deploy workflow is only a pinned checkout and Dagger invocation", async ()
 		/workflow_run\.head_repository\.full_name == github\.repository/u,
 	);
 	assert.match(workflow, /persist-credentials: false/u);
+	assert.match(
+		workflow,
+		/ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/u,
+	);
 	assert.match(workflow, /dagger\/dagger-for-github@[0-9a-f]{40}/u);
 	assert.match(workflow, /environment: production/u);
+	assert.match(
+		workflow,
+		/--commit-sha=\$\{\{ github\.event\.workflow_run\.head_sha \}\}/u,
+	);
+	assert.match(
+		workflow,
+		/--workflow-run-id=\$\{\{ github\.event\.workflow_run\.id \}\}/u,
+	);
+	assert.match(
+		workflow,
+		/--run-attempt=\$\{\{ github\.event\.workflow_run\.run_attempt \}\}/u,
+	);
 	assert.match(workflow, /cloudflare-api-token=env:CLOUDFLARE_API_TOKEN/u);
 	assert.match(workflow, /cloudflare-account-id=env:CLOUDFLARE_ACCOUNT_ID/u);
 	assert.match(workflow, /github-token=env:GITHUB_TOKEN/u);
 	assert.doesNotMatch(workflow, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID): [^$]/u);
+	assert.doesNotMatch(workflow, /workflow_dispatch:/u);
+});
+
+test("deploy permissions fail closed without protected-check visibility", async () => {
+	const workflow = await readFile(WORKFLOW, "utf8");
+	const insufficient = workflow.replace("  checks: read\n", "");
+	assert.throws(() => assertDeployPermissions(insufficient));
 });
 
 test("Wrangler is an exact repository dependency", async () => {

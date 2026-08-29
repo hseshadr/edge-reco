@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import inspect
 import json
@@ -21,7 +22,7 @@ import pytest
 import edge_reco.main as main_module
 from edge_reco.main import EdgeReco, parse_release_evidence
 
-FOUNDATION_SHA = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
+FOUNDATION_SHA = "068c3c08c4d342b3dc2784cdc3804f2b2d51d622"
 VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
 VALID_DEPLOYMENT_URL = "https://f621dc42.edge-reco.pages.dev"
 RECORDING_ENVELOPE = object()
@@ -31,7 +32,7 @@ RECORDING_CLOUDFLARE_ACCOUNT = object()
 PRETRANSPORT_SOURCE = """\
 from dagger import dag, function, object_type
 
-SHA = "daebff7ebf3e69a0361b90cd7b7a767c0e4b48e1"
+SHA = "068c3c08c4d342b3dc2784cdc3804f2b2d51d622"
 COMMIT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 REPOSITORY = "hseshadr/edge-reco"
 
@@ -48,7 +49,7 @@ class Pretransport:
         account = dag.set_secret("cloudflare-account", "synthetic-cloudflare-account")
         return await dag.cloudflare_pages().preflight(
             tampered, github, api, account, "123456", 2, REPOSITORY, "edge-reco", "main", "edge-reco.com",
-            "dist", [], f"{REPOSITORY}@{COMMIT}", f"{SHA}:123456", ["dist"],
+            "dist", ["www.edge-reco.com"], f"{REPOSITORY}@{COMMIT}", f"{SHA}:123456", ["dist"],
         )
 """
 
@@ -66,7 +67,7 @@ def _recording_provider_arguments() -> tuple[object, ...]:
         "main",
         "edge-reco.com",
         "dist",
-        [],
+        ["www.edge-reco.com"],
         "hseshadr/edge-reco@" + "a" * 40,
         FOUNDATION_SHA + ":123456",
         ["dist"],
@@ -82,6 +83,20 @@ class RecordingWorkspace:
     def directory(self, path: str, **_options: object) -> dagger.Directory:
         self.path = path
         return cast(dagger.Directory, object())
+
+
+class RecordingSync:
+    """Record evaluation of one lazy Dagger result."""
+
+    def __init__(self, name: str, events: list[str], error: Exception | None = None) -> None:
+        self.name = name
+        self.events = events
+        self.error = error
+
+    async def sync(self) -> None:
+        if self.error is not None:
+            raise self.error
+        self.events.append(self.name)
 
 
 class RecordingContainer:
@@ -228,75 +243,22 @@ class RecordingFoundation:
 
     def __init__(self, events: list[str]) -> None:
         self.events = events
+        self.bound = cast(dagger.Directory, "bound-source")
+        self.guard_error: Exception | None = None
+        self.calls: list[tuple[str, dagger.Directory, str, str]] = []
 
-    def green_main(self, **_arguments: object) -> RecordingGreenEvidence:
-        self.events.append("green-main")
-        return RecordingGreenEvidence(self.events)
-
-    def source(self, **_arguments: object) -> dagger.Directory:
+    def source(self, source: dagger.Directory, repository: str, commit_sha: str) -> dagger.Directory:
+        self.calls.append(("source", source, repository, commit_sha))
         self.events.append("source")
-        return cast(dagger.Directory, "bound-source")
+        return self.bound
+
+    def guard(self, source: dagger.Directory, repository: str, commit_sha: str) -> dagger.Container:
+        self.calls.append(("guard", source, repository, commit_sha))
+        return cast(dagger.Container, RecordingSync("guard", self.events, self.guard_error))
 
     def envelope(self, *_arguments: object) -> dagger.Directory:
         self.events.append("envelope")
         return cast(dagger.Directory, RECORDING_ENVELOPE)
-
-    def verify_envelope(self, *_arguments: object) -> RecordingEnvelope:
-        self.events.append("verify-envelope")
-        return RecordingEnvelope(self.events)
-
-
-class RecordingGreenEvidence:
-    """One non-cacheable foundation result represented by its serialization."""
-
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    async def serialization(self) -> str:
-        self.events.append("green-serialization")
-        return json.dumps(
-            {
-                "branch": "main",
-                "commit_sha": "a" * 40,
-                "repository": "hseshadr/edge-reco",
-                "run_attempt": 2,
-                "workflow_run_id": "123456",
-            }
-        )
-
-
-class RecordingEnvelope:
-    """Force the local envelope check before a fake provider can run."""
-
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    async def digest(self) -> str:
-        self.events.append("envelope-digest")
-        return "digest"
-
-
-class TamperedEnvelope(RecordingEnvelope):
-    """Fail closed before the generated provider can receive a tampered artifact."""
-
-    async def digest(self) -> str:
-        self.events.append("tampered-envelope-digest")
-        raise ValueError("envelope checksum mismatch")
-
-
-class RecordingGit:
-    """Bind a single exact source without accessing a live Git remote."""
-
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    def commit(self, _commit_sha: str) -> RecordingGit:
-        self.events.append("git-commit")
-        return self
-
-    def tree(self, **_arguments: object) -> dagger.Directory:
-        self.events.append("git-tree")
-        return cast(dagger.Directory, "fetched-source")
 
 
 class RecordingDag:
@@ -318,10 +280,6 @@ class RecordingDag:
     def foundation(self) -> RecordingFoundation:
         return self.foundation_client
 
-    def git(self, _repository: str) -> RecordingGit:
-        self.events.append("git")
-        return RecordingGit(self.events)
-
     def load_cloudflare_pages_deployment_evidence_from_id(
         self, object_id: dagger.CloudflarePagesDeploymentEvidenceID
     ) -> dagger.CloudflarePagesDeploymentEvidence:
@@ -337,17 +295,29 @@ class RecordingDirectory:
         return cast(dagger.Directory, RECORDING_ENVELOPE)
 
 
-class FailingPreflightProvider(RecordingProvider):
-    """Provider fake that proves a preflight failure blocks every later effect."""
+class FailingProviderTransaction(RecordingProvider):
+    """Provider fake that proves a shared transaction failure blocks live proof."""
 
-    async def preflight(self, *arguments: object) -> str:
+    def deploy(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
         self._require_exact_arguments(arguments)
-        self.events.append("preflight")
-        raise ValueError("preflight failed")
+        self.events.append("deploy")
+        raise ValueError("provider transaction failed")
 
 
-class RejectingRedundantVerifyProvider(RecordingProvider):
-    """Prove the consumer does not repeat verification already completed by deploy."""
+class TamperRejectingProvider(RecordingProvider):
+    """Model the central envelope verifier rejecting changed artifact bytes."""
+
+    def deploy(self, *arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
+        self._require_exact_arguments(arguments)
+        self.events.extend(("deploy", "provider-envelope-reject"))
+        raise ValueError("envelope checksum mismatch")
+
+
+class RejectingRedundantProviderStages(RecordingProvider):
+    """Prove the consumer uses only the central deploy transaction."""
+
+    async def preflight(self, *_arguments: object) -> str:
+        raise AssertionError("provider deploy already owns preflight")
 
     def verify(self, *_arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
         raise AssertionError("provider deploy evidence is already converged")
@@ -438,19 +408,13 @@ class GraphGitRepository:
 
 
 class GraphFoundation:
-    def green_main(self, **_arguments: object) -> RecordingGreenEvidence:
-        return RecordingGreenEvidence([])
-
-    def guard(self, **_arguments: object) -> dagger.Container:
+    def guard(self, *_arguments: object, **_options: object) -> dagger.Container:
         return cast(dagger.Container, GraphContainer())
 
-    def source(self, **_arguments: object) -> dagger.Directory:
+    def source(self, *_arguments: object, **_options: object) -> dagger.Directory:
         return cast(dagger.Directory, GraphDirectory())
 
     def envelope(self, *_arguments: object) -> dagger.Directory:
-        return cast(dagger.Directory, GraphDirectory())
-
-    def verify_envelope(self, *_arguments: object) -> dagger.Directory:
         return cast(dagger.Directory, GraphDirectory())
 
 
@@ -466,13 +430,7 @@ class GraphDeployment:
 
 
 class GraphCloudflarePages:
-    async def preflight(self, *_arguments: object) -> str:
-        return "preflight"
-
     def deploy(self, *_arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
-        return cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
-
-    def verify(self, *_arguments: object) -> dagger.CloudflarePagesDeploymentEvidence:
         return cast(dagger.CloudflarePagesDeploymentEvidence, GraphDeployment())
 
 
@@ -511,13 +469,10 @@ def _recording_edge_reco(
     monkeypatch: pytest.MonkeyPatch,
     events: list[str],
     provider: RecordingProvider,
-    envelope: RecordingEnvelope | None = None,
 ) -> EdgeReco:
     edge_reco = EdgeReco.__new__(EdgeReco)
     edge_reco.source = cast(dagger.Directory, "workspace")
     root = RecordingDag(events, provider)
-    if envelope is not None:
-        monkeypatch.setattr(root.foundation_client, "verify_envelope", lambda *_arguments: envelope)
     monkeypatch.setattr(main_module, "dag", root)
     monkeypatch.setattr(edge_reco, "_build_source", lambda *_arguments: _recorded_artifact(events))
     monkeypatch.setattr(edge_reco, "_live_container", lambda *_arguments: RecordingContainer(events))
@@ -567,6 +522,20 @@ def test_should_select_explicit_root_directory_when_module_is_constructed() -> N
     assert workspace.path == "/"
 
 
+def test_should_exclude_local_quality_artifacts_from_exact_source_binding() -> None:
+    # Given
+    generated = {
+        "**/.coverage",
+        "**/.mypy_cache",
+        "**/.pytest_cache",
+        "**/.ruff_cache",
+        "**/__pycache__",
+    }
+
+    # When / Then
+    assert generated <= set(main_module.SOURCE_EXCLUDES)
+
+
 def test_should_require_typed_workspace_when_module_is_constructed() -> None:
     # Given
     signature = inspect.signature(EdgeReco.create, eval_str=True)
@@ -575,6 +544,123 @@ def test_should_require_typed_workspace_when_module_is_constructed() -> None:
     # Then
     assert workspace is not None
     assert workspace.annotation is dagger.Workspace
+
+
+def test_should_expose_one_explicit_exact_sha_ci_entrypoint() -> None:
+    # Given / When
+    ci = inspect.signature(EdgeReco.ci, eval_str=True)
+
+    # Then
+    assert ci.parameters["commit_sha"].annotation is str
+    assert ci.return_annotation is str
+
+
+def test_should_expose_ci_as_the_only_automatic_check_entrypoint() -> None:
+    # Given / When
+    source = inspect.getsource(EdgeReco)
+
+    # Then
+    assert source.count("@check") == 1
+
+
+def test_should_keep_every_adapter_function_within_fifteen_physical_lines() -> None:
+    # Given
+    tree = ast.parse(inspect.getsource(main_module))
+
+    # When
+    oversized = {
+        node.name: node.end_lineno - node.lineno + 1
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+        and node.end_lineno is not None
+        and node.end_lineno - node.lineno + 1 > 15
+    }
+
+    # Then
+    assert oversized == {}
+
+
+def test_should_bind_guard_then_run_every_product_check_on_the_bound_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    events: list[str] = []
+    provider = RecordingProvider(events)
+    root = RecordingDag(events, provider)
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    edge_reco.source = cast(dagger.Directory, "caller-source")
+    products = tuple(RecordingSync(name, events) for name in ("quality", "audit"))
+    monkeypatch.setattr(main_module, "dag", root)
+    monkeypatch.setattr(edge_reco, "_product_checks", lambda _source: products)
+
+    # When
+    result = cast(str, asyncio.run(edge_reco.ci("a" * 40)))
+
+    # Then
+    assert result == "EdgeReco canonical Dagger gate passed"
+    assert events == ["source", "guard", "quality", "audit"]
+    assert root.foundation_client.calls == [
+        ("source", cast(dagger.Directory, "caller-source"), "hseshadr/edge-reco", "a" * 40),
+        ("guard", root.foundation_client.bound, "hseshadr/edge-reco", "a" * 40),
+    ]
+
+
+def test_should_stop_before_product_when_the_shared_guard_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    events: list[str] = []
+    root = RecordingDag(events, RecordingProvider(events))
+    root.foundation_client.guard_error = ValueError("shared guard rejected")
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    edge_reco.source = cast(dagger.Directory, "caller-source")
+    monkeypatch.setattr(main_module, "dag", root)
+    monkeypatch.setattr(
+        edge_reco,
+        "_product_checks",
+        lambda _source: (RecordingSync("product", events),),
+    )
+
+    # When / Then
+    with pytest.raises(ValueError, match="shared guard rejected"):
+        asyncio.run(edge_reco.ci("a" * 40))
+    assert events == ["source"]
+
+
+def test_should_keep_full_quality_security_and_parity_in_the_ci_product_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    source = cast(dagger.Directory, object())
+    events: list[str] = []
+    names = (
+        "backend-quality",
+        "backend-audit",
+        "parity",
+        "frontend-quality",
+        "browser",
+        "frontend-audit",
+        "codeql",
+    )
+    methods = (
+        "_backend_quality",
+        "_backend_audit",
+        "_parity",
+        "_frontend_quality",
+        "_browser_e2e",
+        "_frontend_audit",
+        "_codeql_analysis",
+    )
+    expected = tuple(RecordingSync(name, events) for name in names)
+    for method, product in zip(methods, expected, strict=True):
+        monkeypatch.setattr(edge_reco, method, lambda _source, item=product: item)
+
+    # When
+    actual = edge_reco._product_checks(source)
+
+    # Then
+    assert actual == expected
 
 
 def test_should_expose_typed_build_artifact_contract() -> None:
@@ -596,8 +682,12 @@ def test_should_require_typed_secrets_when_deploying_exact_artifact() -> None:
         name: deploy.parameters[name].annotation
         for name in ("cloudflare_api_token", "cloudflare_account_id", "github_token")
     }
+    identity_types = {
+        name: deploy.parameters[name].annotation for name in ("commit_sha", "workflow_run_id", "run_attempt")
+    }
     # Then
     assert set(secret_types.values()) == {dagger.Secret}
+    assert identity_types == {"commit_sha": str, "workflow_run_id": str, "run_attempt": int}
 
 
 def test_should_bind_edge_reco_repository_pages_and_domain() -> None:
@@ -611,6 +701,7 @@ def test_should_bind_edge_reco_repository_pages_and_domain() -> None:
     assert target.project == "edge-reco"
     assert target.branch == "main"
     assert target.domain == "edge-reco.com"
+    assert main_module.PAGES_DOMAINS == ("www.edge-reco.com",)
 
 
 def test_should_reject_mismatched_delivery_target_tuple() -> None:
@@ -669,10 +760,14 @@ def test_should_construct_every_retained_product_graph_with_typed_inputs(
     edge_reco.backend_quality(), edge_reco.backend_audit(), edge_reco.parity()
     edge_reco.frontend_quality(), edge_reco.browser_e2e(), edge_reco.frontend_audit()
     asyncio.run(edge_reco.workflow_security()), asyncio.run(edge_reco.secret_scan())
+    asyncio.run(edge_reco.ci("a" * 40))
     edge_reco.build("a" * 40), edge_reco.release_preflight("a" * 40), edge_reco.codeql()
     asyncio.run(edge_reco.security()), asyncio.run(edge_reco.codeql_upload(secret, "a" * 40))
     asyncio.run(edge_reco.verify_live("a" * 40))
-    deployment = cast(str, asyncio.run(edge_reco.deploy(secret, secret, secret)))
+    deployment = cast(
+        str,
+        asyncio.run(edge_reco.deploy(secret, secret, secret, "a" * 40, "123456", 2)),
+    )
 
     # Then
     assert edge_reco.codeql_sarif() is not None
@@ -744,7 +839,7 @@ def test_should_pin_cloudflare_pages_to_literal_central_sha() -> None:
 
 def test_should_delegate_canonical_provider_delivery_to_the_generated_client() -> None:
     # Given
-    deploy = inspect.getsource(EdgeReco.deploy)
+    deploy = inspect.getsource(EdgeReco.deploy) + inspect.getsource(EdgeReco._deploy_context)
 
     # When / Then
     assert "dag.cloudflare_pages" in deploy
@@ -797,6 +892,22 @@ def test_should_reject_malformed_serialized_green_main_evidence(evidence: str) -
         parse_release_evidence(evidence)
 
 
+@pytest.mark.parametrize(("workflow_run_id", "run_attempt"), (("0", 1), ("abc", 1), ("123", 0)))
+def test_should_reject_invalid_trigger_attempt_before_product_build(
+    monkeypatch: pytest.MonkeyPatch,
+    workflow_run_id: str,
+    run_attempt: int,
+) -> None:
+    # Given
+    edge_reco = EdgeReco.__new__(EdgeReco)
+    edge_reco.source = cast(dagger.Directory, GraphDirectory())
+    monkeypatch.setattr(main_module, "dag", GraphDag())
+
+    # When / Then
+    with pytest.raises(ValueError, match="workflow run identity"):
+        asyncio.run(edge_reco._release_context("a" * 40, workflow_run_id, run_attempt))
+
+
 def test_should_reject_noncanonical_sha_at_product_build_boundary() -> None:
     # Given
     edge_reco = EdgeReco.__new__(EdgeReco)
@@ -842,12 +953,12 @@ def test_should_materialize_the_verified_provider_deploy_once_when_reading_ident
     assert events.count("load:deploy-evidence") == 1
 
 
-def test_should_not_repeat_provider_verification_after_verified_deploy_evidence(
+def test_should_not_repeat_provider_preflight_or_verification_around_deploy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given
     events: list[str] = []
-    provider = RejectingRedundantVerifyProvider(events)
+    provider = RejectingRedundantProviderStages(events)
     edge_reco = _recording_edge_reco(monkeypatch, events, provider)
 
     # When
@@ -856,6 +967,7 @@ def test_should_not_repeat_provider_verification_after_verified_deploy_evidence(
     # Then
     assert VALID_DEPLOYMENT_ID in result and VALID_DEPLOYMENT_URL in result
     assert events.count("deploy") == 1
+    assert "preflight" not in events
 
 
 def test_should_reject_a_wrong_envelope_at_the_provider_boundary() -> None:
@@ -873,7 +985,7 @@ def test_should_reject_a_wrong_envelope_at_the_provider_boundary() -> None:
         "main",
         "edge-reco.com",
         "dist",
-        [],
+        ["www.edge-reco.com"],
         "hseshadr/edge-reco@" + "a" * 40,
         FOUNDATION_SHA + ":123456",
         ["dist"],
@@ -924,7 +1036,7 @@ def test_should_reject_wrong_provider_argument_at_every_generated_stage(
     assert events == []
 
 
-def test_should_order_shared_provider_mutation_after_local_envelope_verification(
+def test_should_order_shared_provider_mutation_after_source_guard_and_product_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given
@@ -937,19 +1049,12 @@ def test_should_order_shared_provider_mutation_after_local_envelope_verification
     # Then
     assert result == (f"provider deployment verified: id={VALID_DEPLOYMENT_ID} url={VALID_DEPLOYMENT_URL}\nlive proof")
     assert events == [
-        "green-main",
-        "green-serialization",
-        "git",
-        "git-commit",
-        "git-tree",
         "source",
+        "guard",
         "build",
         "directory",
         "envelope",
         "provider-client",
-        "verify-envelope",
-        "envelope-digest",
-        "preflight",
         "deploy",
         "materialize:created-evidence",
         "load:created-evidence",
@@ -959,17 +1064,17 @@ def test_should_order_shared_provider_mutation_after_local_envelope_verification
     ]
 
 
-def test_should_block_product_live_verification_when_provider_preflight_fails(
+def test_should_block_product_live_verification_when_provider_transaction_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given
     events: list[str] = []
-    edge_reco = _recording_edge_reco(monkeypatch, events, FailingPreflightProvider(events))
+    edge_reco = _recording_edge_reco(monkeypatch, events, FailingProviderTransaction(events))
 
     # When / Then
-    with pytest.raises(ValueError, match="preflight failed"):
+    with pytest.raises(ValueError, match="provider transaction failed"):
         asyncio.run(_deploy_with_fake_secrets(edge_reco))
-    assert events[-1] == "preflight"
+    assert events[-1] == "deploy"
 
 
 def test_should_reject_a_tampered_envelope_before_generated_provider_transport(
@@ -977,13 +1082,13 @@ def test_should_reject_a_tampered_envelope_before_generated_provider_transport(
 ) -> None:
     # Given
     events: list[str] = []
-    edge_reco = _recording_edge_reco(monkeypatch, events, RecordingProvider(events), TamperedEnvelope(events))
+    edge_reco = _recording_edge_reco(monkeypatch, events, TamperRejectingProvider(events))
 
     # When / Then
     with pytest.raises(ValueError, match="envelope checksum mismatch"):
         asyncio.run(_deploy_with_fake_secrets(edge_reco))
-    assert "preflight" not in events
-    assert "deploy" not in events
+    assert events[-2:] == ["deploy", "provider-envelope-reject"]
+    assert "provider-transport" not in events
     assert "live" not in events
 
 
@@ -991,7 +1096,7 @@ async def _deploy_with_fake_secrets(edge_reco: EdgeReco) -> str:
     token = cast(dagger.Secret, RECORDING_CLOUDFLARE_TOKEN)
     account = cast(dagger.Secret, RECORDING_CLOUDFLARE_ACCOUNT)
     github = cast(dagger.Secret, RECORDING_GITHUB_TOKEN)
-    deployment = cast(Awaitable[str], edge_reco.deploy(token, account, github))
+    deployment = cast(Awaitable[str], edge_reco.deploy(token, account, github, "a" * 40, "123456", 2))
     return await deployment
 
 

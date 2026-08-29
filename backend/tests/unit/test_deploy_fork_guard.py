@@ -263,9 +263,9 @@ def test_failed_ci_on_main_is_rejected() -> None:
     assert evaluate(GUARD, context) is False
 
 
-def test_manual_dispatch_is_still_accepted() -> None:
+def test_manual_dispatch_cannot_bypass_the_protected_dagger_run() -> None:
     context = Context(event_name="workflow_dispatch", repository=_THIS_REPO)
-    assert evaluate(GUARD, context) is True
+    assert evaluate(GUARD, context) is False
 
 
 def test_pre_fix_guard_accepted_the_fork_pull_request() -> None:
