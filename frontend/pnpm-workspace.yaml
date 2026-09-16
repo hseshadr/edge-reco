@@ -11,6 +11,10 @@ minimumReleaseAge: 0
 #
 # Both are pinned to their current major (<8) — a minimal security bump, not a
 # major upgrade:
+#   adm-zip: pin the onnxruntime-node transitive dependency to 0.6.1, which fixes
+#     GHSA-vwc7-r8mq-g2x9 (archive extraction follows destination symlinks and can
+#     overwrite arbitrary files). 0.6.1 is the first patched release and stays on
+#     the same 0.6 line used by the existing override.
 #   undici: jsdom@29.1.1 hard-requires undici's internal
 #     `lib/handler/wrap-handler.js`, which undici 8.x removed — an open `>=7.28.0`
 #     resolves to 8.x and breaks the jsdom test env. 7.28.0 (latest 7.x) clears all 6.
@@ -23,15 +27,18 @@ minimumReleaseAge: 0
 #     and 8.x carries its own live advisories (GHSA-jfj6-75fj-8934, and j3f2
 #     again through <=8.6.5). 7.6.5 is the patched 7.x line (npm `latest-7`).
 #   sharp: pin transitive sharp to the patched 0.35.x line. `app/package.json`
-#     already declares a direct `sharp: ^0.35.3` devDependency, but that does NOT
+#     already declares a direct `sharp: ^0.35.4` devDependency, but that does NOT
 #     force the NESTED copy pnpm resolves under `@huggingface/transformers`
 #     (declared `sharp: ^0.34.5`, capped below 0.35) — pnpm audit still flagged
-#     that path (app>@huggingface/transformers>sharp) with 4 HIGH libvips CVEs
-#     (2026-33327/33328/35590/35591, vulnerable <0.35.0). An explicit override is
-#     the only way to force that nested resolution onto the patched line too.
-#   fast-uri: floor raised to >=3.1.5 for GHSA-7p8r-x3mc-p8w7 / CVE-2026-18446
-#     (host confusion via a backslash authority delimiter, HIGH; patched in 3.1.5,
-#     2.4.4 and 4.1.2). This SUPERSEDES the earlier >=3.1.4 floor set for
+#     that path (app>@huggingface/transformers>sharp) with libvips CVEs. The floor
+#     is now 0.35.4 for GHSA-rgj7-g3m4-5g8c (libheif vulnerabilities; patched in
+#     0.35.4). An explicit override is the only way to force that nested resolution
+#     onto the patched line too. Bounded below 0.36 to avoid an unrelated upgrade.
+#   fast-uri: floor raised to >=3.1.6 for GHSA-5jgf-p345-68v8,
+#     GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, and GHSA-jqff-g426-hqxp (host
+#     confusion and SSRF variants; patched in 3.1.6). This supersedes the earlier
+#     >=3.1.5 floor for GHSA-7p8r-x3mc-p8w7 / CVE-2026-18446, which superseded
+#     the earlier >=3.1.4 floor set for
 #     GHSA-v2hh-gcrm-f6hx — same class of defect, and 3.1.4 turned out to still
 #     admit it, which is why the floor moves rather than the advisory being
 #     re-cited. Pulled in transitively via vite-plugin-pwa>workbox-build>
@@ -96,11 +103,11 @@ minimumReleaseAge: 0
 #     `require('nanoid')`. An open `>=3.3.18` overshoots to the 6.x line and breaks
 #     postcss outright. 3.x is the patched line postcss can actually consume.
 overrides:
-  adm-zip: "0.6.0"
+  adm-zip: "0.6.1"
   undici: ">=7.28.0 <8"
   protobufjs: ">=7.6.5 <8"
-  sharp: "^0.35.0"
-  fast-uri: ">=3.1.5 <4"
+  sharp: ">=0.35.4 <0.36"
+  fast-uri: ">=3.1.6 <4"
   postcss: ">=8.5.18 <9"
   brace-expansion: ">=5.0.9 <6"
   filelist: ">=2.0.2 <3"
