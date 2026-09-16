@@ -440,6 +440,8 @@ This attribution is *not* a license to the underlying content: the product listi
 
 ## Docs
 
+- [Interactive architecture map](docs/architecture/index.html) — evidence-linked runtime
+  flow in a fully offline viewer.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture, system context, request lifecycle (with diagrams).
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — clone → backend gate → frontend test → run the demo end to end.
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — backend-free vs edge-origin deployment patterns.

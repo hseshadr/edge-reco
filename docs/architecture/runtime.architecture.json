@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "EdgeReco — Signed Catalog to Local Discovery",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/hseshadr/edge-reco",
+      "revision": "1c32d329351f62bf47e425dc694baf5c21ef64cd"
+    },
+    "viewBox": [1390, 700],
+    "views": [
+      {
+        "id": "delivery-path",
+        "label": "Catalog delivery",
+        "focus": ["catalog_builder", "publisher", "static_origin", "sync_worker", "bundle_cache"],
+        "note": "The build host signs one content-addressed catalog that every browser can verify independently."
+      },
+      {
+        "id": "discovery-path",
+        "label": "On-device discovery",
+        "focus": ["bundle_cache", "runtime", "embedder_worker", "hybrid_engine", "nimbus_ui", "shopper"],
+        "note": "Keyword and semantic retrieval, fusion, and reranking run in the shopper's tab."
+      },
+      {
+        "id": "personalization",
+        "label": "Private personalization",
+        "focus": ["shopper", "nimbus_ui", "hybrid_engine", "taste_log"],
+        "note": "Interaction events rebuild a bounded local taste profile without entering the default network path."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "publisher",
+      "type": "backend",
+      "label": "Catalog Publisher",
+      "sublabel": "Build + sign",
+      "pos": [50, 320],
+      "size": [125, 72],
+      "sources": [{ "path": "backend/src/edgereco/catalog/publish.py", "line": 1, "end_line": 28, "label": "Bundle producer" }]
+    },
+    {
+      "id": "static_origin",
+      "type": "cloud",
+      "label": "Static Bundle Origin",
+      "sublabel": "Manifest + chunks",
+      "pos": [200, 320],
+      "size": [130, 72],
+      "sources": [{ "path": "docs/ARCHITECTURE.md", "line": 23, "end_line": 57, "label": "System context" }]
+    },
+    {
+      "id": "sync_worker",
+      "type": "security",
+      "label": "Verify + Sync Worker",
+      "sublabel": "Signed + hashed",
+      "tag": "fail closed",
+      "pos": [355, 320],
+      "size": [130, 72],
+      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/runtime.ts", "line": 1, "end_line": 15, "label": "Worker runtime" }]
+    },
+    {
+      "id": "bundle_cache",
+      "type": "database",
+      "label": "OPFS CAS Cache",
+      "sublabel": "Local bundle cache",
+      "pos": [510, 320],
+      "size": [130, 72],
+      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/opfsStore.ts", "line": 1, "end_line": 20, "label": "Content-addressed store" }]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "EngineRuntime",
+      "sublabel": "Bundle lifecycle",
+      "pos": [665, 320],
+      "size": [130, 72],
+      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/runtime.ts", "line": 213, "end_line": 252, "label": "Browser runtime" }]
+    },
+    {
+      "id": "hybrid_engine",
+      "type": "backend",
+      "label": "Hybrid Search Engine",
+      "sublabel": "BM25 + vector RRF",
+      "pos": [820, 320],
+      "size": [130, 72],
+      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/searchEngine.ts", "line": 1, "end_line": 17, "label": "Discovery pipeline" }]
+    },
+    {
+      "id": "nimbus_ui",
+      "type": "frontend",
+      "label": "Nimbus Storefront",
+      "sublabel": "Search + recommend",
+      "pos": [975, 320],
+      "size": [130, 72],
+      "sources": [{ "path": "frontend/app/src/App.tsx", "line": 19, "end_line": 65, "label": "Launch and storefront" }]
+    },
+    {
+      "id": "shopper",
+      "type": "external",
+      "label": "Shopper",
+      "sublabel": "Taste signals",
+      "pos": [1130, 323],
+      "size": [125, 66],
+      "sources": [{ "path": "README.md", "line": 1, "end_line": 17, "label": "Product experience" }]
+    },
+    {
+      "id": "catalog_builder",
+      "type": "backend",
+      "label": "Catalog Build",
+      "sublabel": "Catalog + vectors",
+      "pos": [50, 80],
+      "size": [125, 66],
+      "sources": [{ "path": "docs/ARCHITECTURE.md", "line": 157, "end_line": 173, "label": "Python build side" }]
+    },
+    {
+      "id": "embedder_worker",
+      "type": "backend",
+      "label": "MiniLM Worker",
+      "sublabel": "ONNX embedding",
+      "pos": [820, 80],
+      "size": [130, 66],
+      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/embedderWorker.ts", "line": 1, "end_line": 13, "label": "Model worker" }]
+    },
+    {
+      "id": "taste_log",
+      "type": "database",
+      "label": "Local Taste Log",
+      "sublabel": "Local taste log",
+      "pos": [820, 535],
+      "size": [130, 66],
+      "sources": [{ "path": "frontend/app/src/signals/tasteLog.ts", "line": 1, "end_line": 27, "label": "Private event store" }]
+    }
+  ],
+  "connections": [
+    { "id": "publisher_serves", "from": "publisher", "to": "static_origin", "label": "signed bundle", "variant": "emphasis", "labelAt": [188, 415] },
+    { "id": "origin_delivers", "from": "static_origin", "to": "sync_worker", "label": "immutable bytes", "labelAt": [343, 415] },
+    { "id": "sync_promotes", "from": "sync_worker", "to": "bundle_cache", "label": "verified chunks", "variant": "security", "labelAt": [498, 415] },
+    { "id": "cache_materializes", "from": "bundle_cache", "to": "runtime", "label": "bundle files", "labelAt": [653, 415] },
+    { "id": "runtime_builds", "from": "runtime", "to": "hybrid_engine", "label": "typed indexes", "variant": "emphasis", "labelAt": [808, 415] },
+    { "id": "engine_ranks", "from": "hybrid_engine", "to": "nimbus_ui", "label": "ranked products", "variant": "emphasis", "labelAt": [963, 415] },
+    { "id": "ui_serves", "from": "nimbus_ui", "to": "shopper", "label": "local results", "variant": "emphasis", "labelAt": [1118, 415] },
+    { "id": "builder_stages", "from": "catalog_builder", "to": "publisher", "label": "staged artifacts", "fromSide": "bottom", "toSide": "top", "labelAt": [113, 235] },
+    { "id": "embedder_feeds", "from": "embedder_worker", "to": "hybrid_engine", "label": "query vector", "fromSide": "bottom", "toSide": "top", "labelAt": [885, 235] },
+    { "id": "taste_personalizes", "from": "taste_log", "to": "hybrid_engine", "label": "session profile", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelAt": [885, 475] }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "One signed delivery substrate",
+      "items": ["Immutable chunks are named by SHA-256", "The browser verifies before it materializes any index"]
+    },
+    {
+      "dot": "cyan",
+      "title": "Discovery runs on the device",
+      "items": ["BM25 and semantic candidates fuse with Reciprocal Rank Fusion", "Session-aware reranking returns directly to Nimbus"]
+    },
+    {
+      "dot": "emerald",
+      "title": "Personalization stays private",
+      "items": ["The default request path has no recommendation backend", "A bounded local taste log rebuilds the browser profile"]
+    }
+  ]
+}
