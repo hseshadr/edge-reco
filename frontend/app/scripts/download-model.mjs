@@ -2,9 +2,9 @@
 // depends on huggingface.co at runtime (house standard §8.1b — the aml-filter
 // download-model mechanism, adapted).
 //
-// The in-browser engine (@edgeproc/browser) embeds the query with the
+// The in-browser engine (@edgereco/browser) embeds the query with the
 // transformers.js model `Xenova/all-MiniLM-L6-v2`. In the browser the pipeline
-// pins `dtype: "q8"` (see packages/edgeproc-browser/src/engine/embedder.ts), so
+// pins `dtype: "q8"` (see packages/edgereco-browser/src/engine/embedder.ts), so
 // it requests `onnx/model_quantized.onnx` (~23 MB). With
 // `env.allowLocalModels = true` + `env.localModelPath = "/models/"`,
 // transformers.js resolves every file as

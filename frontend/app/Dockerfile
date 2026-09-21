@@ -3,10 +3,8 @@
 # The SPA is backend-free: it syncs the signed bundle from the Caddy edge and
 # runs the engine entirely in the browser. There is no API server.
 #
-# Build context: the pnpm-WORKSPACE ROOT (frontend/), because the SPA depends on
-# the in-repo @edgeproc/browser workspace package (frontend/packages/
-# edgeproc-browser) and the lockfile lives at the root. Built via docker compose
-# with `context: .` + `dockerfile: app/Dockerfile`.
+# Build context: `frontend/`. The shared browser substrate is installed from the
+# exact public Git commit pinned in the workspace manifests and lockfile.
 #
 # VITE_BUNDLE_BASE_URL is baked at BUILD time (Vite inlines import.meta.env at
 # compile). It must be the origin the BROWSER reaches — i.e. the host-mapped
@@ -22,14 +20,15 @@ FROM node:24.16.0-slim AS build
 # package.json's "packageManager" field.
 RUN corepack enable
 
-WORKDIR /workspace
+WORKDIR /workspace/frontend
 
 # Install deps first (better layer caching): copy the workspace manifests + the
 # root lockfile + the pnpm workspace config, then `pnpm install` resolves the
 # whole workspace (app + package).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY app/package.json ./app/package.json
-COPY packages/edgeproc-browser/package.json ./packages/edgeproc-browser/package.json
+COPY packages/edgereco-browser/package.json ./packages/edgereco-browser/package.json
+
 RUN pnpm install --frozen-lockfile
 
 # Bring in the full workspace sources (the package is consumed as TS by Vite).
@@ -45,7 +44,7 @@ ENV VITE_BUNDLE_BASE_URL=${VITE_BUNDLE_BASE_URL}
 ARG VITE_EVENTS_URL=
 ENV VITE_EVENTS_URL=${VITE_EVENTS_URL}
 
-# Build only the SPA workspace; it resolves @edgeproc/browser via the workspace link.
+# Build only the SPA workspace; it resolves @edgereco/browser via the workspace link.
 # The workspace member is named "frontend" in app/package.json so `-F frontend` works.
 RUN pnpm -F frontend run build
 
@@ -57,7 +56,7 @@ FROM node:24.16.0-slim AS serve
 WORKDIR /app
 RUN npm install -g serve@14
 
-COPY --from=build /workspace/app/dist ./dist
+COPY --from=build /workspace/frontend/app/dist ./dist
 
 EXPOSE 5174
 

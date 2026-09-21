@@ -1141,3 +1141,7 @@ def test_should_enforce_the_complete_dagger_quality_gate() -> None:
     assert gate == ("lint", "typecheck", "complexity", "test", "branchrate")
     assert "--cov-branch" in tasks["test"]
     assert "--cov-fail-under=90" in tasks["test"]
+
+
+def test_should_compare_relevance_from_the_product_browser_package() -> None:
+    assert EdgeReco._relevance_path() == ("packages/edgereco-browser/src/engine/__fixtures__/relevance_export.json")

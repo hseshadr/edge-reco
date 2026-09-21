@@ -1,4 +1,4 @@
-import type { BootStage } from "@edgeproc/browser";
+import type { BootStage } from "@edgereco/browser";
 import {
 	type ReactNode,
 	useCallback,
@@ -16,6 +16,24 @@ import { OfflineBadge } from "./components/OfflineBadge";
 import { Storefront } from "./components/Storefront";
 import { record } from "./metrics/store";
 
+const DEMO_LAUNCHED_KEY = "edgereco-demo-launched";
+
+function launchedInThisTab(): boolean {
+	try {
+		return sessionStorage.getItem(DEMO_LAUNCHED_KEY) === "1";
+	} catch {
+		return false;
+	}
+}
+
+function rememberLaunch(): void {
+	try {
+		sessionStorage.setItem(DEMO_LAUNCHED_KEY, "1");
+	} catch {
+		// A locked-down browser can still launch; it just cannot resume after reload.
+	}
+}
+
 /**
  * App is the launch gate. It first shows the Landing intro and starts NOTHING —
  * the engine stays cold until the user clicks Launch. On launch it spins up the
@@ -25,7 +43,7 @@ import { record } from "./metrics/store";
  * near-instant + offline-ready (OPFS holds the bundle, the service worker the app shell + model).
  */
 export function App() {
-	const [launched, setLaunched] = useState(false);
+	const [launched, setLaunched] = useState(launchedInThisTab);
 	const [stage, setStage] = useState<BootStage | null>(null);
 	const [ready, setReady] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -54,7 +72,10 @@ export function App() {
 	}, [launched, attempt]);
 
 	const onRetry = useCallback(() => setAttempt((n) => n + 1), []);
-	const onLaunch = useCallback(() => setLaunched(true), []);
+	const onLaunch = useCallback(() => {
+		rememberLaunch();
+		setLaunched(true);
+	}, []);
 
 	let screen: ReactNode;
 	if (!launched) {

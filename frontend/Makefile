@@ -6,7 +6,7 @@
 #   docker compose up --build          # fully containerized (Docker only), one command
 #
 # Iterate on the SPA locally:
-#   make install   # one-time: pnpm workspace deps (app + @edgeproc/browser)
+#   make install   # one-time: pnpm workspace deps (app + @edgereco/browser)
 #   make edge      # serve the signed bundle from the Caddy edge (:8081)
 #   make app       # Vite dev server on localhost:5174 (syncs from the edge)
 #   make dev       # edge + app together
@@ -28,14 +28,14 @@ help: ## Show this help.
 	@echo "Nimbus frontend (backend-free) targets:"
 	@echo "  cd ../backend && uv run poe demo   turnkey: edge + SPA + opens your browser"
 	@echo "  docker compose up --build   the whole showcase, one command"
-	@echo "  make install   pnpm install (workspace: app + @edgeproc/browser)"
+	@echo "  make install   pnpm install (workspace: app + @edgereco/browser)"
 	@echo "  make edge       serve the signed bundle from Caddy (:8081)"
 	@echo "  make app        Vite dev server (open http://localhost:5174)"
 	@echo "  make dev        edge + app together"
 	@echo "  make test       frontend vitest"
 	@echo "  make backend    (optional) the API-server use case (:8000)"
 
-install: ## One-time: install workspace deps (app + @edgeproc/browser package).
+install: ## One-time: install workspace deps (app + @edgereco/browser package).
 	cd $(FRONTEND_DIR) && pnpm install
 
 # Serve the signed bundle from the Caddy edge so the SPA can sync it in-browser.

@@ -30,7 +30,7 @@ from scripts.compare_parity_fixtures import (
 
 _FIXTURE_DIR = (
     Path(__file__).resolve().parents[3]
-    / "frontend/packages/edgeproc-browser/src/engine/__fixtures__"
+    / "frontend/packages/edgereco-browser/src/engine/__fixtures__"
 )
 _TOL = Tolerance(rel_tol=REL_TOL, abs_tol=ABS_TOL)
 

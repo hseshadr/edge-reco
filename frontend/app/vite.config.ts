@@ -128,7 +128,7 @@ const pwa = process.env.VITEST
 					// the shopper launches the demo): transformers.js lazily fetches the
 					// weights same-origin and owns their offline copy in its own
 					// `transformers-cache` CacheStorage cache (env.useBrowserCache = true
-					// in @edgeproc/browser's embedder). Same for the staged /ort/ wasm
+					// in @edgereco/browser's embedder). Same for the staged /ort/ wasm
 					// runtime (~23 MB — offline-covered by the edgereco-wasm runtime
 					// route below). Precaching either would force a ~46 MB download on
 					// every visitor at SW install.

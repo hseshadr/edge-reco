@@ -4,7 +4,7 @@
 // runtime — it exists solely to prove the model loads + embeds under
 // transformers.js v4, the riskiest dependency edge.
 
-import { createEmbedder, EMBEDDING_DIM } from "@edgeproc/browser";
+import { createEmbedder, EMBEDDING_DIM } from "@edgereco/browser";
 
 declare global {
 	interface Window {

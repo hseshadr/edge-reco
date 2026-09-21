@@ -9,7 +9,7 @@
 // `no available backend found … Failed to fetch dynamically imported module`.
 //
 // The fix pair: `env.backends.onnx.wasm.wasmPaths = "/ort/"` (set in
-// packages/edgeproc-browser/src/engine/embedder.ts) makes the runtime import
+// packages/edgereco-browser/src/engine/embedder.ts) makes the runtime import
 // same-origin, and THIS script materializes those files into app/public/ort/
 // by copying them out of the LOCKFILE-PINNED node_modules copy of
 // onnxruntime-web — the exact bytes pnpm resolved, no network, fully

@@ -6,7 +6,7 @@
 import {
 	NETWORK_SENTINEL_REPORT_KIND,
 	type NetworkSentinelReport,
-} from "@edgeproc/browser/engine";
+} from "@edgeproc/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	countBackendCalls,

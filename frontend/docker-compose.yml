@@ -119,8 +119,6 @@ services:
   # sink — empty by default (backend-free); set it to enable the flywheel.
   frontend:
     build:
-      # Context is the npm-workspace root (frontend/) so the build sees the root
-      # lockfile + the @edgeproc/browser package the SPA depends on.
       context: .
       dockerfile: app/Dockerfile
       args:

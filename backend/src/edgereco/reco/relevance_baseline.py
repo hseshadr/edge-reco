@@ -47,7 +47,7 @@ _BACKEND_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 #: way ``scripts/gen_search_fixture.py`` locates its own output.
 RELEVANCE_EXPORT: Final[Path] = (
     _BACKEND_ROOT.parent
-    / "frontend/packages/edgeproc-browser/src/engine/__fixtures__/relevance_export.json"
+    / "frontend/packages/edgereco-browser/src/engine/__fixtures__/relevance_export.json"
 )
 
 

@@ -18,6 +18,7 @@ import { App } from "./App";
 afterEach(() => {
 	cleanup();
 	bootstrap.mockClear();
+	sessionStorage.clear();
 });
 
 describe("App launch gate", () => {
@@ -54,6 +55,17 @@ describe("App launch gate", () => {
 		);
 		expect(bootstrap).toHaveBeenCalledTimes(1);
 		// engine pending -> boot screen, landing gone
+		expect(
+			screen.queryByRole("button", { name: /Launch the live demo/i }),
+		).not.toBeInTheDocument();
+	});
+
+	it("resumes an in-tab launch after a service-worker reload", () => {
+		sessionStorage.setItem("edgereco-demo-launched", "1");
+
+		render(<App />);
+
+		expect(bootstrap).toHaveBeenCalledTimes(1);
 		expect(
 			screen.queryByRole("button", { name: /Launch the live demo/i }),
 		).not.toBeInTheDocument();

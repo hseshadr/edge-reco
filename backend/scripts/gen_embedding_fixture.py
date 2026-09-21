@@ -11,7 +11,7 @@ Run from backend/::
 
     .venv/bin/python3 scripts/gen_embedding_fixture.py
     (cd ../frontend && pnpm exec biome check --write \
-        packages/edgeproc-browser/src/engine/__fixtures__/embedding_parity.json)
+        packages/edgereco-browser/src/engine/__fixtures__/embedding_parity.json)
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from edgeproc.localvec.encoder import TextEncoder
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_ROOT.parent
 FIXTURE = (
-    REPO_ROOT / "frontend/packages/edgeproc-browser/src/engine/__fixtures__/embedding_parity.json"
+    REPO_ROOT / "frontend/packages/edgereco-browser/src/engine/__fixtures__/embedding_parity.json"
 )
 DIM = 384
 

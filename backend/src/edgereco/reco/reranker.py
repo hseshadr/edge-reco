@@ -9,7 +9,7 @@ downstream could express "no good match", and a full page came back for queries 
 catalog cannot answer at all. Demoting junk does not fix that; refusing it does.
 
 Mirrored byte-for-byte in the browser port
-(``frontend/packages/edgeproc-browser/src/engine/reranker.ts``); a test in
+(``frontend/packages/edgereco-browser/src/engine/reranker.ts``); a test in
 ``tests/unit/reco/test_reranker.py`` reads that file and pins both constants,
 because one rule written in two languages will otherwise diverge.
 """

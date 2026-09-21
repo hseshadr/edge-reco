@@ -13,11 +13,10 @@
  *
  * That is not a cosmetic difference. In a sibling repo this exact class of skew
  * reported three permanently-broken tests as green for an entire session: Node
- * 22's WebCrypto REJECTS the cross-realm bare `ArrayBuffer` that @noble/ed25519
- * passes to `subtle.digest` (as `m.buffer`), and Node 24 ACCEPTS it. Same
- * commit, same lockfile — the runtime alone flipped the result. This app depends
- * on @noble/ed25519 (it verifies the signed catalog bundle), so it is exposed to
- * the same behavioural difference.
+ * 22's WebCrypto REJECTS the cross-realm bare `ArrayBuffer` passed through the
+ * shared @edgeproc/browser verifier, and Node 24 ACCEPTS it. Same commit, same
+ * lockfile — the runtime alone flipped the result. The signed-bundle tests
+ * exercise that dependency path.
  *
  * So this FAILS rather than warns. A warning is precisely what got ignored: it
  * scrolls past above several minutes of subsequent output and the gate still

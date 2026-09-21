@@ -23,11 +23,10 @@
 		"verify:i18n": "node scripts/verify-i18n.mjs"
 	},
 	"dependencies": {
-		"@edgeproc/browser": "workspace:*",
+		"@edgeproc/browser": "github:hseshadr/edgeproc-browser#f1ae371c8dfe441c6a3dd845e92c3d67adf654bd",
+		"@edgereco/browser": "workspace:*",
 		"@edgeproc/errors": "^0.1.1",
-		"@hpcc-js/wasm-zstd": "^1.15.0",
 		"@huggingface/transformers": "^4.2.0",
-		"@noble/ed25519": "^3.1.0",
 		"i18next": "^26.3.1",
 		"motion": "^12.43.0",
 		"react": "^19.2.8",
