@@ -80,7 +80,7 @@ describe("multi-strategy recommend() parity vs Python strategy_parity.json", () 
 	for (const expectedCase of fixture.cases) {
 		it(`matches Python for the ${expectedCase.strategy} strategy`, async () => {
 			const eng = await engine();
-			const response = eng.recommend({
+			const response = await eng.recommend({
 				strategy: expectedCase.strategy,
 				limit: fixture.limit,
 				// Omit `seed` (not undefined) for non-vector cases — exactOptionalPropertyTypes.
@@ -111,8 +111,8 @@ describe("multi-strategy recommend() parity vs Python strategy_parity.json", () 
 		if (expected === undefined) {
 			throw new Error("fixture missing similar_items case");
 		}
-		const viaSimilar = eng.similar(seed, { limit: fixture.limit });
-		const viaRecommend = eng.recommend({
+		const viaSimilar = await eng.similar(seed, { limit: fixture.limit });
+		const viaRecommend = await eng.recommend({
 			strategy: "similar_items",
 			seed,
 			limit: fixture.limit,
@@ -128,7 +128,8 @@ describe("multi-strategy recommend() parity vs Python strategy_parity.json", () 
 
 	it("populates score_components.similarity for vector strategies", async () => {
 		const eng = await engine();
-		const top = eng.similar(fixture.seed_product, { limit: 5 }).results[0];
+		const top = (await eng.similar(fixture.seed_product, { limit: 5 }))
+			.results[0];
 		// weights.similarity is 0.60 for similar_items, so the top neighbor's
 		// weighted similarity term is a positive contribution.
 		expect(top?.score_components?.similarity).toBeGreaterThan(0);
@@ -136,20 +137,21 @@ describe("multi-strategy recommend() parity vs Python strategy_parity.json", () 
 
 	it("populates score_components.similarity as 0 for non-vector strategies", async () => {
 		const eng = await engine();
-		const top = eng.recommend({ strategy: "trending", limit: 5 }).results[0];
+		const top = (await eng.recommend({ strategy: "trending", limit: 5 }))
+			.results[0];
 		expect(top?.score_components?.similarity).toBe(0);
 	});
 
 	it("throws for an unknown strategy", async () => {
 		const eng = await engine();
-		expect(() => eng.recommend({ strategy: "nope" })).toThrow(
+		await expect(eng.recommend({ strategy: "nope" })).rejects.toThrow(
 			/unknown strategy/,
 		);
 	});
 
 	it("throws when a vector strategy is called without a seed", async () => {
 		const eng = await engine();
-		expect(() => eng.recommend({ strategy: "similar_items" })).toThrow(
+		await expect(eng.recommend({ strategy: "similar_items" })).rejects.toThrow(
 			/requires a seed/,
 		);
 	});

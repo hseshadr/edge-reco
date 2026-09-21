@@ -85,7 +85,7 @@ describe("co-occurrence recommend() parity vs Python cooccurrence_parity.json", 
 	for (const expectedCase of fixture.cases) {
 		it(`matches Python for the ${expectedCase.strategy} strategy`, async () => {
 			const eng = await engine();
-			const response = eng.recommend({
+			const response = await eng.recommend({
 				strategy: expectedCase.strategy,
 				seed: expectedCase.seed,
 				limit: fixture.limit,
@@ -107,12 +107,12 @@ describe("co-occurrence recommend() parity vs Python cooccurrence_parity.json", 
 
 	it("applies the frequently_bought_together top-k cut (tighter than also_bought)", async () => {
 		const eng = await engine();
-		const also = eng.recommend({
+		const also = await eng.recommend({
 			strategy: "also_bought",
 			seed: fixture.seed_product,
 			limit: fixture.limit,
 		});
-		const fbt = eng.recommend({
+		const fbt = await eng.recommend({
 			strategy: "frequently_bought_together",
 			seed: fixture.seed_product,
 			limit: fixture.limit,
@@ -124,11 +124,13 @@ describe("co-occurrence recommend() parity vs Python cooccurrence_parity.json", 
 
 	it("populates score_components.cooccurrence for the co_occurrence strategies", async () => {
 		const eng = await engine();
-		const top = eng.recommend({
-			strategy: "also_bought",
-			seed: fixture.seed_product,
-			limit: 5,
-		}).results[0];
+		const top = (
+			await eng.recommend({
+				strategy: "also_bought",
+				seed: fixture.seed_product,
+				limit: 5,
+			})
+		).results[0];
 		// weights.cooccurrence is 0.70 for also_bought ⇒ the top neighbour's
 		// weighted co-occurrence term is a positive contribution.
 		expect(top?.score_components?.cooccurrence).toBeGreaterThan(0);
@@ -136,14 +138,14 @@ describe("co-occurrence recommend() parity vs Python cooccurrence_parity.json", 
 
 	it("throws when a co_occurrence strategy is called without a seed", async () => {
 		const eng = await engine();
-		expect(() => eng.recommend({ strategy: "also_bought" })).toThrow(
+		await expect(eng.recommend({ strategy: "also_bought" })).rejects.toThrow(
 			/requires a seed/,
 		);
 	});
 
 	it("returns an empty pool for an unknown/cold seed (rail hidden)", async () => {
 		const eng = await engine();
-		const response = eng.recommend({
+		const response = await eng.recommend({
 			strategy: "also_bought",
 			seed: "NOT_A_REAL_PRODUCT_ID",
 			limit: fixture.limit,

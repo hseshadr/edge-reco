@@ -56,7 +56,7 @@ describe("hybrid engine recommend/browse", () => {
 
 	it("recommends from the popularity pool, descending, capped at limit", async () => {
 		const eng = await engine();
-		const response = eng.recommend({ limit: 5 });
+		const response = await eng.recommend({ limit: 5 });
 		expect(response.results).toHaveLength(5);
 		expect(response.session_clicks).toBe(0);
 		const scores = response.results.map((r) => r.score);
@@ -68,7 +68,7 @@ describe("hybrid engine recommend/browse", () => {
 
 	it("reflects session clicks and applies the repetition penalty", async () => {
 		const eng = await engine();
-		const baseline = eng.recommend({ limit: 10 });
+		const baseline = await eng.recommend({ limit: 10 });
 		const topProduct = baseline.results[0]?.product as Product;
 		const topScore = baseline.results[0]?.score ?? 0;
 		// Click the current top item: click_count rises, and the repetition
@@ -80,7 +80,7 @@ describe("hybrid engine recommend/browse", () => {
 			events,
 			new Map<string, Product>([[topProduct.id, topProduct]]),
 		);
-		const personalized = eng.recommend({ limit: 10, profile });
+		const personalized = await eng.recommend({ limit: 10, profile });
 		// session_clicks surfaces the click count from the profile.
 		expect(personalized.session_clicks).toBe(1);
 		// If the clicked item survives into the window its score reflects the

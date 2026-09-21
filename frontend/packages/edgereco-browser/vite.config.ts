@@ -10,6 +10,7 @@ export default defineConfig({
 		environment: "jsdom",
 		globals: false,
 		maxWorkers: 2,
+		setupFiles: ["./src/testSetup.ts"],
 		coverage: {
 			// Enforces the project's 90% standard on the parity-tested CORE LOGIC.
 			// Off by default (fast `vitest run`); turned on by `test:coverage`
@@ -32,6 +33,7 @@ export default defineConfig({
 				"src/engine/embedderWorker.ts",
 				"src/engine/embedderClient.ts",
 				"src/engine/runtime.ts",
+				"src/testSetup.ts",
 			],
 			// Measured core-logic coverage: lines 97.3 / statements 97.3 /
 			// functions 97.5 / branches 88.4. lines/statements/functions hold the

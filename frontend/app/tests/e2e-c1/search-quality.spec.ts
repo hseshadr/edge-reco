@@ -42,9 +42,15 @@ test("real search is relevant, local, clean, and inside release budgets", async 
 	const errors: string[] = [];
 	const thirdPartyRequests: string[] = [];
 	let blockedRuntimeCdnHits = 0;
+	let sqliteWasmRequests = 0;
 	page.on("pageerror", (error) => errors.push(error.message));
 	page.on("console", (message) => {
 		if (message.type() === "error") errors.push(message.text());
+	});
+	context.on("request", (request) => {
+		if (/\/sqlite3(?:-[^/]+)?\.wasm(?:\?|$)/.test(request.url())) {
+			sqliteWasmRequests += 1;
+		}
 	});
 	page.on("request", (request) => {
 		const origin = new URL(request.url()).origin;
@@ -108,6 +114,38 @@ test("real search is relevant, local, clean, and inside release budgets", async 
 		HEAP_BUDGET_MB,
 	);
 	expect(backendCalls).toBe(0);
+	expect(
+		sqliteWasmRequests,
+		"the storefront never loaded the shared sqlite-vector WASM runtime",
+	).toBeGreaterThan(0);
+	const opfsEntries = await page.evaluate(async () => {
+		const root = await navigator.storage.getDirectory();
+		const names: string[] = [];
+		const walk = async (
+			directory: FileSystemDirectoryHandle,
+			prefix = "",
+		): Promise<void> => {
+			for await (const [name, handle] of (
+				directory as unknown as {
+					entries(): AsyncIterable<
+						[string, FileSystemFileHandle | FileSystemDirectoryHandle]
+					>;
+				}
+			).entries()) {
+				const path = `${prefix}${name}`;
+				names.push(path);
+				if (handle.kind === "directory") {
+					await walk(handle, `${path}/`);
+				}
+			}
+		};
+		await walk(root);
+		return names;
+	});
+	expect(
+		opfsEntries.some((name) => name.includes("edgeproc-vector-")),
+		`sqlite-vector did not create its OPFS SAH-pool; found ${JSON.stringify(opfsEntries)}`,
+	).toBe(true);
 	expect(
 		blockedRuntimeCdnHits,
 		"runtime attempted third-party CDN egress",

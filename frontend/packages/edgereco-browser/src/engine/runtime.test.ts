@@ -1,6 +1,18 @@
-import type { SyncResult } from "@edgeproc/browser";
+import {
+	type IndexManifest,
+	MemoryCacheStore,
+	materializeFile,
+	type SyncResult,
+	syncIndex,
+} from "@edgeproc/browser";
+import {
+	FlatVectorIndex,
+	type VectorIndex,
+	type VectorIndexOptions,
+} from "@edgeproc/browser/vector";
 import { describe, expect, it, vi } from "vitest";
 import type { Embedder } from "./embedder";
+import { catalogFetch } from "./fixtures";
 import { type EnginePort, EngineRuntime, type RuntimeConfig } from "./runtime";
 
 const config: RuntimeConfig = {
@@ -51,6 +63,23 @@ function rejectingEmbedder(error: Error): DisposableEmbedder {
 		},
 		embed: vi.fn(() => Promise.reject(error)),
 	};
+}
+
+async function syncedEnginePort(): Promise<DisposableEngine> {
+	const store = new MemoryCacheStore();
+	const { fetchBytes } = catalogFetch();
+	const result = await syncIndex({
+		baseUrl: "/cat",
+		store,
+		fetchBytes,
+		verify: () => Promise.resolve(),
+	});
+	const manifest = JSON.parse(
+		new TextDecoder().decode(await store.getManifest(result.manifestHash)),
+	) as IndexManifest;
+	return enginePort({
+		readFile: (path) => materializeFile(store, manifest, path),
+	});
 }
 
 describe("EngineRuntime resource lifecycle", () => {
@@ -131,10 +160,43 @@ describe("EngineRuntime resource lifecycle", () => {
 
 		const pending = runtime.bootstrap(config);
 		await vi.waitFor(() => expect(resolveWarmup).toBeTypeOf("function"));
-		runtime.dispose();
+		await runtime.dispose();
 		expect(engine.terminated).toBe(true);
 		expect(embedder.disposed).toBe(true);
 		resolveWarmup?.(new Float32Array(384));
 		await expect(pending).rejects.toThrow("disposed during bootstrap");
+	});
+
+	it("disposes a vector index that finishes opening after runtime disposal", async () => {
+		const engine = await syncedEnginePort();
+		const embedder: DisposableEmbedder = {
+			disposed: false,
+			dispose() {
+				this.disposed = true;
+			},
+			embed: () => Promise.resolve(new Float32Array(384)),
+		};
+		let resolveIndex:
+			| ((index: VectorIndex | PromiseLike<VectorIndex>) => void)
+			| undefined;
+		let index: FlatVectorIndex | undefined;
+		const runtime = new EngineRuntime({
+			spawnEngine: () => engine,
+			makeEmbedder: () => embedder,
+			makeVectorIndex: (options: VectorIndexOptions) =>
+				new Promise<VectorIndex>((resolve) => {
+					index = new FlatVectorIndex(options);
+					resolveIndex = resolve;
+				}),
+		});
+
+		const pending = runtime.bootstrap(config);
+		await vi.waitFor(() => expect(resolveIndex).toBeTypeOf("function"));
+		await runtime.dispose();
+		const dispose = vi.spyOn(index as FlatVectorIndex, "dispose");
+		resolveIndex?.(index as FlatVectorIndex);
+
+		await expect(pending).rejects.toThrow("disposed during bootstrap");
+		expect(dispose).toHaveBeenCalledOnce();
 	});
 });

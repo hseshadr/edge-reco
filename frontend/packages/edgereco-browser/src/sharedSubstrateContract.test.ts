@@ -17,7 +17,7 @@ describe("shared browser substrate dependency", () => {
 	it("keeps EdgeReco product code separate from @edgeproc/browser", () => {
 		expect(manifest.name).toBe("@edgereco/browser");
 		expect(manifest.dependencies?.["@edgeproc/browser"]).toBe(
-			"github:hseshadr/edgeproc-browser#f1ae371c8dfe441c6a3dd845e92c3d67adf654bd",
+			"github:hseshadr/edgeproc-browser#a94e7f2a0237a7144658351c07cb296fcb0540fb",
 		);
 	});
 

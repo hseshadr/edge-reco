@@ -1,12 +1,14 @@
 // The browser runtime that turns the synced signed bundle into a live, in-tab
 // SearchEngine — the in-browser replacement for the FastAPI backend.
 //
-// Two Workers, off the UI thread:
+// Three Workers, off the UI thread:
 //   - the sync Worker (worker.ts) owns OPFS + the ported sync_index; it pulls the
 //     signed, content-addressed bundle from the Caddy origin, verifies it
 //     ed25519+sha256 fail-closed, and materializes the four index files;
 //   - the embedder Worker (embedderWorker.ts) owns transformers.js: the ~25 MB
 //     all-MiniLM-L6-v2 weights download + ONNX inference.
+//   - the shared sqlite-vector Worker owns exact cosine search and its OPFS-
+//     persisted SQLite database.
 //
 // bootstrap() drives both with a progress callback so the UI can show real
 // stages (syncing bundle… loading model…). It is idempotent: the engine is
@@ -15,6 +17,7 @@
 // are offline-capable (a re-sync over a reachable origin fetches zero chunks).
 
 import { EngineClient, fetchBytes, type SyncResult } from "@edgeproc/browser";
+import type { VectorIndexFactory } from "@edgeproc/browser/vector";
 import { type CooccurrenceMatrix, parseCooccurrence } from "./cooccurrence";
 import EdgeProcWorker from "./edgeprocWorker?worker";
 import { createEmbedder, type Embedder } from "./embedder";
@@ -83,6 +86,7 @@ export interface EnginePort {
 export interface RuntimeDeps {
 	readonly spawnEngine: () => EnginePort;
 	readonly makeEmbedder: () => Embedder;
+	readonly makeVectorIndex?: VectorIndexFactory;
 	readonly loadPublisherKey?: (url: string) => Promise<Uint8Array>;
 }
 
@@ -263,6 +267,7 @@ export class EngineRuntime {
 	): Promise<SearchEngine> {
 		let engineClient: EnginePort | null = null;
 		let embedder: Embedder | null = null;
+		let searchEngine: SearchEngine | null = null;
 		try {
 			engineClient = this.#deps.spawnEngine();
 			this.#enginePort = engineClient;
@@ -302,18 +307,25 @@ export class EngineRuntime {
 			await embedder.embed(WARMUP_PROMPT);
 			this.#assertCurrent(generation);
 
-			const engine = await createSearchEngine(
+			searchEngine = await createSearchEngine(
 				files,
 				embedder,
 				rankingConfig,
 				cooccurrence,
 				proofEvidence,
+				this.#deps.makeVectorIndex,
 			);
 			this.#assertCurrent(generation);
-			this.#ready = engine;
+			this.#ready = searchEngine;
 			onStage({ kind: "ready" });
-			return engine;
+			return searchEngine;
 		} catch (error) {
+			if (searchEngine !== null) {
+				if (this.#ready === searchEngine) {
+					this.#ready = null;
+				}
+				await searchEngine.dispose();
+			}
 			if (engineClient !== null) {
 				this.#releaseEngine(engineClient);
 			}
@@ -325,10 +337,14 @@ export class EngineRuntime {
 	}
 
 	/** Release both worker-backed resources and permit a fresh bootstrap. */
-	public dispose(): void {
+	public async dispose(): Promise<void> {
 		this.#generation += 1;
 		this.#enginePromise = null;
+		const ready = this.#ready;
 		this.#ready = null;
+		if (ready !== null) {
+			await ready.dispose();
+		}
 		const enginePort = this.#enginePort;
 		this.#enginePort = null;
 		if (enginePort !== null) {

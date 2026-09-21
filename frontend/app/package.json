@@ -23,7 +23,7 @@
 		"verify:i18n": "node scripts/verify-i18n.mjs"
 	},
 	"dependencies": {
-		"@edgeproc/browser": "github:hseshadr/edgeproc-browser#f1ae371c8dfe441c6a3dd845e92c3d67adf654bd",
+		"@edgeproc/browser": "github:hseshadr/edgeproc-browser#a94e7f2a0237a7144658351c07cb296fcb0540fb",
 		"@edgereco/browser": "workspace:*",
 		"@edgeproc/errors": "^0.1.1",
 		"@huggingface/transformers": "^4.2.0",

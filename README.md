@@ -245,7 +245,7 @@ Two retrieval methods run in parallel and get merged.
 
 **BM25** is the classic keyword-relevance score — it ranks documents by how well their words match the query's words. It catches exact matches and is why "Bose QuietComfort Earbuds" comes back for "earbuds".
 
-**Vector search** catches meaning. Each product title is turned into an **embedding** — a list of numbers positioning that text in a space where similar meanings sit close together. The query gets the same treatment, and **FAISS** (Facebook AI Similarity Search) finds the nearest products fast. This is why "aching back" reaches a massage gun, and "earbuds" reaches "wireless headphones".
+**Vector search** catches meaning. Each product title is turned into an **embedding** — a list of numbers positioning that text in a space where similar meanings sit close together. The query gets the same treatment. The Python runtime searches with **FAISS**; the browser imports the authenticated embedding matrix into **SQLite + sqlite-vector**, running in a dedicated Worker with its database persisted in OPFS. This is why "aching back" reaches a massage gun, and "earbuds" reaches "wireless headphones" without keeping a second in-memory vector index in the tab.
 
 The two rankings are fused with **RRF** (Reciprocal Rank Fusion) — a simple, tuning-free way to merge two ranked lists by position rather than by score, so neither method's scoring scale can dominate the other:
 

@@ -30,7 +30,7 @@ flowchart TB
 
 Architecture:
 
-- A static **origin** holds the signed bundle (`latest` + `manifest/<hash>` + `chunk/<hash>` + the actual `embeddings.f32` / `products.jsonl` / FAISS index, plus the signed `ranking_config.json` scoring-weights + strategy map and the `cooccurrence.json` item-to-item neighbour map).
+- A static **origin** holds the signed bundle (`latest` + `manifest/<hash>` + `chunk/<hash>` + `embeddings.f32` / `products.jsonl` / the Python FAISS artifact, plus the signed `ranking_config.json` scoring-weights + strategy map and the `cooccurrence.json` item-to-item neighbour map). The browser ignores the FAISS artifact and imports authenticated embedding rows into its SQLite-vector OPFS database.
 - A **Caddy edge** fronts the origin with the right cache policy (immutable chunks + manifest, short-TTL pointer, permissive CORS).
 - The **Nimbus SPA** is a static bundle. The browser pins a public key at build time, syncs the bundle into OPFS, verifies, then runs the engine in the tab.
 
