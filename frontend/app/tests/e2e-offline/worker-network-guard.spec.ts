@@ -79,6 +79,10 @@ test("a network call issued INSIDE the app's Web Worker is counted by the tile",
 
 	const tile = backendCallsTile(page);
 	await expect(tile).toHaveText("0");
+	// A visible first card does not mean the asynchronously populated rails have
+	// finished loading their same-origin images. Let that harmless window traffic
+	// settle before taking the attribution baseline for the Worker-only probe.
+	await page.waitForLoadState("networkidle");
 	const before = await page.evaluate(RESOURCE_NAMES);
 
 	// The attack: real fetch, real Worker global scope, real network stack.

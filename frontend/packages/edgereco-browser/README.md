@@ -27,7 +27,7 @@ const engine = await runtime.bootstrap(configFromEnv(), (stage) => {
 });
 
 const results = await engine.search("wireless headphones", { limit: 10 });
-const recs = engine.recommend({ limit: 10 }); // session-aware (folds in clicks)
+const recs = await engine.recommend({ limit: 10 }); // session-aware (folds in clicks)
 ```
 
 `configFromEnv()` reads `VITE_BUNDLE_BASE_URL` (the Caddy edge serving the
@@ -39,15 +39,18 @@ key is **never** fetched from the bundle origin (that would defeat pinning).
 The browser embedder is `Xenova/all-MiniLM-L6-v2` via
 [`@huggingface/transformers`](https://huggingface.co/docs/transformers.js) with
 `{ pooling: "mean", normalize: true }` — the byte-for-byte equivalent of the
-Python core's `sentence-transformers` recipe. The vector index is loaded from
-the same prebuilt `vector/embeddings.f32` file the FastAPI runtime reads. The
+Python core's `sentence-transformers` recipe. The browser imports the signed
+`vector/embeddings.f32` matrix into the shared `@edgeproc/browser` SQLite +
+sqlite-vector Worker and persists the database in OPFS; it never constructs a
+FAISS or packed in-memory browser index. The Python runtime uses FAISS over the
+same producer rows. The
 BM25 tokenizer, RRF fusion (`k=60`), and the rerank scoring formula
 (`0.40·pop + 0.20·cat + 0.15·tag + 0.10·brand + 0.10·fresh − 0.25·rep`) all
 match `src/edgereco/` line for line. The package's parity tests round-trip a
 real query through both engines against the same committed bundle and assert
 top-k by score group.
 
-## Architecture (two Workers, off the UI thread)
+## Architecture (three Workers, off the UI thread)
 
 ```
 SPA tab
@@ -55,6 +58,8 @@ SPA tab
 │     ├── sync Worker   (@edgeproc/browser)
 │     │     └── pull /latest -> verify ed25519 -> fetch chunks ->
 │     │         verify sha256 -> reassemble files into OPFS
+│     ├── sqlite-vector Worker (@edgeproc/browser/vector/sqlite)
+│     │     └── exact cosine search -> SQLite WASM database in OPFS
 │     └── embedder Worker (embedderWorker.ts)
 │           └── load Xenova/all-MiniLM-L6-v2 (~25 MB) -> ONNX session
 └── SearchEngine
@@ -63,7 +68,7 @@ SPA tab
       └── browse()        catalog listing
 ```
 
-Both Workers are lazy: the model is fetched only on the first `embed()`; the
+All Workers are lazy: the model is fetched only on the first `embed()`; the
 bundle is fetched only on the first `bootstrap()`. After the first run the
 bundle lives in OPFS and the model lives in the HTTP cache, so reloads are
 near-instant and offline-capable.
@@ -74,7 +79,7 @@ near-instant and offline-capable.
 - `SearchEngine` / `createSearchEngine` — the search surface (`search`,
   `recommend`, `browse`). Built once over the synced bundle.
 - `@edgeproc/browser` supplies `EngineClient`, the sync Worker, OPFS storage,
-  integrity verification, and vector adapter contracts.
+  integrity verification, and the SQLite + sqlite-vector Worker adapter.
 - `Product` / `SearchResult` / `ScoreComponents` / `InteractionEvent` — the
   domain types the engine produces. Same shapes as the Python core's wire
   contract.

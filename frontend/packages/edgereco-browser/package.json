@@ -16,7 +16,7 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@edgeproc/browser": "github:hseshadr/edgeproc-browser#f1ae371c8dfe441c6a3dd845e92c3d67adf654bd",
+		"@edgeproc/browser": "github:hseshadr/edgeproc-browser#a94e7f2a0237a7144658351c07cb296fcb0540fb",
 		"@edgeproc/assay": "0.5.0-dev.3",
 		"@edgeproc/avow": "0.4.1",
 		"@huggingface/transformers": "^4.2.0"

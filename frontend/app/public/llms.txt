@@ -24,7 +24,8 @@
 - Languages: TypeScript (browser engine), Python (catalog and bundle tooling)
 - Core techniques: signed, content-addressed catalog bundles verified fail-closed
   (Ed25519 signature over an sha256 content-addressed manifest); BM25 keyword search;
-  FAISS vector search over text embeddings (all-MiniLM-L6-v2); Reciprocal Rank Fusion
+  Exact vector search over all-MiniLM-L6-v2 embeddings: FAISS on Python,
+  SQLite + sqlite-vector in an OPFS-backed browser Worker; Reciprocal Rank Fusion
   (RRF, k=60) to combine keyword and vector results; session-aware reranking driven by
   in-session interaction signals (clicks, views, cart, favorites)
 - Primary use case: local product search and recommendations without a per-query

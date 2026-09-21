@@ -56,7 +56,7 @@ flowchart TB
   class events opt;
 ```
 
-The publisher signs the bundle once. The CDN/edge serves immutable chunks and a short-TTL `latest` pointer. The browser (or the FastAPI runtime) syncs the bundle into OPFS / disk, verifies it against a pinned ed25519 public key, reassembles the FAISS index + product catalog, and runs every query locally. After sync, the runtime is offline-capable.
+The publisher signs the bundle once. The CDN/edge serves immutable chunks and a short-TTL `latest` pointer. Both runtimes verify it against a pinned ed25519 public key. Python opens the prebuilt FAISS artifact; the browser imports the authenticated `embeddings.f32` rows into SQLite + sqlite-vector in a dedicated Worker and persists that database in OPFS. No browser FAISS or packed in-memory vector fallback exists. After sync, the runtime is offline-capable.
 
 ## Request lifecycle
 
@@ -66,7 +66,7 @@ sequenceDiagram
     participant UI as Nimbus UI
     participant Engine as Engine (same code, both tiers)
     participant BM25 as BM25 keyword index
-    participant Vec as FAISS vector index
+    participant Vec as Vector index<br/>FAISS (Python) / SQLite (browser)
     participant Session as Browser-local taste profile
 
     UI->>Engine: search(query) or recommend(strategy, seed)
@@ -86,7 +86,7 @@ sequenceDiagram
 
 A query goes through three stages, on whichever tier is running it:
 
-1. **Retrieve** — BM25 (keyword) and FAISS (vector) each return top-k candidates over the same id space.
+1. **Retrieve** — BM25 (keyword) plus the tier's exact vector adapter — FAISS in Python, SQLite + sqlite-vector in the browser — return top-k candidates over the same id space.
 2. **Fuse** — Reciprocal Rank Fusion (`rrf_score(d) = Σ 1/(k + rank_i)`) merges the two lists without depending on raw scores.
 3. **Rerank** — the session-aware scorer applies the published formula.
 
@@ -117,7 +117,7 @@ The seed bundle ships seven strategies:
 | `also_bought` | Customers who bought this also bought | `co_occurrence` | co-occurrence + popularity | product |
 | `frequently_bought_together` | Frequently bought together | `co_occurrence` (tighter cut, `co_occurrence_top_k: 3`) | co-occurrence | product |
 
-`vector_similarity` is the one genuinely new retrieval primitive: a FAISS search by a product's reconstructed vector (`nearest(product_id, k)` Python / `VectorIndex.nearest` browser, excluding the seed). Its candidates carry a per-candidate `similarity` (cosine to seed) that the scorer adds as `+ weights.similarity · similarity`; `co_occurrence` candidates carry a `cooccurrence` score added the same way. For every other strategy those two signals are absent/0. Assay still emits all nine ordered rows, so “How calculated” never hides a zero-valued term.
+`vector_similarity` is the one genuinely new retrieval primitive: an exact search by a product's stored vector (`nearest(product_id, k)` in both tiers, excluding the seed). Python reconstructs it from FAISS; the browser reads and searches it through the SQLite-vector Worker. Its candidates carry a per-candidate `similarity` (cosine to seed) that the scorer adds as `+ weights.similarity · similarity`; `co_occurrence` candidates carry a `cooccurrence` score added the same way. For every other strategy those two signals are absent/0. Assay still emits all nine ordered rows, so “How calculated” never hides a zero-valued term.
 
 The **product-detail page (PDP)** that hosts the seed-based rails is **state-based, not routed**: `Storefront.tsx` flips a `view` between `{ kind: "browse" }` and a product view (`ProductDetail.tsx`), so there is no URL to deep-link to a missing route — the **no-404 property** of a static Pages deploy is preserved. Home stacks For You / Trending / New arrivals via `RailStack`; the PDP stacks Similar items / Because you viewed / Customers also bought / Frequently bought together. Each rail is guarded — an empty or throwing strategy is simply hidden — so a bundle that predates a strategy degrades gracefully to the rails it can serve.
 
@@ -252,7 +252,7 @@ that are not floats remain exact.
 ## Invariants (load-bearing rules)
 
 - **Scoring formula** is the contract between the two tiers. The *weights* now live in the signed `ranking_config.json` (both tiers read them off the verified bundle), so retuning ranking is a data republish — no code edit. The scoring *math* (`scorer.py` ↔ the `@edgereco/browser` rerank module) is still mirrored code; change it on both sides together, and both unit suites and the parity fixtures must update.
-- **Hybrid search**: BM25 + FAISS vector + RRF, in that order.
+- **Hybrid search**: BM25 + exact vector search + RRF, in that order. The vector implementation is FAISS on Python and SQLite + sqlite-vector/OPFS in the browser.
 - **Catalog sync**: signed, content-addressed, fail-closed on tampering. No exception.
 - **Zero backend calls after sync**: once the bundle is local, the runtime is offline-capable. Don't introduce a runtime backend dep.
 - **Uplink is optional & off the inference path**: search / recommend / rerank / sync make zero backend calls. The flywheel uplink (a click is captured in-tab, persisted, then batched as a fire-and-forget beacon to the `/events` collector) is gated by `VITE_EVENTS_URL` — **unset = fully disabled** — and must never block or break the app. It feeds the cloud's retrain; it never gates the in-tab rail re-rank.

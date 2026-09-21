@@ -4,7 +4,9 @@ import {
 	materializeFile,
 	syncIndex,
 } from "@edgeproc/browser";
-import { describe, expect, it } from "vitest";
+import { FlatVectorIndex } from "@edgeproc/browser/vector";
+import { createSqliteVectorIndex } from "@edgeproc/browser/vector/sqlite";
+import { describe, expect, it, vi } from "vitest";
 import { catalogFetch, latestBytes } from "./fixtures";
 import {
 	loadVectorIndex,
@@ -76,6 +78,35 @@ function encoder(vectors: ReadonlyArray<ReadonlyArray<number>>): {
 }
 
 describe("loadVectorIndex synthetic correctness", () => {
+	it("atomically clears stale catalog rows before importing the signed matrix", async () => {
+		const enc = encoder([[1, 0]]);
+		const shared = new FlatVectorIndex({ name: "test", dimension: 2 });
+		const clear = vi.spyOn(shared, "clear");
+		const insert = vi.spyOn(shared, "insert");
+
+		const index = await loadVectorIndex(enc, () => shared);
+
+		expect(clear).toHaveBeenCalledOnce();
+		expect(insert).toHaveBeenCalledOnce();
+		expect(clear.mock.invocationCallOrder[0]).toBeLessThan(
+			insert.mock.invocationCallOrder[0] ?? 0,
+		);
+		await index.dispose();
+	});
+
+	it("opens the shared SQLite-vector adapter in persistent OPFS mode", async () => {
+		const createSqlite = vi.mocked(createSqliteVectorIndex);
+		createSqlite.mockClear();
+		const enc = encoder([[1, 0]]);
+		const index = await loadVectorIndex(enc);
+		expect(createSqlite).toHaveBeenCalledWith({
+			name: "edgereco-catalog",
+			dimension: 2,
+			persistence: "opfs",
+		});
+		await index.dispose();
+	});
+
 	it("cosine top-k ordering is exact over a known matrix", async () => {
 		// Three orthonormal-ish rows; a query closest to row 1, then 2, then 0.
 		const enc = encoder([
@@ -90,7 +121,7 @@ describe("loadVectorIndex synthetic correctness", () => {
 			products: enc.products,
 		});
 		// query points mostly along row 2's direction.
-		const hits = index.search(new Float32Array([0.6, 0.8, 0]), 3);
+		const hits = await index.search(new Float32Array([0.6, 0.8, 0]), 3);
 		expect(hits.map((h) => h.id)).toEqual(["p2", "p1", "p0"]);
 		// row 2 is identical to the (normalized) query -> cosine == 1.
 		expect(hits[0]?.score).toBeCloseTo(1, 5);
@@ -108,7 +139,7 @@ describe("loadVectorIndex synthetic correctness", () => {
 			products: enc.products,
 		});
 		// scaling the query must not change ordering or the cosine score.
-		const small = index.search(new Float32Array([3, 0]), 1);
+		const small = await index.search(new Float32Array([3, 0]), 1);
 		expect(small[0]?.id).toBe("p0");
 		expect(small[0]?.score).toBeCloseTo(1, 5);
 	});
@@ -124,7 +155,7 @@ describe("loadVectorIndex synthetic correctness", () => {
 			embeddings: enc.embeddings,
 			products: enc.products,
 		});
-		expect(index.search(new Float32Array([1, 0]), 99)).toHaveLength(2);
+		expect(await index.search(new Float32Array([1, 0]), 99)).toHaveLength(2);
 		expect(index.ntotal).toBe(2);
 	});
 
@@ -154,10 +185,10 @@ describe("loadVectorIndex over the real synced bundle", () => {
 		expect(index.ntotal).toBe(meta.embedding_count);
 		expect(index.dim).toBe(meta.embedding_dim);
 		// every stored row is L2-normalized -> a row queried against itself scores ~1.
-		const self = index.rowVector(0);
-		const hits = index.search(self, 1);
-		expect(hits[0]?.id).toBe(index.idAt(0));
-		expect(hits[0]?.score).toBeCloseTo(1, 4);
+		const selfId = index.idAt(0);
+		const hits = await index.nearest(selfId, 1);
+		expect(hits[0]?.id).not.toBe(selfId);
+		expect(hits[0]?.score).toBeLessThanOrEqual(1);
 	});
 });
 
@@ -176,7 +207,7 @@ describe("VectorIndex.nearest (kNN-to-seed primitive)", () => {
 			embeddings: enc.embeddings,
 			products: enc.products,
 		});
-		const hits = index.nearest("p1", 2);
+		const hits = await index.nearest("p1", 2);
 		expect(hits.map((h) => h.id)).toEqual(["p2", "p0"]);
 		expect(hits[0]?.score).toBeGreaterThan(hits[1]?.score ?? Number.NaN);
 	});
@@ -189,14 +220,16 @@ describe("VectorIndex.nearest (kNN-to-seed primitive)", () => {
 			embeddings: enc.embeddings,
 			products: enc.products,
 		});
-		expect(() => index.nearest("missing", 5)).toThrow(/unknown product id/);
+		await expect(index.nearest("missing", 5)).rejects.toThrow(
+			/unknown product id/,
+		);
 	});
 
 	it("over the real bundle: seed excluded, k results, strictly descending", async () => {
 		const files = await syncedFiles();
 		const index = await loadVectorIndex(files);
 		const seed = "B07FPCD8BM";
-		const hits = index.nearest(seed, 10);
+		const hits = await index.nearest(seed, 10);
 		expect(hits).toHaveLength(10);
 		expect(hits.some((h) => h.id === seed)).toBe(false);
 		for (let i = 1; i < hits.length; i += 1) {

@@ -1,12 +1,23 @@
 // In-browser vector retrieval over the synced bundle. Mirrors edge-reco's Python
 // VectorSearcher (src/edgereco/search/vector.py): row i of embeddings.f32 is the
-// L2-normalized vector for state.json faiss_ids[i], so cosine == dot product and
-// the only renormalization needed is on the (possibly non-unit) query vector.
+// L2-normalized vector for state.json faiss_ids[i]. The authenticated matrix is
+// imported into the shared SQLite + sqlite-vector Worker, then released; every
+// production similarity query crosses that Worker boundary and stays off the UI
+// thread.
 
-import { PackedVectorIndex } from "@edgeproc/browser/vector";
+import { sha256Hex } from "@edgeproc/browser";
+import type {
+	VectorIndex as SharedVectorIndex,
+	VectorIndexFactory,
+} from "@edgeproc/browser/vector";
+import { createSqliteVectorIndex } from "@edgeproc/browser/vector/sqlite";
 import type { Product } from "./domain";
 
 const DECODER = new TextDecoder();
+const SQLITE_INDEX_NAME = "edgereco-catalog";
+
+const createPersistentVectorIndex: VectorIndexFactory = (options) =>
+	createSqliteVectorIndex({ ...options, persistence: "opfs" });
 
 /** The four reassembled bundle files the index is built from. */
 export interface VectorIndexFiles {
@@ -123,12 +134,19 @@ function parseVectorState(bytes: Uint8Array): VectorState {
 	if (!Array.isArray(ids)) {
 		throw new VectorIndexError("vector/state.json.faiss_ids must be an array");
 	}
+	const seen = new Set<string>();
 	ids.forEach((id, i) => {
 		if (typeof id !== "string") {
 			throw new VectorIndexError(
 				`vector/state.json.faiss_ids[${i}] must be a string`,
 			);
 		}
+		if (seen.has(id)) {
+			throw new VectorIndexError(
+				`vector/state.json.faiss_ids contains duplicate id ${JSON.stringify(id)}`,
+			);
+		}
+		seen.add(id);
 	});
 	return record as unknown as VectorState;
 }
@@ -197,38 +215,41 @@ function parseProducts(bytes: Uint8Array): ReadonlyMap<string, Product> {
 
 /** Loaded, query-ready vector index over the synced bundle. */
 export class VectorIndex {
-	readonly #vectors: PackedVectorIndex;
+	readonly #vectors: SharedVectorIndex;
 	readonly #ids: ReadonlyArray<string>;
 	readonly #rowOf: ReadonlyMap<string, number>;
 	readonly #products: ReadonlyMap<string, Product>;
+	readonly #catalogVersion: string;
+	readonly #dim: number;
 
 	public constructor(
-		matrix: Float32Array,
+		vectors: SharedVectorIndex,
 		ids: ReadonlyArray<string>,
 		products: ReadonlyMap<string, Product>,
-		dim: number,
+		catalogVersion: string,
 	) {
-		this.#vectors = new PackedVectorIndex(matrix, ids, dim);
+		this.#vectors = vectors;
 		this.#ids = ids;
 		this.#rowOf = new Map(ids.map((id, row) => [id, row]));
 		this.#products = products;
+		this.#catalogVersion = catalogVersion;
+		this.#dim = vectors.dimension;
 	}
 
 	public get ntotal(): number {
-		return this.#vectors.ntotal;
+		return this.#ids.length;
 	}
 
 	public get dim(): number {
-		return this.#vectors.dim;
+		return this.#dim;
 	}
 
 	public idAt(row: number): string {
-		return this.#vectors.idAt(row);
-	}
-
-	/** The L2-normalized stored vector for a row (a copy, safe to mutate). */
-	public rowVector(row: number): Float32Array {
-		return this.#vectors.vectorAt(row);
+		const id = this.#ids[row];
+		if (id === undefined) {
+			throw new RangeError(`row ${row} out of range`);
+		}
+		return id;
 	}
 
 	public product(id: string): Product | undefined {
@@ -248,14 +269,33 @@ export class VectorIndex {
 	}
 
 	/**
-	 * Cosine top-k. Stored rows are L2-normalized, so cosine == dot product; the
-	 * query is normalized here so a non-unit input scores correctly. A flat scan
-	 * is exact and plenty fast for ~10^3 rows.
+	 * Exact cosine top-k through sqlite-vector. Stale rows from an older signed
+	 * catalog revision are excluded by the authenticated state-file digest.
 	 */
-	public search(queryVec: Float32Array, k: number): ReadonlyArray<VectorHit> {
-		return this.#vectors
-			.search(queryVec, Math.max(0, k))
-			.map((hit) => ({ id: hit.id, score: hit.similarity }));
+	public async search(
+		queryVec: Float32Array,
+		k: number,
+	): Promise<ReadonlyArray<VectorHit>> {
+		const limit = Math.max(0, k);
+		if (limit === 0) {
+			return [];
+		}
+		const hits = await this.#vectors.search(queryVec, this.ntotal, {
+			catalogVersion: this.#catalogVersion,
+		});
+		// Python FAISS and the historical browser runtime preserve producer row order
+		// for exact distance ties. sqlite-vector orders ties by id, so reapply the
+		// authenticated state.json row order to keep cross-tier parity exact. Only
+		// hit metadata crosses the Worker boundary; vectors remain in SQLite.
+		return [...hits]
+			.sort(
+				(left, right) =>
+					left.distance - right.distance ||
+					(this.#rowOf.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+						(this.#rowOf.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+			)
+			.slice(0, limit)
+			.map((hit) => ({ id: hit.id, score: 1 - hit.distance }));
 	}
 
 	/**
@@ -264,14 +304,23 @@ export class VectorIndex {
 	 * take its L2-normalized vector, cosine-search k+1 (room to drop the seed),
 	 * then return the k descending (id, cosine) pairs. Throws on an unknown id.
 	 */
-	public nearest(productId: string, k: number): ReadonlyArray<VectorHit> {
-		const row = this.#rowOf.get(productId);
-		if (row === undefined) {
+	public async nearest(
+		productId: string,
+		k: number,
+	): Promise<ReadonlyArray<VectorHit>> {
+		if (!this.#rowOf.has(productId)) {
 			throw new Error(`unknown product id: ${productId}`);
 		}
-		const seedVec = this.rowVector(row);
-		const hits = this.search(seedVec, k + 1);
+		const seed = await this.#vectors.read(productId);
+		if (seed === undefined) {
+			throw new Error(`product vector unavailable: ${productId}`);
+		}
+		const hits = await this.search(seed.vector, k + 1);
 		return hits.filter((hit) => hit.id !== productId).slice(0, k);
+	}
+
+	public dispose(): Promise<void> {
+		return this.#vectors.dispose();
 	}
 }
 
@@ -285,6 +334,7 @@ export class VectorIndex {
  */
 export async function loadVectorIndex(
 	files: VectorIndexFiles,
+	factory: VectorIndexFactory = createPersistentVectorIndex,
 ): Promise<VectorIndex> {
 	const meta = parseCatalogMeta(files.meta);
 	const state = parseVectorState(files.state);
@@ -297,9 +347,25 @@ export async function loadVectorIndex(
 	}
 	const matrix = asMatrix(files.embeddings, ntotal, dim);
 	const products = parseProducts(files.products);
+	const catalogVersion = await sha256Hex(files.state);
+	let vectors: SharedVectorIndex | undefined;
 	try {
-		return new VectorIndex(matrix, state.faiss_ids, products, dim);
+		vectors = await factory({ name: SQLITE_INDEX_NAME, dimension: dim });
+		// The database is durable across catalog revisions. Clear it before this
+		// bootstrap exposes the engine so removed product ids cannot accumulate and
+		// make sqlite-vector's full scan progressively more expensive. If import is
+		// interrupted, bootstrap fails closed and the next attempt reconstructs it.
+		await vectors.clear();
+		await vectors.insert(
+			state.faiss_ids.map((id, row) => ({
+				id,
+				vector: matrix.subarray(row * dim, (row + 1) * dim),
+				metadata: { catalogVersion, row },
+			})),
+		);
+		return new VectorIndex(vectors, state.faiss_ids, products, catalogVersion);
 	} catch (error) {
+		await vectors?.dispose();
 		const message = error instanceof Error ? error.message : String(error);
 		throw new VectorIndexError(`vector index rejected the bundle: ${message}`);
 	}

@@ -16,6 +16,7 @@
 // The C2b vector-only parity path is a TEST-ONLY helper, exported separately
 // as `__searchVectorForParity` (not on the public SearchEngine interface).
 
+import type { VectorIndexFactory } from "@edgeproc/browser/vector";
 import { type CooccurrenceMatrix, EMPTY_COOCCURRENCE } from "./cooccurrence";
 import type {
 	BrowseResponse,
@@ -101,12 +102,12 @@ export interface SearchEngine {
 	 * `strategy` defaults to `for_you`; a `vector_similarity` strategy requires
 	 * `seed`. Throws on an unknown strategy or a vector strategy with no seed.
 	 */
-	recommend(opts?: RecommendOptions): RecommendResponse;
+	recommend(opts?: RecommendOptions): Promise<RecommendResponse>;
 	/**
 	 * Seed-based "similar items" rail: recommend a `vector_similarity` strategy
 	 * around `productId` (kNN-to-seed → similarity-weighted rerank).
 	 */
-	similar(productId: string, opts?: SimilarOptions): RecommendResponse;
+	similar(productId: string, opts?: SimilarOptions): Promise<RecommendResponse>;
 	/** Catalog listing path (browse/category pages). */
 	browse(opts?: BrowseOptions): BrowseResponse;
 	/** The full catalog in bundle order — the lookup the events path folds clicks over. */
@@ -127,6 +128,8 @@ export interface SearchEngine {
 	interactionWeights(): InteractionWeights;
 	/** Static publisher evidence for the live ranking config and Assay formula. */
 	rankingProofEvidence(): RankingProofEvidence;
+	/** Release the SQLite-vector Worker and its OPFS handle. */
+	dispose(): Promise<void>;
 }
 
 function hydrateFused(
@@ -201,7 +204,7 @@ class HybridSearchEngine implements SearchEngine {
 		const k = Math.max(limit * 3, 30);
 		const keywordHits = this.#keyword.search(query, k);
 		const queryVec = await this.#embedder.embed(query);
-		const vectorHits = this.#index.search(queryVec, k);
+		const vectorHits = await this.#index.search(queryVec, k);
 		const fused = reciprocalRankFusion(keywordHits, vectorHits);
 
 		const fusedResults = hydrateFused(this.#index, fused);
@@ -226,12 +229,17 @@ class HybridSearchEngine implements SearchEngine {
 		};
 	}
 
-	public recommend(opts?: RecommendOptions): RecommendResponse {
+	public async recommend(opts?: RecommendOptions): Promise<RecommendResponse> {
 		const limit = opts?.limit ?? DEFAULT_LIMIT;
 		const profile = opts?.profile ?? emptyProfile();
 		const strategyName = opts?.strategy ?? "for_you";
 		const strategy = this.#strategy(strategyName);
-		const ranked = this.#rankStrategy(strategy, profile, opts?.seed, limit);
+		const ranked = await this.#rankStrategy(
+			strategy,
+			profile,
+			opts?.seed,
+			limit,
+		);
 		return {
 			results: [...ranked.slice(0, limit)],
 			session_clicks: profile.clickCount,
@@ -245,12 +253,12 @@ class HybridSearchEngine implements SearchEngine {
 	 * map (rerankWithSimilarity, empty ⇒ a plain session rerank). Phase-1/2 paths
 	 * carry an empty cooccurrence map, so their scores stay byte-identical.
 	 */
-	#rankStrategy(
+	async #rankStrategy(
 		strategy: Strategy,
 		profile: SessionProfile,
 		seed: string | undefined,
 		limit: number,
-	): ReadonlyArray<SearchResult> {
+	): Promise<ReadonlyArray<SearchResult>> {
 		if (strategy.candidate_policy === "co_occurrence") {
 			const { candidates, cooccurrence } = this.#cooccurrenceCandidates(
 				strategy,
@@ -263,7 +271,7 @@ class HybridSearchEngine implements SearchEngine {
 				cooccurrence,
 			);
 		}
-		const { candidates, similarity } = this.#candidates(
+		const { candidates, similarity } = await this.#candidates(
 			strategy,
 			profile,
 			seed,
@@ -277,7 +285,10 @@ class HybridSearchEngine implements SearchEngine {
 		);
 	}
 
-	public similar(productId: string, opts?: SimilarOptions): RecommendResponse {
+	public similar(
+		productId: string,
+		opts?: SimilarOptions,
+	): Promise<RecommendResponse> {
 		// Build options without forwarding `undefined` (exactOptionalPropertyTypes);
 		// recommend() applies its own DEFAULT_LIMIT / emptyProfile fallbacks.
 		const recommendOpts: RecommendOptions = {
@@ -304,15 +315,15 @@ class HybridSearchEngine implements SearchEngine {
 	 * vector_similarity → kNN-to-seed (requires a seed), affinity_first → today's
 	 * warm/cold pool. Only vector candidates carry a non-empty similarity map.
 	 */
-	#candidates(
+	async #candidates(
 		strategy: Strategy,
 		profile: SessionProfile,
 		seed: string | undefined,
 		limit: number,
-	): {
+	): Promise<{
 		readonly candidates: SearchResult[];
 		readonly similarity: ReadonlyMap<string, number>;
-	} {
+	}> {
 		const empty = new Map<string, number>();
 		switch (strategy.candidate_policy) {
 			case "popularity":
@@ -341,17 +352,17 @@ class HybridSearchEngine implements SearchEngine {
 	}
 
 	/** kNN-to-seed candidates + their cosine map (requires a seed product id). */
-	#vectorCandidates(
+	async #vectorCandidates(
 		seed: string | undefined,
 		limit: number,
-	): {
+	): Promise<{
 		readonly candidates: SearchResult[];
 		readonly similarity: ReadonlyMap<string, number>;
-	} {
+	}> {
 		if (seed === undefined) {
 			throw new Error("vector_similarity strategy requires a seed product id");
 		}
-		const hits = this.#index.nearest(seed, limit * 5);
+		const hits = await this.#index.nearest(seed, limit * 5);
 		const similarity = new Map<string, number>();
 		const candidates: SearchResult[] = [];
 		for (const { id, score } of hits) {
@@ -413,6 +424,10 @@ class HybridSearchEngine implements SearchEngine {
 			categories,
 		};
 	}
+
+	public dispose(): Promise<void> {
+		return this.#index.dispose();
+	}
 }
 
 /**
@@ -429,8 +444,9 @@ export async function createSearchEngine(
 	config: RankingConfig = DEFAULT_RANKING_CONFIG,
 	cooccurrence: CooccurrenceMatrix = EMPTY_COOCCURRENCE,
 	proofEvidence: RankingProofEvidence = unavailableRankingProof("missing"),
+	vectorIndexFactory?: VectorIndexFactory,
 ): Promise<SearchEngine> {
-	const index = await loadVectorIndex(files);
+	const index = await loadVectorIndex(files, vectorIndexFactory);
 	const keyword = KeywordSearcher.fromProducts(index.products());
 	return new HybridSearchEngine(
 		index,
@@ -452,10 +468,11 @@ export async function __searchVectorForParity(
 	files: VectorIndexFiles,
 	queryVec: Float32Array,
 	limit: number,
+	vectorIndexFactory?: VectorIndexFactory,
 ): Promise<SearchResponse> {
-	const index = await loadVectorIndex(files);
+	const index = await loadVectorIndex(files, vectorIndexFactory);
 	const k = Math.max(limit * 3, 30);
-	const hits = index.search(queryVec, k);
+	const hits = await index.search(queryVec, k);
 	const cosineById = new Map(hits.map((h) => [h.id, h.score]));
 	// RRF over the single vector ranking is rank-monotone: preserves cosine
 	// order. Report cosine on the result (what VectorSearcher exposes).
@@ -472,5 +489,6 @@ export async function __searchVectorForParity(
 		}
 	}
 	const sliced = results.slice(0, limit);
+	await index.dispose();
 	return { results: sliced, query: "", total: sliced.length };
 }
