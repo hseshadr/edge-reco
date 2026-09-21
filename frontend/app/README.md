@@ -5,7 +5,7 @@ Vite storefront with **no application backend**. On load it syncs a signed,
 content-addressed catalog bundle from a CDN edge, verifies it in the tab
 (ed25519 + sha256, against the key pinned in `public/public.key`), and then runs every
 search and recommendation locally via the workspace engine package
-([`../packages/edgeproc-browser`](../packages/edgeproc-browser)). The Python tier only
+([`../packages/edgereco-browser`](../packages/edgereco-browser)). The Python tier only
 *publishes* the bundle; it is never in the request path.
 
 ## Run it

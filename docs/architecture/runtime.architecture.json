@@ -7,7 +7,7 @@
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/hseshadr/edge-reco",
-      "revision": "1c32d329351f62bf47e425dc694baf5c21ef64cd"
+      "revision": "2c552eac49544e827399598c441ebac82c98da8a"
     },
     "viewBox": [1390, 700],
     "views": [
@@ -53,12 +53,12 @@
     {
       "id": "sync_worker",
       "type": "security",
-      "label": "Verify + Sync Worker",
-      "sublabel": "Signed + hashed",
+      "label": "@edgeproc/browser",
+      "sublabel": "Verify + sync Worker",
       "tag": "fail closed",
       "pos": [355, 320],
       "size": [130, 72],
-      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/runtime.ts", "line": 1, "end_line": 15, "label": "Worker runtime" }]
+      "sources": [{ "path": "docs/ARCHITECTURE.md", "line": 5, "end_line": 14, "label": "Shared browser Lego boundary" }]
     },
     {
       "id": "bundle_cache",
@@ -67,7 +67,7 @@
       "sublabel": "Local bundle cache",
       "pos": [510, 320],
       "size": [130, 72],
-      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/opfsStore.ts", "line": 1, "end_line": 20, "label": "Content-addressed store" }]
+      "sources": [{ "path": "docs/ARCHITECTURE.md", "line": 178, "end_line": 211, "label": "Shared OPFS substrate" }]
     },
     {
       "id": "runtime",
@@ -76,7 +76,7 @@
       "sublabel": "Bundle lifecycle",
       "pos": [665, 320],
       "size": [130, 72],
-      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/runtime.ts", "line": 213, "end_line": 252, "label": "Browser runtime" }]
+      "sources": [{ "path": "frontend/packages/edgereco-browser/src/engine/runtime.ts", "line": 1, "end_line": 30, "label": "Product runtime" }]
     },
     {
       "id": "hybrid_engine",
@@ -85,7 +85,7 @@
       "sublabel": "BM25 + vector RRF",
       "pos": [820, 320],
       "size": [130, 72],
-      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/searchEngine.ts", "line": 1, "end_line": 17, "label": "Discovery pipeline" }]
+      "sources": [{ "path": "frontend/packages/edgereco-browser/src/engine/searchEngine.ts", "line": 1, "end_line": 17, "label": "Discovery pipeline" }]
     },
     {
       "id": "nimbus_ui",
@@ -121,7 +121,7 @@
       "sublabel": "ONNX embedding",
       "pos": [820, 80],
       "size": [130, 66],
-      "sources": [{ "path": "frontend/packages/edgeproc-browser/src/engine/embedderWorker.ts", "line": 1, "end_line": 13, "label": "Model worker" }]
+      "sources": [{ "path": "frontend/packages/edgereco-browser/src/engine/embedderWorker.ts", "line": 1, "end_line": 13, "label": "Model worker" }]
     },
     {
       "id": "taste_log",

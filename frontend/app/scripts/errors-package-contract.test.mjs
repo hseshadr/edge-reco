@@ -29,7 +29,7 @@ import { test } from "node:test";
  * "the published package is what the app actually loads", so that is what gets
  * asserted.
  *
- * `@edgeproc/browser` is deliberately NOT covered here: it is a first-party
+ * `@edgereco/browser` is deliberately NOT covered here: it is a first-party
  * package that belongs to this repo and is meant to live under
  * `frontend/packages/`. Only the shared, separately-published library is
  * constrained.

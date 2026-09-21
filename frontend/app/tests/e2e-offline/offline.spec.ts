@@ -18,7 +18,12 @@ const PRODUCT_CARD = "main article.card button.card__overlay";
 const OFFLINE_BADGE = ".offline-badge";
 
 async function launch(page: Page): Promise<void> {
-	await page.getByRole("button", { name: "▶ Launch the live demo" }).click();
+	const launchButton = page.getByRole("button", {
+		name: "▶ Launch the live demo",
+	});
+	if (await launchButton.isVisible()) {
+		await launchButton.click();
+	}
 	await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
 		timeout: 240_000,
 	});

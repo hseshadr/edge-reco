@@ -9,11 +9,11 @@ const INTEGRITY =
 	"sha512-s0NBvvTvbc7Y6z50oqaIPraN0hd6RRd9vY4dPXkWpB3DTGKCuJ8c4Kz2eX1KjEqF7PecQ4FyqzAYvgxIrJsQYg==";
 const PACKAGE_MANIFEST = resolve(
 	import.meta.dirname,
-	"../../packages/edgeproc-browser/package.json",
+	"../../packages/edgereco-browser/package.json",
 );
 const INSTALLED_MANIFEST = resolve(
 	import.meta.dirname,
-	"../../packages/edgeproc-browser/node_modules/@edgeproc/assay/package.json",
+	"../../packages/edgereco-browser/node_modules/@edgeproc/assay/package.json",
 );
 const LOCKFILE = resolve(import.meta.dirname, "../../pnpm-lock.yaml");
 

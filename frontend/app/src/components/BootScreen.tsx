@@ -1,4 +1,4 @@
-import type { BootStage } from "@edgeproc/browser";
+import type { BootStage } from "@edgereco/browser";
 import { useTranslation } from "react-i18next";
 
 interface BootScreenProps {

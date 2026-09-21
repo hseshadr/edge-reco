@@ -62,9 +62,12 @@ test.beforeEach(async ({ page }) => {
 	await page.route(/m\.media-amazon\.com/, (route) => route.abort());
 });
 
-/** Cross the launch gate and wait for the storefront grid to mount. */
+/** Cross the launch gate when present and wait for the storefront grid. */
 async function launch(page: import("@playwright/test").Page): Promise<void> {
-	await page.getByRole("button", { name: LAUNCH }).click();
+	const launchButton = page.getByRole("button", { name: LAUNCH });
+	if (await launchButton.isVisible()) {
+		await launchButton.click();
+	}
 	await expect(page.locator(PRODUCT_CARD).first()).toBeVisible({
 		timeout: 60_000,
 	});
@@ -118,6 +121,7 @@ test("(a)+(b) clicks personalize the rail, and a FULL RELOAD retains the taste",
 	// (b) a real document reload — previously this wiped the profile.
 	await page.reload();
 	await launch(page);
+	await expect(page.getByRole("button", { name: LAUNCH })).toHaveCount(0);
 
 	// The badge restores from the replayed OPFS log (views never count) …
 	await expect(page.locator(FOR_YOU_BADGE)).toHaveText("3");
@@ -155,7 +159,7 @@ test("(c) browser Back leaves the PDP but stays in-app; reload restores the PDP 
 	await page.locator(PRODUCT_CARD).first().click();
 	await expect(page.locator(".pdp__title")).toBeVisible();
 	await page.reload();
-	await page.getByRole("button", { name: LAUNCH }).click();
+	await expect(page.getByRole("button", { name: LAUNCH })).toHaveCount(0);
 	await expect(page.locator(".pdp__title")).toBeVisible({ timeout: 60_000 });
 	// Back home: the badge restored BOTH clicks from the replayed log.
 	await page.locator(BACK).click();

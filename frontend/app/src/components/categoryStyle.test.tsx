@@ -13,7 +13,7 @@ import { DEFAULT_STYLE, styleForCategory, toneClassFor } from "./categoryStyle";
 
 const BUNDLE_CATALOG_DIR = join(
 	__dirname,
-	"../../../packages/edgeproc-browser/src/engine/__fixtures__/bundle/catalog",
+	"../../../packages/edgereco-browser/src/engine/__fixtures__/bundle/catalog",
 );
 
 interface ManifestChunk {

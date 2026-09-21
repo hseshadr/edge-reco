@@ -21,7 +21,7 @@ from edgereco.reco.ranking_config import (
 _SEED = b"\x07" * 32
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _BROWSER_FIXTURE = (
-    _REPO_ROOT / "frontend/packages/edgeproc-browser/src/engine/__fixtures__/ranking_proof_v1.json"
+    _REPO_ROOT / "frontend/packages/edgereco-browser/src/engine/__fixtures__/ranking_proof_v1.json"
 )
 _FORMULA_IDS = (
     "retrieval",

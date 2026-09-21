@@ -21,7 +21,7 @@ from edgereco.reco.score_receipt import sign_ranking_receipt
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_ROOT.parent
 FIXTURE = (
-    REPO_ROOT / "frontend/packages/edgeproc-browser/src/engine/__fixtures__/ranking_proof_v1.json"
+    REPO_ROOT / "frontend/packages/edgereco-browser/src/engine/__fixtures__/ranking_proof_v1.json"
 )
 TEST_SEED = b"\x07" * 32
 

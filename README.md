@@ -175,7 +175,7 @@ Things this project does **not** do, stated plainly.
 
 **Resource floor.** A first launch downloads a roughly 23 MB quantized language model and a roughly 23 MB ONNX/WASM runtime, then allocates more memory while compiling and running them. The engine starts only after the shopper clicks Launch; simultaneous first searches share one model load, failed boots release both Workers, and the release test enforces cold-start, search, and Chromium-heap budgets. This is still a meaningful cost on low-memory phones and laptops. The app does not claim support for a particular minimum-memory device until physical-device measurements establish one.
 
-**1. Bundle-sync verification is not displayed.** Signature checking genuinely runs, fail-closed, every time the catalog syncs — a tampered file *is* rejected and the app *does* refuse to load it (`frontend/packages/edgeproc-browser/src/engine/`: `crypto.ts`, `sync.ts`, `integrity.ts`). What does not exist is a screen showing that bundle-sync outcome. The landing page's “verify (Ed25519 + SHA-256, fail-closed)” step is static pipeline copy, not a live result. The separate ranking-proof evidence below does not replace or claim to display bundle-sync verification.
+**1. Bundle-sync verification is not displayed.** Signature checking genuinely runs, fail-closed, every time the catalog syncs — a tampered file *is* rejected and the app *does* refuse to load it. That reusable implementation comes from the standalone [`@edgeproc/browser`](https://github.com/hseshadr/edgeproc-browser) dependency; EdgeReco does not keep a private copy. What does not exist is a screen showing that bundle-sync outcome. The landing page's “verify (Ed25519 + SHA-256, fail-closed)” step is static pipeline copy, not a live result. The separate ranking-proof evidence below does not replace or claim to display bundle-sync verification.
 
 **2. Ranking proof is deliberately narrower than result truth.** The “why?” panel has two sibling sections. **How calculated — Assay** shows the live ordered formula for that result: every raw signal, coefficient, additive/subtractive contribution, and final score. **What verified — Avow** reports whether the publisher signature on a static `edgereco.ranking-proof/v1` payload verifies, its hash matches the complete `ranking_config.json`, and its formula probes match search plus every named strategy. It never signs a shopper’s personalized result, and it does not prove input truth, freshness, fairness, or recommendation quality.
 
@@ -197,12 +197,13 @@ EdgeReco is two layers, not one.
 
 The bottom layer is [**edge-proc**](https://github.com/hseshadr/edge-proc) — a reusable local-compute engine: signed catalog delivery, an on-device cache, fail-closed verification, and the retrieval primitives. The top layer is **edge-reco** — the product-discovery brain: the scoring formula, the session-signal capture, and the session-aware re-ranker.
 
-That split is real in both runtimes. The Python side depends on [`edge-proc[localvec,bundles]`](backend/pyproject.toml); the browser side runs [`@edgeproc/browser`](frontend/packages/edgeproc-browser/) over the same signed file and imports the shared [`@edgeproc/errors`](https://www.npmjs.com/package/@edgeproc/errors) package for stable error codes. The lower layer is reusable for any local search workload; edge-reco is what turns it into recommendations, and the two halves are tested against each other to return identical results.
+That split is real in both runtimes. The Python side depends on [`edge-proc[localvec,bundles]`](backend/pyproject.toml). The browser side depends on the standalone [`@edgeproc/browser`](https://github.com/hseshadr/edgeproc-browser) package for signed sync, integrity, Workers, OPFS, and vector contracts, while this repo's [`@edgereco/browser`](frontend/packages/edgereco-browser/) package owns only recommendation-specific embedding, search, ranking, and session logic. The lower layer is reusable for any local browser workload; EdgeReco turns it into recommendations, and the two halves are tested against each other to return identical results.
 
 | Repo | Role |
 | --- | --- |
 | [**edge-reco**](https://github.com/hseshadr/edge-reco) (this repo) | the product brain — scoring formula, session signals, session-aware re-ranker, the Nimbus demo storefront. |
 | [**edge-proc**](https://github.com/hseshadr/edge-proc) | the reusable local-compute layer — signed catalog delivery, on-device content-addressed cache, fail-closed Ed25519 + SHA-256 verification, and the retrieval primitives. **This is what makes on-device search possible.** |
+| [**edgeproc-browser**](https://github.com/hseshadr/edgeproc-browser) | the reusable browser Lego — signed bundle sync, OPFS/CAS, Worker transport, integrity checks, and swappable vector indexes. |
 | [**edgeproc-core**](https://github.com/hseshadr/edgeproc-core) | the vector-partitioning protocol edge-proc builds its local vector index on. On PyPI as [`edgeproc-core`](https://pypi.org/project/edgeproc-core/). |
 
 You don't need to clone edge-proc or edgeproc-core — the backend pulls edgeproc-core from PyPI and edge-proc from public GitHub automatically (see [QUICKSTART](docs/QUICKSTART.md)).
@@ -403,9 +404,9 @@ uv sync --group dev
 uv run poe gate                   # format + lint + types + complexity + tests/coverage
 uv run poe audit                  # dependency vulnerability scan (network; own workflow)
 
-# Frontend (Nimbus storefront + @edgeproc/browser)
+# Frontend (Nimbus storefront + @edgereco/browser over @edgeproc/browser)
 cd ../frontend
-pnpm install                      # resolves the whole pnpm workspace (app + package)
+pnpm install                      # resolves the exact pinned @edgeproc/browser Git commit
 pnpm -r run lint                  # biome on both workspace members
 pnpm -r run typecheck             # tsc -b on both
 pnpm -r run test                  # vitest on both
@@ -466,7 +467,7 @@ image that can drift from the text beside it.
   - `backend/scripts/` — `curate_demo_catalog.py` + browser-tier parity-fixture generators
 - `frontend/` — pnpm workspace root (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`).
   - `frontend/app/` — Nimbus React storefront (backend-free; syncs + runs the engine in-browser)
-  - `frontend/packages/edgeproc-browser/` — `@edgeproc/browser`, the in-browser sync + hybrid-search engine
+  - `frontend/packages/edgereco-browser/` — `@edgereco/browser`, EdgeReco-specific embedding, hybrid search, ranking, and session logic
 - `docs/` — `ARCHITECTURE.md` · `QUICKSTART.md` · `DEPLOY.md` · `SECURITY-PRIVACY.md`
 
 ## Security

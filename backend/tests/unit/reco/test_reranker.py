@@ -78,7 +78,7 @@ def test_the_browser_port_carries_the_same_floor() -> None:
     """
     source = (
         Path(__file__).resolve().parents[3].parent
-        / "frontend/packages/edgeproc-browser/src/engine/reranker.ts"
+        / "frontend/packages/edgereco-browser/src/engine/reranker.ts"
     ).read_text(encoding="utf-8")
     semantic = re.search(r"MIN_SEMANTIC_RELEVANCE = ([\d.]+);", source)
     lexical = re.search(r"MIN_LEXICAL_RELEVANCE = ([\d.]+);", source)

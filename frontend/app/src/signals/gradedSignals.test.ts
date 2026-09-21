@@ -1,4 +1,4 @@
-import { applyInteraction, emptyProfile } from "@edgeproc/browser";
+import { applyInteraction, emptyProfile } from "@edgereco/browser";
 import { describe, expect, it } from "vitest";
 import type { Product } from "../api/types";
 

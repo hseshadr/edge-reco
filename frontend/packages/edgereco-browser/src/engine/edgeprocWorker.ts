@@ -1,0 +1,1 @@
+import "@edgeproc/browser/worker";

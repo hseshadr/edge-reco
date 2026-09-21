@@ -38,9 +38,9 @@ Run from backend/ (regenerate the demo sessions first if they changed)::
 
 Then mirror the result into the browser parity fixture (the browser syncs this copy)::
 
-    rm -rf ../frontend/packages/edgeproc-browser/src/engine/__fixtures__/bundle/catalog
+    rm -rf ../frontend/packages/edgereco-browser/src/engine/__fixtures__/bundle/catalog
     cp -R examples/catalog \
-        ../frontend/packages/edgeproc-browser/src/engine/__fixtures__/bundle/catalog
+        ../frontend/packages/edgereco-browser/src/engine/__fixtures__/bundle/catalog
 """
 
 from __future__ import annotations

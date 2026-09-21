@@ -1,5 +1,5 @@
 // The data layer — backend-free. Every call that used to hit the FastAPI backend
-// now runs the in-browser engine (@edgeproc/browser) over the synced signed bundle:
+// now runs the in-browser engine (@edgereco/browser) over the synced signed bundle:
 //
 //   search()   -> engine.search(query)        (embed in-tab -> BM25⊕vector -> RRF -> rerank)
 //   recommend()-> engine.recommend()          (popularity pool reranked by the live profile)
@@ -32,7 +32,7 @@ import {
 	type RuntimeDeps,
 	type SearchEngine,
 	type SessionProfile,
-} from "@edgeproc/browser";
+} from "@edgereco/browser";
 import { record } from "../metrics/store";
 import {
 	appendTasteEvent,
@@ -95,7 +95,7 @@ const PERSONALIZED_STRATEGIES: ReadonlySet<string> = new Set([
  * the ~25 MB transformers.js model download (the one slow/flaky external
  * fetch). Production never sets it.
  *
- * Lives in the demo (not in `@edgeproc/browser`) because this is a property of
+ * Lives in the demo (not in `@edgereco/browser`) because this is a property of
  * how this demo wires its e2e, not of the engine package itself.
  */
 interface DemoTestHooks {
@@ -296,7 +296,7 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
  * Compose the final RuntimeDeps:
  *   explicit caller-passed dep > demo test hook (window) > package default.
  * The demo test hook is honored only for `makeEmbedder`; everything else uses
- * the real Worker-backed defaults from `@edgeproc/browser`.
+ * the real Worker-backed defaults from `@edgereco/browser`.
  */
 function resolveDeps(deps: Partial<RuntimeDeps>): RuntimeDeps {
 	const base = defaultRuntimeDeps();

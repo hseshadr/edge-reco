@@ -29,20 +29,17 @@ importers:
   app:
     dependencies:
       '@edgeproc/browser':
-        specifier: workspace:*
-        version: link:../packages/edgeproc-browser
+        specifier: github:hseshadr/edgeproc-browser#f1ae371c8dfe441c6a3dd845e92c3d67adf654bd
+        version: https://codeload.github.com/hseshadr/edgeproc-browser/tar.gz/f1ae371c8dfe441c6a3dd845e92c3d67adf654bd
       '@edgeproc/errors':
         specifier: ^0.1.1
         version: 0.1.1
-      '@hpcc-js/wasm-zstd':
-        specifier: ^1.15.0
-        version: 1.15.0
+      '@edgereco/browser':
+        specifier: workspace:*
+        version: link:../packages/edgereco-browser
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0(@types/node@26.1.2)
-      '@noble/ed25519':
-        specifier: ^3.1.0
-        version: 3.1.0
       i18next:
         specifier: ^26.3.1
         version: 26.3.6(typescript@7.0.2)
@@ -111,7 +108,7 @@ importers:
         specifier: 7.4.1
         version: 7.4.1
 
-  packages/edgeproc-browser:
+  packages/edgereco-browser:
     dependencies:
       '@edgeproc/assay':
         specifier: 0.5.0-dev.3
@@ -119,15 +116,12 @@ importers:
       '@edgeproc/avow':
         specifier: 0.4.1
         version: 0.4.1
-      '@hpcc-js/wasm-zstd':
-        specifier: ^1.15.0
-        version: 1.15.0
+      '@edgeproc/browser':
+        specifier: github:hseshadr/edgeproc-browser#f1ae371c8dfe441c6a3dd845e92c3d67adf654bd
+        version: https://codeload.github.com/hseshadr/edgeproc-browser/tar.gz/f1ae371c8dfe441c6a3dd845e92c3d67adf654bd
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0(@types/node@26.1.2)
-      '@noble/ed25519':
-        specifier: ^3.1.0
-        version: 3.1.0
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.6
@@ -830,6 +824,11 @@ packages:
     resolution: {integrity: sha512-HmoF165wNgrcMv5ZwAHXbzCrR8gFqATQONNMtUArNMFm1L46oTZJ0sWDOdVHWAg4PZwEAkRQo5PRVOPbyAjBIA==}
     engines: {node: '>=22.13'}
 
+  '@edgeproc/browser@https://codeload.github.com/hseshadr/edgeproc-browser/tar.gz/f1ae371c8dfe441c6a3dd845e92c3d67adf654bd':
+    resolution: {gitHosted: true, integrity: sha512-rKYH7vi3HkqtMGQVX6ch4fU0dys1bUkTb+01HsspDbhzuzy8QE3IJgTTHVJEkK3uAhdg2HPFep9ByNxx03QZ7g==, tarball: https://codeload.github.com/hseshadr/edgeproc-browser/tar.gz/f1ae371c8dfe441c6a3dd845e92c3d67adf654bd}
+    version: 0.1.0
+    engines: {node: '>=22.13'}
+
   '@edgeproc/errors@0.1.1':
     resolution: {integrity: sha512-5eLXm6Dp99oSBhQSCeTns5CRLoYypkxRw4GP0kIesOutt55Y+FluygxGQdXN0V88NPRmHZFPovrAuVf9UH0Vig==}
     engines: {node: '>=22.13'}
@@ -1002,8 +1001,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@hpcc-js/wasm-zstd@1.15.0':
-    resolution: {integrity: sha512-WjcnbecP+iWNzg/njGoUmQ64DNyadGuEnpNy3a151xqasIHThzZMNuGO2xk3vMwyQ3iYbDU7Z29ntXj4aPolQg==}
+  '@hpcc-js/wasm-zstd@1.16.1':
+    resolution: {integrity: sha512-mMAkjBmrtkThCRY2h9FazYEsDhn42z+6hQ2zPtIP3TEtwZKgIqUBrnH4r39ujK/MNP94MFEJmVm7h9wcpzMo3Q==}
 
   '@huggingface/jinja@0.5.9':
     resolution: {integrity: sha512-uWTG+l3VJRsl7EXxYizuL3P+cCPoc3cRqbWWRcQN0FhejRfbdq0RNhCmbY/YDtnTcz9icdLYuLDjsnz4d8JMuw==}
@@ -2248,6 +2247,9 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  idb-keyval@6.3.0:
+    resolution: {integrity: sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow==}
 
   idb@7.1.1:
     resolution: {integrity: sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==}
@@ -4104,6 +4106,12 @@ snapshots:
       '@noble/ed25519': 3.1.0
       canonicalize: 3.0.0
 
+  '@edgeproc/browser@https://codeload.github.com/hseshadr/edgeproc-browser/tar.gz/f1ae371c8dfe441c6a3dd845e92c3d67adf654bd':
+    dependencies:
+      '@hpcc-js/wasm-zstd': 1.16.1
+      '@noble/ed25519': 3.1.0
+      idb-keyval: 6.3.0
+
   '@edgeproc/errors@0.1.1': {}
 
   '@emnapi/runtime@1.11.3':
@@ -4191,7 +4199,7 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@hpcc-js/wasm-zstd@1.15.0': {}
+  '@hpcc-js/wasm-zstd@1.16.1': {}
 
   '@huggingface/jinja@0.5.9': {}
 
@@ -5265,6 +5273,8 @@ snapshots:
   i18next@26.3.6(typescript@7.0.2):
     optionalDependencies:
       typescript: 7.0.2
+
+  idb-keyval@6.3.0: {}
 
   idb@7.1.1: {}
 

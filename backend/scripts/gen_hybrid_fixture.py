@@ -17,7 +17,7 @@ Run from backend/::
 
     .venv/bin/python3 scripts/gen_hybrid_fixture.py
     (cd ../frontend && pnpm exec biome check --write \
-        packages/edgeproc-browser/src/engine/__fixtures__/hybrid_parity.json)
+        packages/edgereco-browser/src/engine/__fixtures__/hybrid_parity.json)
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_ROOT.parent
 CATALOG = BACKEND_ROOT / "examples" / "catalog"
 FIXTURE = (
-    REPO_ROOT / "frontend/packages/edgeproc-browser/src/engine/__fixtures__/hybrid_parity.json"
+    REPO_ROOT / "frontend/packages/edgereco-browser/src/engine/__fixtures__/hybrid_parity.json"
 )
 DIM = 384
 LIMIT = 10

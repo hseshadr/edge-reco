@@ -3,7 +3,7 @@
 Why this exists
 ---------------
 The parity fixtures under
-``frontend/packages/edgeproc-browser/src/engine/__fixtures__/`` are regenerated in
+``frontend/packages/edgereco-browser/src/engine/__fixtures__/`` are regenerated in
 CI and compared to the committed copies. That comparison used to be
 ``git diff --exit-code`` — a BYTE-exact test applied to float data. It went red
 intermittently on ~1e-7 *relative* wobble in ``score`` / embedding values: the

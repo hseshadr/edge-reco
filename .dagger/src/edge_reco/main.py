@@ -35,7 +35,7 @@ ASSAY_INSTALL: Final = tuple(
 )
 PLAYWRIGHT_INSTALL: Final = tuple(shell_split("pnpm -C app exec playwright install --with-deps chromium"))
 FIXTURES: Final = tuple(shell_split("search_parity cooccurrence_parity strategy_parity embedding_parity hybrid_parity"))
-FIXTURE_DIR: Final = "../frontend/packages/edgeproc-browser/src/engine/__fixtures__"
+FIXTURE_DIR: Final = "../frontend/packages/edgereco-browser/src/engine/__fixtures__"
 SOURCE_EXCLUDES: Final = list(
     shell_split(
         ".git .venv .dagger/.venv .dagger/sdk **/.venv **/.coverage "
@@ -463,10 +463,11 @@ class EdgeReco:
     def _node(self, source: dagger.Directory, commit: str = CHECK_SHA) -> dagger.Container:
         base = dag.container().from_(NODE_IMAGE).with_exec(["corepack", "enable", "pnpm"])
         base = base.with_exec(["corepack", "install", "--global", f"pnpm@{PNPM_VERSION}"])
-        base = base.with_directory("/src", source).with_workdir("/src/frontend")
-        return base.with_env_variable("EXPECTED_SHA", commit).with_mounted_cache(
+        base = base.with_directory("/src", source)
+        base = base.with_env_variable("EXPECTED_SHA", commit).with_mounted_cache(
             "/pnpm/store", dag.cache_volume("edge-reco-pnpm")
         )
+        return base.with_workdir("/src/frontend")
 
     def _dependencies(self, source: dagger.Directory, commit: str = CHECK_SHA) -> dagger.Container:
         container = self._node(source, commit).with_exec(["pnpm", "config", "set", "store-dir", "/pnpm/store"])
@@ -495,7 +496,7 @@ class EdgeReco:
 
     @staticmethod
     def _fixtures(source: dagger.Directory) -> dagger.Directory:
-        return source.directory("frontend/packages/edgeproc-browser/src/engine/__fixtures__")
+        return source.directory("frontend/packages/edgereco-browser/src/engine/__fixtures__")
 
     @staticmethod
     def _codeql() -> dagger.Container:
@@ -527,7 +528,7 @@ class EdgeReco:
 
     @staticmethod
     def _relevance_path() -> str:
-        return "packages/edgeproc-browser/src/engine/__fixtures__/relevance_export.json"
+        return "packages/edgereco-browser/src/engine/__fixtures__/relevance_export.json"
 
     @staticmethod
     def _parity_command() -> str:
