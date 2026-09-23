@@ -42,6 +42,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   clause being the one that reads what actually loads, not what was asked for.
 
 ### Security
+- **`@edgeproc/browser` bumped `a94e7f2` → `02171df` (upstream `main`) for the
+  rollback-floor fix.** Upstream #13: `syncIndex` used to re-verify the stored
+  active pointer under the currently pinned key and, on a `SignatureError`, forget
+  it — so any key change reset the anti-rollback floor and an OLD release re-signed
+  by the new key was promoted with no freshness check. The stored pointer is now
+  the floor whether or not the current key verifies it; serving the cached bundle
+  offline still requires a valid signature under the pinned key. The same range
+  also brings upstream #14 (a trust-root URL may serve an `edgeproc.keyring/v1`
+  JSON keyring; optional signed `key_id` / `expires_at` pointer fields;
+  `KeyRevokedError` / `UnknownKeyError` / `PointerExpiredError` map to the existing
+  `integrity` Worker code; `SyncResult.expired` on an offline, expired cache) and
+  #11/#12 (an opt-in `@edgeproc/browser/sqlite` app-state export edge-reco does not
+  import). Nothing here changes for edge-reco: the trust root stays the raw 32-byte
+  `public.key`, the committed signed bundle and its pointers (no `key_id`, no
+  `expires_at`) verify byte-identically, no storage key or format changes, and no
+  call site changes. Only the two `package.json` pins, the contract test that pins
+  them, and the lockfile's `@edgeproc/browser` entry moved; there are no transitive
+  changes.
+
 - **`edge-proc` installs from PyPI, closing the last hole in `poe audit`.**
   pip-audit *skips* any URL requirement — "URL requirements cannot be pinned to a
   specific package version" — so while `edge-proc` was pinned to a git SHA it and
