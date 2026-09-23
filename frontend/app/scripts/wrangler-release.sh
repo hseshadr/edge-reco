@@ -4,7 +4,10 @@ mode=$1
 commit=$2
 case "$mode" in
   preflight)
-		pnpm exec wrangler --version | grep -Fx '4.134.0' && pnpm exec wrangler pages deploy --help >/dev/null
+		# The exact pin lives only in frontend/package.json, so a Dependabot bump
+		# moves the dependency and this check together.
+		expected=$(node -p 'require(process.argv[1]).devDependencies.wrangler' "$(cd "$(dirname "$0")/../.." && pwd)/package.json")
+		pnpm exec wrangler --version | grep -Fx "$expected" && pnpm exec wrangler pages deploy --help >/dev/null
 		ARTIFACT_DIR=/artifact EXPECTED_SHA="$commit" node --test \
 			--test-name-pattern='mounted artifact' app/scripts/release-verify.test.mjs
     ;;
