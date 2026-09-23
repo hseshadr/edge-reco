@@ -1,7 +1,11 @@
 import { type EngineErrorCode, EngineOperationError } from "@edgeproc/browser";
 import { starterPack } from "@edgeproc/errors";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bootErrorMessage, bundleErrorRegistry } from "./syncErrors";
+import {
+	bootErrorMessage,
+	bootFailure,
+	bundleErrorRegistry,
+} from "./syncErrors";
 
 /**
  * A faithful stand-in for a bundle-sync failure: the in-browser engine sets a
@@ -248,5 +252,141 @@ describe("bootErrorMessage — behaviour-identical display", () => {
 			"[edge-reco:bundle.integrity_failed]",
 			err,
 		);
+	});
+});
+
+describe("bootFailure — which failures offer the manual catalog-cache clear", () => {
+	// A returning shopper whose durable rollback floor / cached pointer can no
+	// longer be satisfied (a republish with a lower sequence, a new signing key,
+	// a changed bundle_id/channel) hits the SAME integrity refusal on every
+	// Retry. Only that class gets the explicit "clear cached catalog" action:
+	// every other failure keeps Retry alone, because wiping the verified offline
+	// copy would not fix a network/lock/device problem and would cost the shopper
+	// their offline catalog.
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("offers the clear for every integrity-class refusal, Worker or in-thread", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const refusals: unknown[] = [
+			new EngineOperationError({ code: "rollback", message: "sequence 3 < 5" }),
+			new EngineOperationError({ code: "integrity", message: "bad sig" }),
+			engineError("RollbackError", "sequence 3 < 5"),
+			engineError("SignatureError", "bad sig"),
+			engineError("IntegrityError", "bundle identity mismatch"),
+			engineError("UnknownKeyError", "unknown key"),
+		];
+		for (const raw of refusals) {
+			expect(bootFailure(raw)).toMatchObject({
+				code: "bundle.integrity_failed",
+				offerCacheClear: true,
+			});
+		}
+	});
+
+	it("keeps Retry alone for network, lock, storage, device and unknown failures", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const others: unknown[] = [
+			new EngineOperationError({ code: "network", message: "HTTP 503" }),
+			new EngineOperationError({ code: "lock", message: "lock" }),
+			new EngineOperationError({ code: "storage", message: "QuotaExceeded" }),
+			new EngineOperationError({ code: "storage", message: "no OPFS" }),
+			new EngineOperationError({ code: "internal", message: "boom" }),
+			engineError("NetworkError", "origin unreachable"),
+			engineError("WorkerTimeoutError", "idle"),
+			new TypeError("Failed to fetch"),
+			"weird",
+		];
+		for (const raw of others) {
+			expect(bootFailure(raw).offerCacheClear).toBe(false);
+		}
+	});
+
+	it("carries the verbatim message and logs the same coded breadcrumb as bootErrorMessage", () => {
+		const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const err = new EngineOperationError({
+			code: "rollback",
+			message: "pointer sequence 3 is below the stored floor 5",
+		});
+		expect(bootFailure(err).message).toBe(
+			"pointer sequence 3 is below the stored floor 5",
+		);
+		expect(bootFailure("weird").message).toBe("Unexpected error");
+		expect(spy).toHaveBeenCalledWith(
+			"[edge-reco:bundle.integrity_failed]",
+			err,
+		);
+	});
+});
+
+describe("bootFailure — a rollback refusal needs a warning and a two-step confirm", () => {
+	// Threat: an attacker who can serve an older-but-validly-signed `latest`
+	// (but not the app's JavaScript) triggers a RollbackError. A one-click clear
+	// would walk the shopper into wiping the rollback floor, after which that old
+	// bundle is accepted at first-install trust. So a rollback carries its engine
+	// code to the screen and the clear demands explicit confirmation.
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("carries the Worker's EngineOperationError.code through to the screen", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		for (const code of [
+			"integrity",
+			"rollback",
+			"network",
+			"lock",
+			"storage",
+			"internal",
+		] as const) {
+			expect(
+				bootFailure(new EngineOperationError({ code, message: "x" }))
+					.engineCode,
+			).toBe(code);
+		}
+		// An in-thread RollbackError carries the same category by name.
+		expect(bootFailure(engineError("RollbackError", "x")).engineCode).toBe(
+			"rollback",
+		);
+		// Unknown/foreign shapes carry none.
+		expect(bootFailure(new TypeError("Failed to fetch")).engineCode).toBe(null);
+		expect(
+			bootFailure({ name: "EngineOperationError", code: "bogus" }).engineCode,
+		).toBe(null);
+	});
+
+	it("requires confirmation for a rollback, Worker or in-thread", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		for (const raw of [
+			new EngineOperationError({ code: "rollback", message: "3 < 5" }),
+			engineError("RollbackError", "3 < 5"),
+		]) {
+			expect(bootFailure(raw)).toMatchObject({
+				offerCacheClear: true,
+				confirmCacheClear: true,
+			});
+		}
+	});
+
+	it("keeps the single-click clear for other integrity refusals", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		for (const raw of [
+			new EngineOperationError({ code: "integrity", message: "bad sig" }),
+			engineError("SignatureError", "bad sig"),
+			engineError("IntegrityError", "bundle identity mismatch"),
+		]) {
+			expect(bootFailure(raw)).toMatchObject({
+				offerCacheClear: true,
+				confirmCacheClear: false,
+			});
+		}
+	});
+
+	it("never asks to confirm a clear it does not offer", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		expect(
+			bootFailure(new EngineOperationError({ code: "network", message: "x" })),
+		).toMatchObject({ offerCacheClear: false, confirmCacheClear: false });
 	});
 });

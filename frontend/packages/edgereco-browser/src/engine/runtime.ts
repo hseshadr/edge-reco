@@ -16,8 +16,15 @@
 // run everything needed to search lives in OPFS + the HTTP cache, so reloads
 // are offline-capable (a re-sync over a reachable origin fetches zero chunks).
 
-import { EngineClient, fetchBytes, type SyncResult } from "@edgeproc/browser";
+import {
+	EngineClient,
+	fetchBytes,
+	MAX_TRUST_ROOT_BYTES,
+	parseTrustRoot,
+	type SyncResult,
+} from "@edgeproc/browser";
 import type { VectorIndexFactory } from "@edgeproc/browser/vector";
+import { deleteBundleFloorDatabase } from "./cacheFloor";
 import { type CooccurrenceMatrix, parseCooccurrence } from "./cooccurrence";
 import EdgeProcWorker from "./edgeprocWorker?worker";
 import { createEmbedder, type Embedder } from "./embedder";
@@ -76,6 +83,13 @@ export interface EnginePort {
 		expectedChannel?: string,
 	): Promise<SyncResult>;
 	readFile(path: string): Promise<Uint8Array>;
+	/**
+	 * Clear the durable signed-bundle cache (OPFS chunks/manifests, the active
+	 * pointer and the IndexedDB rollback floor) under the same cross-tab lock as
+	 * sync/read. `EngineClient.clear()` satisfies this. Only ever driven by an
+	 * explicit user action — see {@link EngineRuntime.clearBundleCache}.
+	 */
+	clear?(): Promise<void>;
 	/** Release the sync worker once the bundle is materialized. */
 	dispose?(): void;
 	/** Legacy lifecycle alias for worker-backed ports. */
@@ -87,11 +101,22 @@ export interface RuntimeDeps {
 	readonly spawnEngine: () => EnginePort;
 	readonly makeEmbedder: () => Embedder;
 	readonly makeVectorIndex?: VectorIndexFactory;
+	/**
+	 * Fetch the raw trust-root bytes at `pubkeyUrl` — the SAME document the sync
+	 * Worker pins: a legacy raw 32-byte Ed25519 key or an `edgeproc.keyring/v1`
+	 * JSON keyring. Parsing is not the loader's job (see `loadTrustedKeys`).
+	 */
 	readonly loadPublisherKey?: (url: string) => Promise<Uint8Array>;
+	/**
+	 * Delete the IndexedDB rollback-floor database, awaited and bounded; used
+	 * only by the explicit {@link EngineRuntime.clearBundleCache}. Defaults to
+	 * `deleteBundleFloorDatabase` (cacheFloor.ts).
+	 */
+	readonly deleteFloorDatabase?: () => Promise<void>;
 }
 
 const defaultLoadPublisherKey = (url: string): Promise<Uint8Array> =>
-	fetchBytes(url, { cache: "force-cache", maxBytes: 32 });
+	fetchBytes(url, { cache: "force-cache", maxBytes: MAX_TRUST_ROOT_BYTES });
 
 /** Bundle the shared side-effect Worker entry from this Vite consumer. */
 export function spawnEngineClient(): EngineClient {
@@ -161,13 +186,24 @@ async function readRankingConfig(engine: EnginePort): Promise<RankingConfig> {
 	return parseRankingConfig(bytes);
 }
 
-async function loadPinnedKey(
+/**
+ * The keys the ranking proof may be signed by: every UNREVOKED key of the
+ * pinned trust root, read with upstream `parseTrustRoot` — the exact parser the
+ * sync Worker uses (`loadTrustRoot`) — so both readers agree on one format and a
+ * key rotation to an `edgeproc.keyring/v1` trust root keeps the proof verified.
+ * An unreachable or malformed trust root yields `undefined` (→ key_unavailable);
+ * the proof is evidence, never boot-critical.
+ */
+async function loadTrustedKeys(
 	url: string,
 	loader: (url: string) => Promise<Uint8Array>,
-): Promise<Uint8Array | undefined> {
+): Promise<ReadonlyArray<Uint8Array> | undefined> {
 	try {
-		const bytes = await loader(url);
-		return bytes.byteLength === 32 ? bytes : undefined;
+		const keyring = await parseTrustRoot(await loader(url));
+		const revoked = new Set(keyring.revoked);
+		return keyring.keys
+			.filter((key) => !revoked.has(key.keyId))
+			.map((key) => key.publicKey);
 	} catch {
 		return undefined;
 	}
@@ -188,8 +224,8 @@ export async function readRankingProofEvidence(
 	) {
 		return preliminary;
 	}
-	const pinnedKey = await loadPinnedKey(pubkeyUrl, loadPublisherKey);
-	return verifyRankingProof(receipt, config, pinnedKey);
+	const trustedKeys = await loadTrustedKeys(pubkeyUrl, loadPublisherKey);
+	return verifyRankingProof(receipt, config, trustedKeys);
 }
 
 /**
@@ -354,6 +390,62 @@ export class EngineRuntime {
 		this.#embedder = null;
 		if (embedder !== null) {
 			disposeResource(embedder);
+		}
+	}
+
+	/**
+	 * Wipe the synced signed-bundle cache — OPFS `chunk/`, `manifest/` and the
+	 * durable active pointer, plus the IndexedDB rollback floor — through the
+	 * upstream `EngineClient.clear()` on a dedicated, short-lived sync Worker.
+	 * Nothing else is touched: not the service-worker caches, not the
+	 * self-hosted model cache, not the on-device taste log or vector database.
+	 *
+	 * SECURITY: this discards the anti-rollback floor and returns the device to
+	 * first-install trust (the next pointer is verified against the pinned key
+	 * exactly as for a new visitor, with no floor). It exists for ONE caller: an
+	 * explicit, user-initiated "clear cached catalog" action after a failed
+	 * boot. Never call it automatically in response to a `RollbackError` or any
+	 * other refusal — that would turn rollback protection into a no-op.
+	 *
+	 * Refused while a bootstrap is in flight or an engine is live, so it cannot
+	 * race the sync it would be wiping. A failed bootstrap clears its memo, so
+	 * the boot-failure screen can always reach it.
+	 *
+	 * Order: (1) tear down any worker a failed boot left behind, so it releases
+	 * the Web Lock and its OPFS sync-access handles; (2) run the library clear
+	 * on a fresh sync worker, under the cache's Web Lock; (3) release that
+	 * worker; (4) delete the IndexedDB floor database, awaited and bounded
+	 * (`onblocked` waits; a timeout rejects), so the floor cannot silently
+	 * survive. Any failure rejects — a partial clear is never reported as done.
+	 */
+	public async clearBundleCache(): Promise<void> {
+		if (this.#enginePromise !== null) {
+			throw new Error(
+				"cannot clear the bundle cache while the engine is booting or running",
+			);
+		}
+		this.#teardownIdleWorkers();
+		const port = this.#deps.spawnEngine();
+		try {
+			if (port.clear === undefined) {
+				throw new Error("this engine port cannot clear its bundle cache");
+			}
+			await port.clear();
+		} finally {
+			disposeResource(port);
+		}
+		await (this.#deps.deleteFloorDatabase ?? deleteBundleFloorDatabase)();
+	}
+
+	/** Release any sync/embedder worker still held while no boot is running. */
+	#teardownIdleWorkers(): void {
+		const enginePort = this.#enginePort;
+		if (enginePort !== null) {
+			this.#releaseEngine(enginePort);
+		}
+		const embedder = this.#embedder;
+		if (embedder !== null) {
+			this.#releaseEmbedder(embedder);
 		}
 	}
 

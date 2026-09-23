@@ -60,4 +60,78 @@ describe("BootScreen", () => {
 		await userEvent.click(screen.getByRole("button", { name: "Retry" }));
 		expect(onRetry).toHaveBeenCalledOnce();
 	});
+
+	it("offers no cache clear unless the failure calls for it", () => {
+		render(
+			<BootScreen stage={null} error="origin unreachable" onRetry={vi.fn()} />,
+		);
+		expect(
+			screen.queryByRole("button", { name: "Clear cached catalog and retry" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("renders the explicit clear-cached-catalog action and explains it plainly", async () => {
+		const onRetry = vi.fn();
+		const onClear = vi.fn();
+		render(
+			<BootScreen
+				stage={null}
+				error="pointer signature verification failed"
+				onRetry={onRetry}
+				cacheClear={{ onClear, confirm: false }}
+			/>,
+		);
+		expect(
+			screen.getByText(/saved copy of the catalog in this browser/i),
+		).toBeInTheDocument();
+		// Retry stays available alongside the recovery action.
+		expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "Clear cached catalog and retry" }),
+		);
+		expect(onClear).toHaveBeenCalledOnce();
+		expect(onRetry).not.toHaveBeenCalled();
+	});
+
+	it("warns about tampering on a rollback and requires an inline second click", async () => {
+		const onClear = vi.fn();
+		render(
+			<BootScreen
+				stage={null}
+				error="pointer sequence 3 is below the stored floor 5"
+				onRetry={vi.fn()}
+				cacheClear={{ onClear, confirm: true }}
+			/>,
+		);
+		// The plain-language warning is on screen BEFORE anything is cleared.
+		expect(
+			screen.getByText(
+				/offered an older catalog than the one you already have/i,
+			),
+		).toBeInTheDocument();
+		expect(screen.getByText(/someone is tampering/i)).toBeInTheDocument();
+
+		// Step one only arms the confirm — nothing is cleared yet.
+		await userEvent.click(
+			screen.getByRole("button", { name: "Clear cached catalog and retry" }),
+		);
+		expect(onClear).not.toHaveBeenCalled();
+
+		// Cancel backs out without clearing.
+		await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(onClear).not.toHaveBeenCalled();
+		expect(
+			screen.queryByRole("button", { name: "Yes, clear and retry" }),
+		).not.toBeInTheDocument();
+
+		// Step two, explicitly confirmed, clears.
+		await userEvent.click(
+			screen.getByRole("button", { name: "Clear cached catalog and retry" }),
+		);
+		await userEvent.click(
+			screen.getByRole("button", { name: "Yes, clear and retry" }),
+		);
+		expect(onClear).toHaveBeenCalledOnce();
+	});
 });

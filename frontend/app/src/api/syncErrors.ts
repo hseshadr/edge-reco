@@ -189,6 +189,76 @@ const BUNDLE_ERROR_CATALOG = {
 export const bundleErrorRegistry = defineErrors(BUNDLE_ERROR_CATALOG);
 
 /**
+ * A classified boot/sync failure: what `BootScreen` renders and which recovery
+ * it offers.
+ */
+export interface BootFailure {
+	/** The engine's own message, verbatim (or "Unexpected error"). */
+	readonly message: string;
+	/** The canonical code (`bundle.integrity_failed`, `net.unreachable`, …). */
+	readonly code: string;
+	/**
+	 * Offer the explicit, user-initiated "Clear cached catalog and retry".
+	 *
+	 * True ONLY for `bundle.integrity_failed`: the durable rollback floor keeps
+	 * the stored pointer even when the current key can't verify it, so after a
+	 * republish with a lower `sequence`, a new signing key, or a changed
+	 * bundle_id/channel, every Retry hits the same fail-closed refusal. Clearing
+	 * the cached catalog is the remedy — and it must stay a manual choice so the
+	 * anti-rollback protection is never switched off automatically. Network,
+	 * lock, storage and device failures keep Retry alone: wiping the verified
+	 * offline copy fixes none of them.
+	 */
+	readonly offerCacheClear: boolean;
+	/**
+	 * The engine's own failure category, carried through to the screen: the
+	 * Worker's `EngineOperationError.code`, or `"rollback"` for an in-thread
+	 * `RollbackError`. `null` when the failure carries no recognised code.
+	 */
+	readonly engineCode: EngineErrorCode | null;
+	/**
+	 * The clear must show a tampering warning and an inline two-step confirm.
+	 *
+	 * True for a rollback refusal: someone able to serve an older but validly
+	 * signed `latest` (without serving the app's JavaScript) triggers exactly
+	 * this, and a one-click clear would walk the shopper into wiping the floor —
+	 * after which that old bundle is accepted at first-install trust. Other
+	 * integrity refusals keep the single-click clear.
+	 */
+	readonly confirmCacheClear: boolean;
+}
+
+/** The engine category a raw failure carries, if any (see `BootFailure`). */
+function engineCategoryOf(raw: unknown): EngineErrorCode | null {
+	if (isWorkerError(raw)) {
+		const code = (raw as { code?: unknown }).code;
+		return typeof code === "string" && Object.hasOwn(WORKER_CODES, code)
+			? (code as EngineErrorCode)
+			: null;
+	}
+	return errorNameOf(raw) === "RollbackError" ? "rollback" : null;
+}
+
+/**
+ * Classify a boot/sync failure for the BootScreen. Logs the same coded,
+ * greppable console breadcrumb `bootErrorMessage` always has — dev-facing,
+ * never rendered.
+ */
+export function bootFailure(err: unknown): BootFailure {
+	const code = bundleErrorRegistry.classify(err);
+	console.error(`[edge-reco:${code}]`, err);
+	const engineCode = engineCategoryOf(err);
+	const offerCacheClear = code === "bundle.integrity_failed";
+	return {
+		message: err instanceof Error ? err.message : "Unexpected error",
+		code,
+		offerCacheClear,
+		engineCode,
+		confirmCacheClear: offerCacheClear && engineCode === "rollback",
+	};
+}
+
+/**
  * The user-facing message for a boot/sync failure — what `BootScreen` renders.
  *
  * Behaviour-identical to the pre-adoption `App.errorMessage` helper: it surfaces
@@ -198,6 +268,5 @@ export const bundleErrorRegistry = defineErrors(BUNDLE_ERROR_CATALOG);
  * code for support correlation — a dev-facing breadcrumb, never rendered.
  */
 export function bootErrorMessage(err: unknown): string {
-	console.error(`[edge-reco:${bundleErrorRegistry.classify(err)}]`, err);
-	return err instanceof Error ? err.message : "Unexpected error";
+	return bootFailure(err).message;
 }
