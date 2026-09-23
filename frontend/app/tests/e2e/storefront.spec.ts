@@ -266,7 +266,7 @@ test("clicks record + re-rank the For-You rail (backend-free hero loop)", async 
 	).toBeVisible();
 	await expect(topCard.locator(".why__row")).toHaveCount(9);
 	await expect(
-		topCard.getByRole("heading", { name: "What verified — Avow" }),
+		topCard.getByRole("heading", { name: "Config provenance — Avow" }),
 	).toBeVisible();
 
 	await page.screenshot({

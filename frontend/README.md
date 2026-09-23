@@ -9,8 +9,10 @@ and loads a small embedding model into a Web Worker. From then on, every search,
 recommendation, and the **live personalization loop** runs locally: click a few products
 and the "Recommended for you" rail visibly re-ranks toward your taste — **no network round
 trip per click** — while a **"why?"** panel opens up the engine. **How calculated —
-Assay** shows every live term, coefficient, contribution, and subtraction. **What verified —
-Avow** shows whether the publisher signature and the complete ranking-config hash match.
+Assay** shows every live term, coefficient, contribution, and subtraction. **Config provenance —
+Avow** shows whether the ranking config is signed by the publisher and its complete hash
+matches. That attests which config and formula shipped — its formula self-test runs on fixed
+synthetic inputs — not that the result on screen was computed from them.
 
 ## Architecture (backend-free)
 
@@ -93,9 +95,12 @@ The dev SPA reads `VITE_BUNDLE_BASE_URL` (default `http://localhost:8081`, the e
    increment as signals accumulate.
 5. **Open "why?"** on a recommended card. The Assay section shows retrieval plus all
    seven positive ranking signals and the subtractive repetition penalty, in execution
-   order. The sibling Avow section reports signature/config verification and its limits:
-   the personalized result is not signed, and the proof does not establish input truth,
-   freshness, fairness, or recommendation quality.
+   order. The sibling Avow config-provenance section reports whether the ranking config is
+   signed by the publisher and its hash matches, and its limits: the formula self-test uses
+   fixed synthetic inputs, not this result; the personalized result is not signed; and the
+   proof does not establish input truth, freshness, fairness, or recommendation quality.
+   The committed demo catalog still carries the legacy receipt shape, so this section
+   currently reads "Verification unavailable" until a v1 proof is republished.
 
 Taste signals are stored only in this browser and survive reloads; use **Reset taste** to
 clear them.
