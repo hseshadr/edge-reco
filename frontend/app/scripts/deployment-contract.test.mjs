@@ -110,7 +110,7 @@ test("deploy permissions fail closed without protected-check visibility", async 
 
 test("Wrangler is an exact repository dependency", async () => {
 	const packageJson = JSON.parse(await readFile(FRONTEND_PACKAGE, "utf8"));
-	assert.equal(packageJson.devDependencies.wrangler, "4.103.0");
+	assert.equal(packageJson.devDependencies.wrangler, "4.134.0");
 });
 
 test("the quality gate builds and validates the Pages artifact", async () => {
