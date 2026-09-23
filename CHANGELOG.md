@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **Truth-in-labeling for the "why?" panel and search docs.** The Avow section is
+  now headed **Config provenance — Avow** (was "What verified — Avow"), its check
+  reads **Ranking config signed by publisher** (was "Publisher signature verified"),
+  and its limit line says the formula self-test runs on fixed synthetic test inputs,
+  not on the displayed result. README, `frontend/README.md` and `docs/ARCHITECTURE.md`
+  now say the ranking proof attests which config/formula shipped (one fixed synthetic
+  probe per strategy), not that a result was computed from them, and state plainly
+  that vector retrieval is exact flat search (FAISS `IndexFlatIP` / sqlite-vector full
+  scan) — fine at demo scale (720 products), no ANN index yet. The demo-server
+  docstring's "728-product" catalog is corrected to 720. The `edgereco.ranking-proof/v1`
+  schema id, the signed bundle, and all behavior are unchanged.
 - **`@edgeproc/errors` is installed from npm; the copy in this repo is deleted.**
   The library was vendored at `frontend/packages/edgeproc-errors/` as a snapshot of
   upstream commit `7705a72`. A copy cannot be upgraded, so it rotted quietly: by

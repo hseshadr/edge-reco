@@ -85,7 +85,7 @@ describe("RailCard", () => {
 
 		expect(screen.getByText(/legacy receipt/)).toBeInTheDocument();
 		expect(
-			screen.queryByText("Publisher signature verified"),
+			screen.queryByText("Ranking config signed by publisher"),
 		).not.toBeInTheDocument();
 	});
 
@@ -104,7 +104,7 @@ describe("RailCard", () => {
 		);
 
 		expect(
-			screen.getByText("Publisher signature verified"),
+			screen.getByText("Ranking config signed by publisher"),
 		).toBeInTheDocument();
 		expect(
 			screen.getByText("Full ranking-config hash does not match"),
@@ -197,7 +197,7 @@ describe("RailCard", () => {
 		expect(hide).toHaveAttribute("aria-expanded", "true");
 		// The popover renders sibling calculation and verification contracts.
 		expect(screen.getByText("How calculated — Assay")).toBeInTheDocument();
-		expect(screen.getByText("What verified — Avow")).toBeInTheDocument();
+		expect(screen.getByText("Config provenance — Avow")).toBeInTheDocument();
 		expect(screen.getByText("Retrieval")).toBeInTheDocument();
 		expect(screen.getByText("Popularity")).toBeInTheDocument();
 		expect(screen.getByText("Similarity")).toBeInTheDocument();
@@ -208,7 +208,7 @@ describe("RailCard", () => {
 		).toBeInTheDocument();
 		expect(screen.getByText("1 × 0.25 = −0.25")).toBeInTheDocument();
 		expect(
-			screen.getByText("Publisher signature verified"),
+			screen.getByText("Ranking config signed by publisher"),
 		).toBeInTheDocument();
 		expect(
 			screen.getByText("Full ranking-config hash matches"),
