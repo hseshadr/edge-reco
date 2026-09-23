@@ -1,3 +1,4 @@
+import { type EngineErrorCode, EngineOperationError } from "@edgeproc/browser";
 import { starterPack } from "@edgeproc/errors";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bootErrorMessage, bundleErrorRegistry } from "./syncErrors";
@@ -43,6 +44,7 @@ describe("@edgeproc/errors adoption — bundleErrorRegistry", () => {
 			"bundle.integrity_failed",
 			"bundle.device_unsupported",
 			"bundle.timeout",
+			"bundle.quota_exceeded",
 			"net.unreachable",
 			"internal.unknown",
 		] as const;
@@ -87,6 +89,110 @@ describe("@edgeproc/errors adoption — bundleErrorRegistry", () => {
 	});
 });
 
+/**
+ * A faithful stand-in for a failure that crossed the sync Worker boundary. The
+ * Worker classifies its own throw (`classifyEngineError`) and the main-thread
+ * `EngineClient` rethrows it as `EngineOperationError` — `.name` is ALWAYS
+ * "EngineOperationError"; the failure category lives only in the stable `.code`.
+ * The real class is used so the test tracks the published contract.
+ */
+function workerError(code: EngineErrorCode, message: string): Error {
+	return new EngineOperationError({ code, message });
+}
+
+describe("Worker-boundary errors — classified by EngineOperationError.code", () => {
+	const code = (raw: unknown) => bundleErrorRegistry.classify(raw);
+
+	it("maps every engine code to its canonical app code", () => {
+		const cases: Record<EngineErrorCode, string> = {
+			integrity: "bundle.integrity_failed",
+			rollback: "bundle.integrity_failed",
+			network: "bundle.download_failed",
+			lock: "bundle.timeout",
+			storage: "bundle.device_unsupported",
+			internal: "internal.unknown",
+		};
+		for (const [engineCode, expected] of Object.entries(cases)) {
+			expect(
+				code(workerError(engineCode as EngineErrorCode, "worker failure")),
+				engineCode,
+			).toBe(expected);
+		}
+	});
+
+	it("classifies a real Worker signature/revoked/expired/rollback failure as an integrity failure", () => {
+		// These are the security-relevant fail-closed throws inside the Worker;
+		// all of them arrive as code integrity|rollback, never by their own name.
+		for (const [c, message] of [
+			["integrity", "pointer signature verification failed"],
+			["integrity", "signing key k1 is revoked"],
+			["integrity", "version pointer expired"],
+			["integrity", "manifest 9f3a failed content-address check"],
+			["rollback", "pointer version 3 is older than the pinned floor 4"],
+		] as const) {
+			expect(code(workerError(c, message))).toBe("bundle.integrity_failed");
+		}
+	});
+
+	it("never downgrades an integrity failure to a retryable network error", () => {
+		// A message that the starter pack's message-based matcher would read as
+		// "offline" must not outrank the Worker's integrity/rollback code.
+		for (const c of ["integrity", "rollback"] as const) {
+			expect(code(workerError(c, "Failed to fetch: network error"))).toBe(
+				"bundle.integrity_failed",
+			);
+		}
+	});
+
+	it("reads a quota-exhausted storage failure as bundle.quota_exceeded", () => {
+		expect(
+			code(workerError("storage", "browser storage quota exhausted")),
+		).toBe("bundle.quota_exceeded");
+	});
+
+	it("fails safe: an internal or unknown Worker code is internal.unknown, never network", () => {
+		expect(code(workerError("internal", "Failed to fetch"))).toBe(
+			"internal.unknown",
+		);
+		const future = new EngineOperationError({
+			code: "integrity",
+			message: "Failed to fetch",
+		});
+		(future as unknown as { code: string }).code = "some_future_code";
+		expect(code(future)).toBe("internal.unknown");
+		// A code-less object merely named EngineOperationError is not trusted.
+		expect(
+			code({ name: "EngineOperationError", message: "network down" }),
+		).toBe("internal.unknown");
+	});
+});
+
+describe("in-thread engine errors — the subclass names also classify", () => {
+	const code = (raw: unknown) => bundleErrorRegistry.classify(raw);
+
+	it("maps every IntegrityError/SignatureError subclass name to integrity", () => {
+		for (const name of [
+			"RollbackError",
+			"PointerExpiredError",
+			"SyncCapError",
+			"ResponseTooLargeError",
+			"KeyringError",
+			"KeyRevokedError",
+			"UnknownKeyError",
+		]) {
+			expect(code(engineError(name, "Failed to fetch")), name).toBe(
+				"bundle.integrity_failed",
+			);
+		}
+	});
+
+	it("maps StorageQuotaError to bundle.quota_exceeded", () => {
+		expect(
+			code(engineError("StorageQuotaError", "browser storage quota exhausted")),
+		).toBe("bundle.quota_exceeded");
+	});
+});
+
 describe("bootErrorMessage — behaviour-identical display", () => {
 	// The BootScreen has always shown the engine's own message verbatim (App's
 	// old `errorMessage` helper). Adoption must not change one on-screen byte: the
@@ -128,6 +234,19 @@ describe("bootErrorMessage — behaviour-identical display", () => {
 		expect(spy).toHaveBeenCalledWith(
 			"[edge-reco:bundle.integrity_failed]",
 			expect.any(Error),
+		);
+	});
+
+	it("logs integrity for a Worker-boundary failure and still shows its message verbatim", () => {
+		const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const err = new EngineOperationError({
+			code: "integrity",
+			message: "pointer signature verification failed",
+		});
+		expect(bootErrorMessage(err)).toBe("pointer signature verification failed");
+		expect(spy).toHaveBeenCalledWith(
+			"[edge-reco:bundle.integrity_failed]",
+			err,
 		);
 	});
 });

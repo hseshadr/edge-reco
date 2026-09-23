@@ -42,6 +42,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   clause being the one that reads what actually loads, not what was asked for.
 
 ### Security
+- **Worker-boundary sync failures are now classified by their stable engine code.**
+  A failure inside the sync Worker reaches the main thread as `@edgeproc/browser`'s
+  `EngineOperationError`, whose `.name` is always `EngineOperationError` — the
+  category lives only in `.code`. `frontend/app/src/api/syncErrors.ts` classified by
+  `.name` alone, so since the Worker engine landed (`a94e7f2`) every real signature,
+  integrity, rollback, revoked/unknown-key, or expired-pointer refusal was logged as
+  `internal.unknown` (or, if its message mentioned a fetch, the starter pack's
+  retryable `net.unreachable`) instead of `bundle.integrity_failed`. The registry now
+  maps every `EngineErrorCode` through a total, typecheck-enforced table —
+  `integrity`/`rollback` → `bundle.integrity_failed`, `network` →
+  `bundle.download_failed`, `lock` → `bundle.timeout`, `storage` →
+  `bundle.quota_exceeded` (quota) or `bundle.device_unsupported`, `internal` →
+  `internal.unknown` — and a missing or unknown code fails safe to
+  `internal.unknown`; a Worker error never reaches the message-based network
+  fallback. The in-thread name path also now recognises every `IntegrityError` /
+  `SignatureError` subclass name (`RollbackError`, `PointerExpiredError`,
+  `SyncCapError`, `ResponseTooLargeError`, `KeyringError`, `KeyRevokedError`,
+  `UnknownKeyError`) and `StorageQuotaError`. The BootScreen still shows the engine's
+  own message verbatim; only the canonical code changes. Sync stays fail-closed —
+  this fixes the classification, not the verification.
 - **`@edgeproc/browser` bumped `a94e7f2` → `02171df` (upstream `main`) for the
   rollback-floor fix.** Upstream #13: `syncIndex` used to re-verify the stored
   active pointer under the currently pinned key and, on a `SignatureError`, forget
