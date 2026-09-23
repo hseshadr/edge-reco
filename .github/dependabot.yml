@@ -19,6 +19,14 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    # transformers.js >=4.3.0 pulls onnxruntime-web 1.31.0-dev, whose
+    # ort-wasm-simd-threaded.asyncify.wasm (26,861,777 B) exceeds the Cloudflare
+    # Pages 25 MiB per-file limit that the self-hosted ORT runtime must fit
+    # (stage-ort-wasm preflight, CLAUDE.md "Zero runtime CDN"). Held at 4.2.x in
+    # #116. Drop this entry once a release's asyncify wasm is < 26,214,400 B.
+    ignore:
+      - dependency-name: "@huggingface/transformers"
+        versions: [">=4.3.0"]
     groups:
       frontend-npm:
         patterns: ["*"]
