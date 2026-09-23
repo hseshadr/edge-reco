@@ -79,6 +79,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   today, so this is a developer breadcrumb, not UI copy.
 
 ### Security
+- **A revoked signing key no longer keeps verifying the ranking proof from the HTTP
+  cache.** The ranking-proof check read the trust root (`public.key`) with
+  `cache: "force-cache"`, and `_headers` serves that file `immutable` for a year, so a
+  keyring that revoked a key could leave the proof panel trusting that key until the
+  browser's cached copy expired, while the sync Worker (upstream `loadTrustRoot`,
+  `cache: "no-store"`) had already stopped. The proof loader now uses `no-store` too;
+  `runtimeRankingProof.test.ts` pins the cache mode. The service worker still precaches
+  `public.key` so an offline reload can start the engine; the resulting
+  one-page-load revocation lag for returning shoppers, and why a network-first route
+  was not swapped in, are documented in `docs/DEPLOY.md` ("Revocation lag").
+
 - **Worker-boundary sync failures are now classified by their stable engine code.**
   A failure inside the sync Worker reaches the main thread as `@edgeproc/browser`'s
   `EngineOperationError`, whose `.name` is always `EngineOperationError` — the
