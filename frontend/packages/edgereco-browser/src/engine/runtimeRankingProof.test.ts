@@ -174,4 +174,24 @@ describe("runtime ranking proof — the trust root the sync Worker pins", () => 
 			new TextDecoder().decode(body),
 		);
 	});
+
+	it("the default loader bypasses the HTTP cache, so a revoked key stops verifying on the next read", async () => {
+		// Upstream `loadTrustRoot` reads the trust root with `cache: "no-store"`.
+		// `force-cache` here let a keyring that has since REVOKED a key keep
+		// verifying the ranking proof under that key until the cached copy
+		// expired — the revocation reached the sync Worker but not the proof panel.
+		const body = await keyringBytes([hexBytes(fixture.public_key)]);
+		const fetchSpy = vi.fn((_url: string, _init?: RequestInit) =>
+			Promise.resolve(
+				new Response(new TextDecoder().decode(body), { status: 200 }),
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+		const load = defaultRuntimeDeps().loadPublisherKey;
+		if (load === undefined) throw new Error("expected a default loader");
+
+		await load(PUBLIC_KEY_URL);
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy.mock.calls[0]?.[1]?.cache).toBe("no-store");
+	});
 });

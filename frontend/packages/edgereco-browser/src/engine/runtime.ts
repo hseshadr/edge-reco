@@ -115,8 +115,11 @@ export interface RuntimeDeps {
 	readonly deleteFloorDatabase?: () => Promise<void>;
 }
 
+// `no-store`, matching upstream `loadTrustRoot`: the trust root is where a key is
+// REVOKED, so an HTTP-cached copy would keep a revoked key verifying the ranking
+// proof until the cache expired. It is a few hundred bytes, read once per boot.
 const defaultLoadPublisherKey = (url: string): Promise<Uint8Array> =>
-	fetchBytes(url, { cache: "force-cache", maxBytes: MAX_TRUST_ROOT_BYTES });
+	fetchBytes(url, { cache: "no-store", maxBytes: MAX_TRUST_ROOT_BYTES });
 
 /** Bundle the shared side-effect Worker entry from this Vite consumer. */
 export function spawnEngineClient(): EngineClient {
