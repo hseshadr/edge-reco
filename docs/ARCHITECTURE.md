@@ -80,13 +80,13 @@ sequenceDiagram
     Engine->>Engine: Fuse — Reciprocal Rank Fusion, k=60
     Engine->>Session: read category / tag / brand affinity
     Engine->>Engine: Rerank — ordered Assay formula
-    Engine-->>UI: ranked products + Assay explanation + Avow proof state
+    Engine-->>UI: ranked products + Assay explanation + Avow config-provenance state
     UI->>Session: click / view / favorite / cart
 ```
 
 A query goes through three stages, on whichever tier is running it:
 
-1. **Retrieve** — BM25 (keyword) plus the tier's exact vector adapter — FAISS in Python, SQLite + sqlite-vector in the browser — return top-k candidates over the same id space.
+1. **Retrieve** — BM25 (keyword) plus the tier's exact vector adapter — FAISS in Python, SQLite + sqlite-vector in the browser — return top-k candidates over the same id space. Vector retrieval is exact flat search (FAISS `IndexFlatIP` / sqlite-vector full scan); that is fine at demo scale (720 products), and there is no ANN index yet.
 2. **Fuse** — Reciprocal Rank Fusion (`rrf_score(d) = Σ 1/(k + rank_i)`) merges the two lists without depending on raw scores.
 3. **Rerank** — the session-aware scorer applies the published formula.
 
