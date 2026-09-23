@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **README follows the portfolio template.** A plain-language first screen: a tagline
+  that says what it does and for whom, "At a glance" (including exactly what leaves the
+  device), and a "Try it in 60 seconds" walkthrough whose hero screenshot and pasted
+  on-screen results were captured from the production build (`build:pages` + `vite
+  preview`) searching "something for my aching back". Every existing section is kept
+  below the fold. The stale demo GIF (blank product images, old "why?" panel) is
+  removed, and the stale "category tiles" sentence now says product photos are
+  self-hosted under `/images/`. `backend/pyproject.toml`'s `description` now equals the
+  tagline; `backend/tests/unit/test_readme_contract.py` (run by `poe gate`) keeps the
+  first screen in shape.
 - **Truth-in-labeling for the "why?" panel and search docs.** The Avow section is
   now headed **Config provenance — Avow** (was "What verified — Avow"), its check
   reads **Ranking config signed by publisher** (was "Publisher signature verified"),
@@ -79,6 +89,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   today, so this is a developer breadcrumb, not UI copy.
 
 ### Security
+- **A revoked signing key no longer keeps verifying the ranking proof from the HTTP
+  cache.** The ranking-proof check read the trust root (`public.key`) with
+  `cache: "force-cache"`, and `_headers` serves that file `immutable` for a year, so a
+  keyring that revoked a key could leave the proof panel trusting that key until the
+  browser's cached copy expired, while the sync Worker (upstream `loadTrustRoot`,
+  `cache: "no-store"`) had already stopped. The proof loader now uses `no-store` too;
+  `runtimeRankingProof.test.ts` pins the cache mode. The service worker still precaches
+  `public.key` so an offline reload can start the engine; the resulting
+  one-page-load revocation lag for returning shoppers, and why a network-first route
+  was not swapped in, are documented in `docs/DEPLOY.md` ("Revocation lag").
+
 - **Worker-boundary sync failures are now classified by their stable engine code.**
   A failure inside the sync Worker reaches the main thread as `@edgeproc/browser`'s
   `EngineOperationError`, whose `.name` is always `EngineOperationError` — the

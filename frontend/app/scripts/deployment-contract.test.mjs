@@ -110,7 +110,14 @@ test("deploy permissions fail closed without protected-check visibility", async 
 
 test("Wrangler is an exact repository dependency", async () => {
 	const packageJson = JSON.parse(await readFile(FRONTEND_PACKAGE, "utf8"));
-	assert.equal(packageJson.devDependencies.wrangler, "4.134.0");
+	assert.match(packageJson.devDependencies.wrangler, /^\d+\.\d+\.\d+$/u);
+});
+
+test("the release preflight checks Wrangler against the package.json pin, not a copy", async () => {
+	const wrangler = await readFile(WRANGLER_RELEASE, "utf8");
+	assert.match(wrangler, /devDependencies\.wrangler/u);
+	assert.match(wrangler, /grep -Fx "\$expected"/u);
+	assert.doesNotMatch(wrangler, /grep -Fx '\d+\.\d+\.\d+'/u);
 });
 
 test("the quality gate builds and validates the Pages artifact", async () => {

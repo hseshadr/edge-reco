@@ -129,9 +129,15 @@ is required for offline support — it is on by default in the Pages build.
 
 The same file serves `public.key` as `application/octet-stream` and caches the pinned
 trust root, content-addressed bundle data, hashed Vite assets, and build-verified
-model/ORT files as immutable release assets. A trust-root or model rotation therefore
-requires a versioned asset path plus an application release; silently replacing a file
-at one of these stable paths is not a supported deployment operation.
+model/ORT files as immutable release assets. A model rotation therefore requires a
+versioned asset path plus an application release; silently replacing a file at one of
+these stable paths is not a supported deployment operation. The trust root is the one
+stable path whose *contents* may change, and only in an application release (see
+[rotation](#signing-keys-the-release-sequence-and-rotation)): both of its readers — the
+sync Worker's `loadTrustRoot` and the ranking-proof check — fetch it with
+`cache: "no-store"`, so the year-long `immutable` header never serves them a stale copy,
+and the service worker re-downloads it (bypassing the HTTP cache) whenever its precache
+revision changes.
 
 Then add the apex domain in the Pages project → **Custom domains** → `edge-reco.com`.
 Cloudflare provisions the DNS record (CNAME-flattening at the apex) and the TLS
@@ -342,6 +348,38 @@ can never be used to push an old release. That has three consequences for publis
   copies disagree or stop parsing. The optional Python/FastAPI tier
   (`EDGERECO_VERIFY_KEY_PATH`, and the `retrain` / `audit` verify key) still reads one
   raw key, so rotating that tier means swapping its key in step with the publisher.
+
+#### Revocation lag: the service worker serves the trust root from its precache
+
+`public.key` is precached by the service worker, because an offline reload has to start
+the engine and the sync Worker fails closed without a trust root. A precached URL is
+answered from the precache, even for a `cache: "no-store"` request. So a revocation
+reaches a returning shopper only when their browser installs the service worker from
+the release that ships the new keyring:
+
+- **Online, returning shopper:** the first page load after the release is still served
+  by the *old* service worker, with the *old* keyring. The new worker installs in the
+  background (its precache fetches the changed `public.key` with `cache: "reload"`),
+  activates, and — because the app registers it with `autoUpdate` — reloads the page,
+  which then boots under the new keyring. If the shopper clicked **Launch** before that
+  reload, that one boot trusts the revoked key.
+- **Offline shopper:** keeps the old keyring until they are next online and the update
+  installs. They cannot fetch a new catalog while offline either, so this only extends
+  trust in the catalog already on the device.
+- **First-time visitor:** no lag; there is no older service worker.
+
+Why the precache is kept instead of a network-first route for `public.key`: Workbox
+answers precached URLs before any runtime route, so a network-first route would mean
+dropping the key from the precache. The key would then be cached only if the engine
+happened to boot after the service worker took control of the page. A shopper who clicks
+**Launch** during the first visit's install would get no cached key, and their offline
+reload would refuse to start. That trades a guaranteed offline boot for a one-load
+revocation window, and the live-user storage covenant rules out renaming the existing
+caches to force a refresh. So the operational rule is: **revoke a key only when a
+one-page-load lag for online shoppers is acceptable.** For an emergency (a leaked
+private key), stop serving bundles signed by that key at the origin first, then ship
+the revoking keyring. A returning shopper's old keyring can only accept a bundle that
+is actually served.
 
 If a shopper is stuck anyway, the boot screen offers **Clear cached catalog and retry**
 for an integrity refusal. It clears only the synced catalog and its rollback floor:
