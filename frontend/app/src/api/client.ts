@@ -19,6 +19,7 @@
 
 import {
 	applyInteraction,
+	type BootStage,
 	buildProfile,
 	configFromEnv,
 	defaultRuntimeDeps,
@@ -120,6 +121,12 @@ function appRuntimeConfig(): RuntimeConfig {
 /** The data-layer API. Created once per app/test session via createDataClient. */
 export interface DataClient {
 	bootstrap(onStage?: OnStage, config?: RuntimeConfig): Promise<void>;
+	/**
+	 * Clear ONLY the cached signed catalog (OPFS bundle + its rollback floor) so
+	 * the next bootstrap re-syncs from scratch. The explicit, user-initiated
+	 * recovery for a stuck integrity refusal — never called automatically.
+	 */
+	clearCatalogCache(): Promise<void>;
 	/** Clear the live profile AND the durable taste log (the Reset-taste path). */
 	resetSession(): Promise<void>;
 	/**
@@ -174,7 +181,10 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 			onStage: OnStage = () => {},
 			config: RuntimeConfig = appRuntimeConfig(),
 		): Promise<void> {
-			const engine = await runtime.bootstrap(config, onStage);
+			const engine = await runtime.bootstrap(config, (stage) => {
+				warnIfExpired(stage);
+				onStage(stage);
+			});
 			productById = new Map(engine.catalog().map((p) => [p.id, p]));
 			interactionWeights = engine.interactionWeights();
 			// Deterministic replay: rebuild the taste profile from the durable
@@ -195,6 +205,9 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 				(event: TasteEvent) =>
 					event.type !== "view" && productById.has(event.productId),
 			).length;
+		},
+		clearCatalogCache(): Promise<void> {
+			return runtime.clearBundleCache();
 		},
 		resetSession(): Promise<void> {
 			profile = emptyProfile();
@@ -293,6 +306,21 @@ export function createDataClient(deps: Partial<RuntimeDeps> = {}): DataClient {
 }
 
 /**
+ * Surface an expired signed pointer. Offline, the engine may serve an
+ * already-verified cached bundle whose pointer is past its signed `expires_at`
+ * (`SyncResult.expired`): the bytes are intact and authentic, but the publisher
+ * no longer vouches that they are current. The publisher sets no `expires_at`
+ * today, so this is a coded, greppable developer breadcrumb — not UI copy.
+ */
+function warnIfExpired(stage: BootStage): void {
+	if (stage.kind === "synced" && stage.result.expired === true) {
+		console.warn(
+			`[edge-reco:bundle.expired] serving the verified cached catalog ${stage.result.version}; its signed pointer is past expires_at, so it may be out of date`,
+		);
+	}
+}
+
+/**
  * Compose the final RuntimeDeps:
  *   explicit caller-passed dep > demo test hook (window) > package default.
  * The demo test hook is honored only for `makeEmbedder`; everything else uses
@@ -305,10 +333,13 @@ function resolveDeps(deps: Partial<RuntimeDeps>): RuntimeDeps {
 			? window.__edgeprocDemoTestHooks?.makeEmbedder
 			: undefined;
 	const loadPublisherKey = deps.loadPublisherKey ?? base.loadPublisherKey;
+	const deleteFloorDatabase =
+		deps.deleteFloorDatabase ?? base.deleteFloorDatabase;
 	return {
 		spawnEngine: deps.spawnEngine ?? base.spawnEngine,
 		makeEmbedder: deps.makeEmbedder ?? hookEmbedder ?? base.makeEmbedder,
 		...(loadPublisherKey !== undefined ? { loadPublisherKey } : {}),
+		...(deleteFloorDatabase !== undefined ? { deleteFloorDatabase } : {}),
 	};
 }
 
@@ -331,6 +362,9 @@ export function bootstrap(
 	config?: RuntimeConfig,
 ): Promise<void> {
 	return active.bootstrap(onStage, config);
+}
+export function clearCatalogCache(): Promise<void> {
+	return active.clearCatalogCache();
 }
 export function resetSession(): Promise<void> {
 	return active.resetSession();

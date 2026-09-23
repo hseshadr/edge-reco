@@ -6,8 +6,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { bootstrap } from "./api/client";
-import { bootErrorMessage } from "./api/syncErrors";
+import { bootstrap, clearCatalogCache } from "./api/client";
+import { type BootFailure, bootFailure } from "./api/syncErrors";
 import { BootScreen } from "./components/BootScreen";
 import { Footer } from "./components/Footer";
 import { InstallButton } from "./components/InstallButton";
@@ -46,7 +46,7 @@ export function App() {
 	const [launched, setLaunched] = useState(launchedInThisTab);
 	const [stage, setStage] = useState<BootStage | null>(null);
 	const [ready, setReady] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const [failure, setFailure] = useState<BootFailure | null>(null);
 	const [attempt, setAttempt] = useState(0);
 	// Guards StrictMode's double-invoke within a single attempt; reset on retry.
 	const ranAttempt = useRef(-1);
@@ -60,7 +60,7 @@ export function App() {
 			return;
 		}
 		ranAttempt.current = attempt;
-		setError(null);
+		setFailure(null);
 		setStage(null);
 		const t0 = performance.now();
 		bootstrap(setStage)
@@ -68,10 +68,20 @@ export function App() {
 				record({ coldStartMs: performance.now() - t0 });
 				setReady(true);
 			})
-			.catch((err: unknown) => setError(bootErrorMessage(err)));
+			.catch((err: unknown) => setFailure(bootFailure(err)));
 	}, [launched, attempt]);
 
 	const onRetry = useCallback(() => setAttempt((n) => n + 1), []);
+	// The explicit, user-initiated recovery for a stuck fail-closed refusal:
+	// clear ONLY the cached signed catalog (and its rollback floor), then boot
+	// again. Offered only when `bootFailure` says so — never run automatically.
+	const onClearCache = useCallback(() => {
+		setFailure(null);
+		setStage(null);
+		clearCatalogCache()
+			.then(() => setAttempt((n) => n + 1))
+			.catch((err: unknown) => setFailure(bootFailure(err)));
+	}, []);
 	const onLaunch = useCallback(() => {
 		rememberLaunch();
 		setLaunched(true);
@@ -81,7 +91,21 @@ export function App() {
 	if (!launched) {
 		screen = <Landing onLaunch={onLaunch} />;
 	} else if (!ready) {
-		screen = <BootScreen stage={stage} error={error} onRetry={onRetry} />;
+		screen = (
+			<BootScreen
+				stage={stage}
+				error={failure?.message ?? null}
+				onRetry={onRetry}
+				{...(failure?.offerCacheClear === true
+					? {
+							cacheClear: {
+								onClear: onClearCache,
+								confirm: failure.confirmCacheClear,
+							},
+						}
+					: {})}
+			/>
+		);
 	} else {
 		screen = <Storefront />;
 	}

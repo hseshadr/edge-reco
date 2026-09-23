@@ -195,10 +195,32 @@ async function proofMatches(
 	);
 }
 
+/**
+ * The pinned key the receipt must verify under: the trusted key whose hex
+ * matches the receipt's embedded signer, else the first trusted key (which
+ * Avow then refuses as a signer mismatch). `undefined` when nothing is trusted.
+ */
+function signerFor(
+	trusted: Uint8Array | ReadonlyArray<Uint8Array> | undefined,
+	receiptPublicKey: string,
+): string | undefined {
+	if (trusted === undefined) return undefined;
+	const keys = trusted instanceof Uint8Array ? [trusted] : trusted;
+	const hexKeys = keys.map(bytesHex);
+	const wanted = receiptPublicKey.toLowerCase();
+	return hexKeys.find((key) => key === wanted) ?? hexKeys[0];
+}
+
+/**
+ * Verify the bundle's static ranking proof. `trustedKeys` is the pinned signer
+ * set — one raw 32-byte key, or every unrevoked key of an `edgeproc.keyring/v1`
+ * trust root. A receipt signed by any other key (including a revoked one)
+ * fails `signature_invalid`; no trusted key at all is `key_unavailable`.
+ */
 export async function verifyRankingProof(
 	receiptBytes: Uint8Array | undefined,
 	config: RankingConfig,
-	pinnedPublicKey: Uint8Array | undefined,
+	trustedKeys: Uint8Array | ReadonlyArray<Uint8Array> | undefined,
 ): Promise<RankingProofEvidence> {
 	if (receiptBytes === undefined) return unavailableRankingProof("missing");
 	const document = parseDocument(receiptBytes);
@@ -213,11 +235,12 @@ export async function verifyRankingProof(
 	const receipt = signedReceipt(document);
 	if (receipt === undefined)
 		return failed("not_checked", "not_checked", "malformed");
-	if (pinnedPublicKey === undefined) {
+	const signer = signerFor(trustedKeys, receipt.public_key);
+	if (signer === undefined) {
 		return unavailableRankingProof("key_unavailable");
 	}
 	try {
-		await verifySignature(receipt, bytesHex(pinnedPublicKey));
+		await verifySignature(receipt, signer);
 	} catch {
 		return failed("failed", "not_checked", "signature_invalid");
 	}

@@ -89,10 +89,21 @@ def bundle(
     ] = 0,
     product_count: Annotated[int, typer.Option(help="Number of products in the catalog")] = 0,
     sequence: Annotated[
-        int, typer.Option(help="Monotonic signed release sequence (increment every publish)")
+        int,
+        typer.Option(
+            help=(
+                "Monotonic signed release sequence: must exceed every sequence already "
+                "published for this catalog id, across signing keys (a new key does not "
+                "reset it). Browsers refuse a lower one as a rollback."
+            )
+        ),
     ] = 1,
 ) -> None:
-    """Build a signed, content-addressed bundle (FAISS index + catalog) origin."""
+    """Build a signed, content-addressed bundle (FAISS index + catalog) origin.
+
+    Key rotation: pin an edgeproc.keyring/v1 trust root listing the old and new keys
+    (see docs/DEPLOY.md) rather than swapping public.key, and keep --sequence rising.
+    """
     from edgereco.catalog.publish import publish_bundle
 
     publish_bundle(

@@ -18,6 +18,13 @@
 			}
 		},
 		"errorTitle": "Couldn’t start the engine",
-		"retry": "Retry"
+		"retry": "Retry",
+		"clearCache": {
+			"explain": "The saved copy of the catalog in this browser no longer matches the store’s signed catalog, so it can’t be trusted and Retry will keep failing. Clearing it downloads a fresh, verified copy. Your browsing history and the search model stay on this device.",
+			"action": "Clear cached catalog and retry",
+			"rollbackWarning": "The store’s server offered an older catalog than the one you already have. That can mean someone is tampering with it. Only clear if you trust this — clearing makes this browser accept the catalog it is offered next.",
+			"confirm": "Yes, clear and retry",
+			"cancel": "Cancel"
+		}
 	}
 }

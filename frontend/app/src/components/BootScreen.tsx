@@ -1,10 +1,27 @@
 import type { BootStage } from "@edgereco/browser";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface BootScreenProps {
 	stage: BootStage | null;
 	error: string | null;
 	onRetry: () => void;
+	/**
+	 * The explicit "Clear cached catalog and retry" recovery. Passed ONLY when
+	 * the classified failure calls for it (`bootFailure().offerCacheClear`);
+	 * absent, the error panel offers Retry alone.
+	 */
+	cacheClear?: CacheClearAction;
+}
+
+/** The user-initiated catalog-cache clear offered on the error panel. */
+export interface CacheClearAction {
+	readonly onClear: () => void;
+	/**
+	 * A rollback refusal: show the tampering warning and require an inline
+	 * second click ("Yes, clear and retry") before `onClear` runs.
+	 */
+	readonly confirm: boolean;
 }
 
 const ORDER: ReadonlyArray<BootStage["kind"]> = [
@@ -36,7 +53,12 @@ function activeStep(stage: BootStage | null): number {
  * the bundle lives in OPFS and the model in the HTTP cache, so this screen is
  * near-instant offline.
  */
-export function BootScreen({ stage, error, onRetry }: BootScreenProps) {
+export function BootScreen({
+	stage,
+	error,
+	onRetry,
+	cacheClear,
+}: BootScreenProps) {
 	const { t } = useTranslation("errors");
 	const current = activeStep(stage);
 	return (
@@ -80,12 +102,82 @@ export function BootScreen({ stage, error, onRetry }: BootScreenProps) {
 					<div className="boot__error">
 						<div className="boot__error-title">{t("boot.errorTitle")}</div>
 						<p className="boot__error-copy">{error}</p>
-						<button type="button" className="banner__retry" onClick={onRetry}>
-							{t("boot.retry")}
-						</button>
+						{cacheClear === undefined ? (
+							<div className="boot__error-actions">
+								<RetryButton onRetry={onRetry} />
+							</div>
+						) : (
+							<CacheClearPanel action={cacheClear} onRetry={onRetry} />
+						)}
 					</div>
 				)}
 			</div>
 		</div>
+	);
+}
+
+function RetryButton({ onRetry }: { readonly onRetry: () => void }) {
+	const { t } = useTranslation("errors");
+	return (
+		<button type="button" className="banner__retry" onClick={onRetry}>
+			{t("boot.retry")}
+		</button>
+	);
+}
+
+/**
+ * The explanation + actions for the explicit catalog-cache clear. A rollback
+ * shows the tampering warning up front and arms an inline confirm on the first
+ * click; `onClear` runs only on "Yes, clear and retry". Every other offered
+ * clear is a single click.
+ */
+function CacheClearPanel({
+	action,
+	onRetry,
+}: {
+	readonly action: CacheClearAction;
+	readonly onRetry: () => void;
+}) {
+	const { t } = useTranslation("errors");
+	const [armed, setArmed] = useState(false);
+	const explain = action.confirm
+		? t("boot.clearCache.rollbackWarning")
+		: t("boot.clearCache.explain");
+	const onFirstClick = action.confirm
+		? () => setArmed(true)
+		: () => action.onClear();
+	return (
+		<>
+			<p className="boot__error-copy">{explain}</p>
+			<div className="boot__error-actions">
+				<RetryButton onRetry={onRetry} />
+				{armed ? (
+					<>
+						<button
+							type="button"
+							className="banner__retry"
+							onClick={action.onClear}
+						>
+							{t("boot.clearCache.confirm")}
+						</button>
+						<button
+							type="button"
+							className="banner__retry"
+							onClick={() => setArmed(false)}
+						>
+							{t("boot.clearCache.cancel")}
+						</button>
+					</>
+				) : (
+					<button
+						type="button"
+						className="banner__retry"
+						onClick={onFirstClick}
+					>
+						{t("boot.clearCache.action")}
+					</button>
+				)}
+			</div>
+		</>
 	);
 }

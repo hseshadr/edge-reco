@@ -309,6 +309,49 @@ Everything an attacker could swap (chunks, manifest, pointer) is verified locall
 
 **Never ship the private key.** It signs on the publisher only.
 
+### Signing keys, the release `sequence`, and rotation
+
+Every signed `latest` pointer carries a `sequence` (`edgereco bundle --sequence N`;
+`edgereco retrain` bumps it for you). Each browser keeps the highest pointer it has
+accepted as an **anti-rollback floor**, in OPFS and in IndexedDB. It keeps that floor
+even when the currently pinned key can't verify the stored pointer, so a key change
+can never be used to push an old release. That has three consequences for publishers:
+
+- **`sequence` must strictly increase across keys, not just within one.** A new or
+  regenerated key does not reset the counter. If `backend/examples/keys/private.key`
+  is lost or regenerated, read the `sequence` from the `latest` pointer you are serving
+  now (it is public), then publish with a larger one. A lower or equal `sequence` is
+  refused as a rollback by every returning shopper, on every Retry.
+- **Keep `bundle_id` and `channel` stable.** The stored pointer is bound to them, so
+  changing either one also makes returning shoppers refuse the new release.
+- **Rotate through an `edgeproc.keyring/v1` trust root, not by swapping `public.key`.**
+  The browser's trust root (`frontend/app/public/public.key`) may be a raw 32-byte
+  Ed25519 key or a JSON keyring:
+
+  ```json
+  {"schema": "edgeproc.keyring/v1",
+   "keys": [{"key_id": "<first 16 hex of sha256(raw key)>", "public_key": "<64 hex>"}],
+   "revoked": ["<key_id>", "..."]}
+  ```
+
+  Ship a keyring that lists both the old and the new key in an app release first. Then
+  sign with the new key, using a higher `sequence`. Revoke the old key id once every
+  client has the new release. The sync Worker and the ranking-proof check both read the
+  trust root with `@edgeproc/browser`'s `parseTrustRoot`, and
+  `frontend/app/scripts/trust-root-contract.test.mjs` fails the gate if the committed
+  copies disagree or stop parsing. The optional Python/FastAPI tier
+  (`EDGERECO_VERIFY_KEY_PATH`, and the `retrain` / `audit` verify key) still reads one
+  raw key, so rotating that tier means swapping its key in step with the publisher.
+
+If a shopper is stuck anyway, the boot screen offers **Clear cached catalog and retry**
+for an integrity refusal. It clears only the synced catalog and its rollback floor:
+the OPFS `chunk/`, `manifest/` and active-pointer files, plus the
+`edgeproc-browser-cache` IndexedDB database. It then syncs again at first-install
+trust. It never runs by itself. For a rollback refusal (the server offered an *older*
+catalog than the one the browser already has, which is what tampering looks like) it
+first shows a warning and asks for a second click. The service-worker caches, the
+self-hosted model (`transformers-cache`), and the on-device taste log are left alone.
+
 ## Operational notes
 
 - **Cold start**: the first sync downloads the full bundle (~10 MB for the demo catalog). Subsequent syncs only fetch chunks that changed.

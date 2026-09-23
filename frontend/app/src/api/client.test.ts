@@ -19,7 +19,7 @@ import {
 	type SyncResult,
 } from "@edgereco/browser";
 import { catalogFetch } from "@edgereco/browser/testing/fixtures";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSnapshot } from "../metrics/store";
 import {
 	__setTasteLogBackendForTests,
@@ -32,6 +32,7 @@ import {
 	browse,
 	catalog,
 	catalogInfo,
+	clearCatalogCache,
 	rankingProofEvidence,
 	recommend,
 	recommendStrategy,
@@ -486,5 +487,78 @@ describe("durable taste: replay on boot, reset, replayed count", () => {
 		__setRuntimeForTests(freshDeps());
 		await bootstrap();
 		expect(replayedSignalCount()).toBe(3);
+	});
+});
+
+describe("expired signed pointer — surfaced, never silently served", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+	});
+
+	/** A fake sync Worker whose (offline, cached) sync is flagged expired. */
+	function expiredEnginePort(): EnginePort {
+		const inner = fakeEnginePort();
+		return {
+			sync: async (...args) => ({
+				...(await inner.sync(...args)),
+				expired: true as const,
+			}),
+			readFile: (path) => inner.readFile(path),
+		};
+	}
+
+	it("warns with a coded breadcrumb when the synced bundle's pointer has expired", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		__setRuntimeForTests({
+			spawnEngine: () => expiredEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+		const stages: string[] = [];
+		await bootstrap((stage) => stages.push(stage.kind));
+
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("[edge-reco:bundle.expired]"),
+		);
+		// The caller still sees every stage — the warning never swallows one.
+		expect(stages).toContain("synced");
+		expect(stages.at(-1)).toBe("ready");
+	});
+
+	it("stays quiet for a current bundle", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+		await bootstrap();
+		expect(warn).not.toHaveBeenCalled();
+	});
+});
+
+describe("clearCatalogCache — the explicit recovery", () => {
+	afterEach(() => {
+		__setRuntimeForTests({
+			spawnEngine: () => fakeEnginePort(),
+			makeEmbedder: () => stubEmbedder,
+		});
+	});
+
+	it("clears through a dedicated sync worker, then lets bootstrap run again", async () => {
+		const clear = vi.fn(() => Promise.resolve());
+		const deleteFloorDatabase = vi.fn(() => Promise.resolve());
+		__setRuntimeForTests({
+			spawnEngine: () => ({ ...fakeEnginePort(), clear }),
+			makeEmbedder: () => stubEmbedder,
+			deleteFloorDatabase,
+		});
+
+		await clearCatalogCache();
+		expect(clear).toHaveBeenCalledOnce();
+		expect(deleteFloorDatabase).toHaveBeenCalledOnce();
+		await expect(bootstrap()).resolves.toBeUndefined();
 	});
 });
