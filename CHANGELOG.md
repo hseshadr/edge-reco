@@ -41,6 +41,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the *resolved* package in `node_modules` is not the published artifact — the last
   clause being the one that reads what actually loads, not what was asked for.
 
+### Added
+- **Recovery for a stuck returning shopper: "Clear cached catalog and retry".** When
+  boot fails with an integrity refusal (`bundle.integrity_failed`), the boot screen
+  now offers this action next to Retry. It never runs on its own. It clears only
+  the synced signed catalog through `@edgeproc/browser`'s `EngineClient.clear()`, on
+  a fresh sync Worker and under the cache's Web Lock. That covers the OPFS
+  `chunk/` and `manifest/` directories and the active-pointer files, plus the
+  IndexedDB rollback floor. It then deletes the `edgeproc-browser-cache` floor
+  database, awaited and bounded to 10 s: `onblocked` keeps waiting, and a timeout
+  fails loudly instead of reporting a floor as cleared. Only after all that does
+  it boot again. Before the clear, any worker the failed boot left behind is torn
+  down, so it releases its lock and OPFS handles.
+
+  A **rollback** refusal is different. The server offered an *older* catalog than
+  the one the browser holds, which is what an attacker able to serve an old,
+  validly signed `latest` would cause. So the action first shows a plain-language
+  tampering warning and needs an inline second click ("Yes, clear and retry").
+  Other integrity refusals are a single click. Network, lock, storage, device and
+  unknown failures keep Retry alone, because wiping the verified offline copy fixes
+  none of them. The Worker's `EngineOperationError.code` is now carried through to
+  the boot screen (`bootFailure()` in `app/src/api/syncErrors.ts`).
+
+  Per the live-user storage covenant, no cache name, storage key or format changes.
+  The service-worker caches, the self-hosted model's `transformers-cache`, and the
+  on-device taste log are untouched. A new Playwright spec
+  (`tests/e2e/catalog-recovery.spec.ts`) seeds a real returning shopper: a
+  higher-`sequence` pointer in both OPFS and the IndexedDB floor, or a retired
+  `bundle_id`. It proves that Retry never clears, that the rollback confirm is
+  required, that the catalog loads after the clear with both floors back at the
+  live `sequence`, and that a `transformers-cache` entry and an unrelated OPFS file
+  survive.
+- **An expired signed pointer is surfaced.** When the engine serves an
+  already-verified cached catalog whose pointer is past its signed `expires_at`
+  (`SyncResult.expired`, offline only), the app logs a coded
+  `[edge-reco:bundle.expired]` console warning. The publisher sets no `expires_at`
+  today, so this is a developer breadcrumb, not UI copy.
+
 ### Security
 - **Worker-boundary sync failures are now classified by their stable engine code.**
   A failure inside the sync Worker reaches the main thread as `@edgeproc/browser`'s
@@ -62,6 +99,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `UnknownKeyError`) and `StorageQuotaError`. The BootScreen still shows the engine's
   own message verbatim; only the canonical code changes. Sync stays fail-closed —
   this fixes the classification, not the verification.
+- **The ranking-proof check reads the trust root the same way the sync Worker does.**
+  `loadPinnedKey` (`@edgereco/browser` `runtime.ts`) accepted exactly 32 bytes, and
+  the default loader capped the fetch at 32 bytes. Once `public.key` became an
+  `edgeproc.keyring/v1` keyring (which the sync Worker already accepts), the proof
+  would have dropped silently to `key_unavailable`. The trust root is now parsed
+  with upstream `parseTrustRoot`, fetched up to `MAX_TRUST_ROOT_BYTES`, and the
+  proof verifies under the keyring's **unrevoked** keys. A proof signed by a
+  revoked or unlisted key fails `signature_invalid`, and a malformed trust root
+  stays `key_unavailable`. New guard: `app/scripts/trust-root-contract.test.mjs`
+  fails if the three committed `public.key` copies disagree, or if the served one
+  stops parsing with the Worker's own parser. `docs/DEPLOY.md` now documents the
+  rules: `sequence` must strictly increase across signing keys, `bundle_id` /
+  `channel` must stay stable, and rotation goes through a keyring. The
+  `edgereco bundle --sequence` help says the same.
 - **`@edgeproc/browser` bumped `a94e7f2` → `02171df` (upstream `main`) for the
   rollback-floor fix.** Upstream #13: `syncIndex` used to re-verify the stored
   active pointer under the currently pinned key and, on a `SignatureError`, forget
@@ -74,12 +125,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `KeyRevokedError` / `UnknownKeyError` / `PointerExpiredError` map to the existing
   `integrity` Worker code; `SyncResult.expired` on an offline, expired cache) and
   #11/#12 (an opt-in `@edgeproc/browser/sqlite` app-state export edge-reco does not
-  import). Nothing here changes for edge-reco: the trust root stays the raw 32-byte
-  `public.key`, the committed signed bundle and its pointers (no `key_id`, no
-  `expires_at`) verify byte-identically, no storage key or format changes, and no
-  call site changes. Only the two `package.json` pins, the contract test that pins
-  them, and the lockfile's `@edgeproc/browser` entry moved; there are no transitive
-  changes.
+  import). For edge-reco, the trust root stays the raw 32-byte `public.key`, the
+  committed signed bundle and its pointers (no `key_id`, no `expires_at`) verify
+  byte-identically, no storage key or format changes, and no call site changes. Only
+  the two `package.json` pins, the contract test that pins them, and the lockfile's
+  `@edgeproc/browser` entry moved, with no transitive changes. **One behaviour did
+  change for returning shoppers.** A stored pointer the current key can't verify
+  used to be dropped silently (the "stale pointer self-heals" path). It now stays
+  as the rollback floor. After a republish with a lower `sequence`, a new signing
+  key published without a higher `sequence`, or a changed `bundle_id` / `channel`,
+  such a shopper hits the same integrity refusal on every Retry. The answer is the
+  explicit **Clear cached catalog and retry** action below, plus the publishing
+  rule in `docs/DEPLOY.md`.
 
 - **`edge-proc` installs from PyPI, closing the last hole in `poe audit`.**
   pip-audit *skips* any URL requirement — "URL requirements cannot be pinned to a
