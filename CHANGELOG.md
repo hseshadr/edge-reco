@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **README follows the portfolio template.** A plain-language first screen: a tagline
+  that says what it does and for whom, "At a glance" (including exactly what leaves the
+  device), and a "Try it in 60 seconds" walkthrough whose hero screenshot and pasted
+  on-screen results were captured from the production build (`build:pages` + `vite
+  preview`) searching "something for my aching back". Every existing section is kept
+  below the fold. The stale demo GIF (blank product images, old "why?" panel) is
+  removed, and the stale "category tiles" sentence now says product photos are
+  self-hosted under `/images/`. `backend/pyproject.toml`'s `description` now equals the
+  tagline; `backend/tests/unit/test_readme_contract.py` (run by `poe gate`) keeps the
+  first screen in shape.
 - **Truth-in-labeling for the "why?" panel and search docs.** The Avow section is
   now headed **Config provenance — Avow** (was "What verified — Avow"), its check
   reads **Ranking config signed by publisher** (was "Publisher signature verified"),

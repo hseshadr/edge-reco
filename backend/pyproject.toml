@@ -1,7 +1,7 @@
 [project]
 name = "edgereco"
 version = "0.13.0"
-description = "Local-first product recommendations — hybrid search + session-aware reranking that runs on the shopper's device, zero backend calls after sync"
+description = "Search and product recommendations that run in the shopper's own browser, for online stores tired of paying per search."
 requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
