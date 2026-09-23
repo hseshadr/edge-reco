@@ -3,10 +3,13 @@
 // the Nimbus runtime — it exists solely to prove C1 in a real browser.
 
 import { spawnEngineClient } from "@edgereco/browser";
+import { bundleErrorRegistry } from "../api/syncErrors";
 
 interface EngineHarness {
 	sync(baseUrl: string, pubkeyUrl: string): Promise<unknown>;
 	readFileText(path: string): Promise<string>;
+	/** The app's own canonical code for a raw failure (the real classifier). */
+	classify(error: unknown): string;
 }
 
 declare global {
@@ -24,6 +27,9 @@ window.__engineHarness = {
 	},
 	async readFileText(path) {
 		return DECODER.decode(await client.readFile(path));
+	},
+	classify(error) {
+		return bundleErrorRegistry.classify(error);
 	},
 };
 

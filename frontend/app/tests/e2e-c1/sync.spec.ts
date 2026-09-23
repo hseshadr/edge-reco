@@ -10,7 +10,9 @@ import { expect, test } from "@playwright/test";
  *   - readFile('catalog_meta.json') reassembles byte-correct (valid JSON),
  *   - the OPFS chunk dir is populated (files really landed on the device),
  *   - a re-sync fetches nothing (chunksFetched == 0 — only-changed-chunks proof),
- *   - a tampered /latest signature is rejected fail-closed (nothing promoted).
+ *   - a tampered /latest signature is rejected fail-closed (nothing promoted),
+ *     surfaces on the main thread as EngineOperationError{code:"integrity"},
+ *     and the app's real classifier reads it as bundle.integrity_failed.
  */
 
 const CATALOG = "http://localhost:8910/catalog";
@@ -30,6 +32,7 @@ declare global {
 		__engineHarness?: {
 			sync(baseUrl: string, pubkeyUrl: string): Promise<SyncResult>;
 			readFileText(path: string): Promise<string>;
+			classify(error: unknown): string;
 		};
 	}
 }
@@ -107,17 +110,33 @@ test("a tampered /latest signature is rejected fail-closed — nothing promoted"
 		async ([base, key]) => {
 			try {
 				await window.__engineHarness?.sync(base, key);
-				return { rejected: false, message: "" };
+				return {
+					rejected: false,
+					message: "",
+					name: "",
+					code: "",
+					canonical: "",
+				};
 			} catch (error) {
+				const code = (error as { code?: unknown } | null)?.code;
 				return {
 					rejected: true,
 					message: error instanceof Error ? error.message : String(error),
+					name: error instanceof Error ? error.name : "",
+					code: typeof code === "string" ? code : "",
+					canonical: window.__engineHarness?.classify(error) ?? "",
 				};
 			}
 		},
 		[CATALOG_TAMPERED, PUBKEY],
 	);
 	expect(outcome.rejected).toBe(true);
+	// The Worker's fail-closed refusal crosses the boundary with its stable
+	// category intact, and the app classifies it as an integrity failure —
+	// never a retryable network error or an unknown one.
+	expect(outcome.name).toBe("EngineOperationError");
+	expect(outcome.code).toBe("integrity");
+	expect(outcome.canonical).toBe("bundle.integrity_failed");
 
 	// nothing landed: no `active` pointer, no chunk dir created with content
 	const promoted = await page.evaluate(async () => {
