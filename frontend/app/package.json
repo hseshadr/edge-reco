@@ -26,7 +26,7 @@
 		"@edgeproc/browser": "github:hseshadr/edgeproc-browser#a94e7f2a0237a7144658351c07cb296fcb0540fb",
 		"@edgereco/browser": "workspace:*",
 		"@edgeproc/errors": "^0.1.1",
-		"@huggingface/transformers": "^4.3.0",
+		"@huggingface/transformers": "^4.2.0",
 		"i18next": "^26.4.2",
 		"motion": "^13.4.0",
 		"react": "^19.3.0",
