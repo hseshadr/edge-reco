@@ -418,7 +418,7 @@ class EdgeReco:
 
     def _python_toolchain(self) -> dagger.Container:
         base = dag.container().from_(PYTHON_IMAGE).with_exec(["apt-get", "update"])
-        base = base.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "build-essential", "git"])
+        base = base.with_exec(["apt-get", "install", "-y", "--no-install-recommends", "build-essential", "git", "jq"])
         return base.with_exec(["python", "-m", "pip", "install", f"uv=={UV_VERSION}"])
 
     def _product_checks(self, source: dagger.Directory) -> tuple[dagger.Container, ...]:

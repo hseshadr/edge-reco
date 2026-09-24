@@ -29,18 +29,29 @@ dependencies = [
   # The pin's other stated reason is also retired, not merely stale: uv honors a GIT
   # dependency's own `[tool.uv.sources]`, which is why the rev had to be one whose
   # edgeproc-core came from PyPI. A wheel carries no `[tool.uv.sources]` at all —
-  # only `requires_dist` (edge-proc 0.2.0 declares `edgeproc-core>=0.2.1`) — so
+  # only `requires_dist` (edge-proc 0.5.0 declares `edgeproc-core>=0.4.3`) — so
   # consuming the release dissolves the lineage constraint rather than working
   # around it.
   #
   # Floor only, no ceiling — the same rule as avow below. 0.2.0 is 22 commits AHEAD
   # of the rev this replaces, including fail-closed anti-rollback/anti-replay at
   # promote and fail-closed FAISS index options; the pin was holding those back.
-  "edge-proc[localvec,bundles]>=0.2.0",
+  #
+  # 0.5.0 floor (was 0.2.0). 0.3.0 closed a HIGH anti-replay hole: an EQUAL version
+  # read as "fresh", so a genuinely signed older pointer at the same label replayed
+  # onto a device; a promote now needs a strictly greater `sequence` (every edgereco
+  # publish already signs one — see catalog/publish.py). 0.4.0 made the embedding
+  # model fail closed: `TextEncoder` refuses to fetch unless EDGEPROC_MODEL_PATH is
+  # set or EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 (see embeddings/encoder.py). 0.4.1 made
+  # saved FAISS snapshots crash-atomic. 0.5.0 adds the keyring trust root the
+  # browser tier already speaks, and raises its own core floor to 0.4.3.
+  "edge-proc[localvec,bundles]>=0.5.0",
   # Direct dependency (not just transitive via edge-proc): edgereco imports
   # edgeproc_core.vector_mgmt.core.types in embeddings/index.py, so the
-  # import is declared honestly here. Published on PyPI (0.2.1+).
-  "edgeproc-core>=0.2.1",
+  # import is declared honestly here. Published on PyPI. 0.4.3 is the floor edge-proc
+  # 0.5.0 itself requires (wire-safe RFC 9457 problem details); declared here too so
+  # this direct import never resolves below what the substrate was tested against.
+  "edgeproc-core>=0.4.3",
   # Assay owns deterministic score composition. Pin the independently verified
   # 0.5 release candidate exactly so every deployment executes the same formula.
   # The metrics extra retains the reference ranking metrics used by the relevance
@@ -48,7 +59,14 @@ dependencies = [
   "assay-engine[metrics]==0.5.0.dev3",
   # Avow owns only the RFC-8785 + Ed25519 evidence envelope. EdgeReco signs one
   # static ranking proof at catalog publish time and never signs shopper results.
-  "avow>=0.3.0",
+  # 0.4.1 floor: the latest PyPI release. EdgeReco uses only content_hash /
+  # load_signing_key / sign_payload, which are unchanged since 0.3.0; 0.4.x's
+  # changes are ledger durability fixes (0.4.1 supersedes 0.4.0) plus the removal
+  # of the deprecated `avow.replay_mismatch` code, which nothing here matches on.
+  "avow>=0.4.1",
+  # Direct: catalog/publish.py holds a FileLock on ORIGIN_DIR/.publish.lock from the
+  # served-`latest` read through the `latest` write. Same floor as edge-proc's own.
+  "filelock>=3.20",
   # Security floors on transitive deps (pulled via fastapi / edge-proc[bundles] /
   # sentence-transformers); pinned to the CVE-fixed releases. NO suppression — bump
   # where a fix exists. See `poe audit`.

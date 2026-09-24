@@ -17,6 +17,7 @@ Run from backend/::
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from edgeproc.localvec.encoder import TextEncoder
@@ -43,6 +44,10 @@ STRINGS = [
 
 
 def main() -> None:
+    # Build-machine opt-in (edge-proc >=0.4.0 never downloads a model implicitly):
+    # this generator embeds with the real sentence-transformers weights, so it may
+    # fetch them once. A configured EDGEPROC_MODEL_PATH still wins, and loads offline.
+    os.environ.setdefault("EDGEPROC_ALLOW_MODEL_DOWNLOAD", "1")
     encoder = TextEncoder("sentence-transformers/all-MiniLM-L6-v2")
     vectors = [encoder.encode_query(s) for s in STRINGS]
     if any(v.shape[0] != DIM for v in vectors):

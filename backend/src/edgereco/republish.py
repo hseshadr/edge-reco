@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Final
 
 import httpx
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from edgeproc.bundles.cas import FilesystemCacheStore
 from edgeproc.bundles.signing import Verifier
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ from edgereco.api.deps import sync_and_materialize
 from edgereco.api.models import EngagementExport
 from edgereco.catalog.loader import dump_jsonl, load_jsonl
 from edgereco.catalog.models import Product
-from edgereco.catalog.publish import CatalogMeta, publish_bundle
+from edgereco.catalog.publish import CatalogMeta, next_sequence, publish_bundle
 from edgereco.reco.cooccurrence import Session, build_cooccurrence
 from edgereco.reco.retrain import EngagementStat, blend_popularity
 
@@ -62,6 +63,12 @@ def bump_version(current: str) -> str:
     return f"{match.group(1)}{int(match.group(2)) + 1}"
 
 
+def _public_key(private_key_path: Path) -> bytes:
+    """The raw public half of the publisher's Ed25519 key (verifies the served floor)."""
+    private = Ed25519PrivateKey.from_private_bytes(private_key_path.read_bytes())
+    return private.public_key().public_bytes_raw()
+
+
 def fetch_engagement(events_url: str) -> dict[str, EngagementStat]:
     """Pull aggregated engagement from a collector's ``/events/export`` endpoint."""
     response = httpx.get(events_url, timeout=_FETCH_TIMEOUT_S)
@@ -96,9 +103,20 @@ def retrain_and_republish(
     active = FilesystemCacheStore(cache_root).read_active()
     if active is None:  # pragma: no cover - sync_and_materialize promoted or raised
         raise RuntimeError("sync completed without an active bundle pointer")
-    next_sequence = 1 if active.sequence is None else active.sequence + 1
+    # Strictly above BOTH the release just synced and whatever origin_dir already
+    # serves: the two differ whenever the retrain republishes somewhere other than
+    # where it synced from, and a sequence at or below the served one is refused by
+    # every returning shopper as a rollback (docs/DEPLOY.md).
     base = load_jsonl(materialized / "products.jsonl")
     meta = CatalogMeta.model_validate_json((materialized / "catalog_meta.json").read_bytes())
+    # publish_bundle re-checks this under the origin's publish lock, so a concurrent
+    # publisher that got there first makes this retrain fail closed, never overwrite.
+    sequence = next_sequence(
+        origin_dir,
+        public_key=_public_key(private_key_path),
+        catalog_id=meta.catalog_id,
+        at_least=active.sequence,
+    )
     blended = blend_popularity(base, engagement, alpha=alpha)
     new_version = version or bump_version(meta.version)
     staging = _stage_catalog(materialized, blended, cache_root / "staging", sessions or [])
@@ -109,7 +127,7 @@ def retrain_and_republish(
         meta=meta,
         version=new_version,
         product_count=len(blended),
-        sequence=next_sequence,
+        sequence=sequence,
     )
     return RetrainResult(
         version=new_version, product_count=len(blended), changed=_deltas(base, blended)

@@ -12,14 +12,13 @@ Goal: clone the repo, gate both subprojects, then run the headline demo (Nimbus,
 ## Clone and go
 
 Clone **just this repo** — that's all you need. The Python backend pulls
-[`edgeproc-core`](https://github.com/hseshadr/edgeproc-core) from PyPI
-(`edgeproc-core>=0.2.1`) and declares [`edge-proc`](https://github.com/hseshadr/edge-proc)
-as a git source pinned to a full commit SHA, so `uv sync` resolves everything
-automatically:
+[`edge-proc`](https://github.com/hseshadr/edge-proc) (`>=0.5.0`) and
+[`edgeproc-core`](https://github.com/hseshadr/edgeproc-core) (`>=0.4.3`) from PyPI, and
+`uv.lock` pins the exact releases, so `uv sync` resolves everything automatically:
 
 ```bash
 git clone https://github.com/hseshadr/edge-reco
-cd edge-reco/backend && uv sync     # edgeproc-core from PyPI, edge-proc from GitHub
+cd edge-reco/backend && uv sync     # edge-proc + edgeproc-core from PyPI
 ```
 
 > **Co-developing the substrate?** If you want to hack on edge-proc or
@@ -131,12 +130,15 @@ cd backend
 # Scraped Amazon CSV → products.jsonl  (the committed demo source; or your own CSV)
 uv run edgereco build-catalog examples/source/catalog.csv /tmp/cache/products.jsonl
 
-# Build the FAISS index (reads /tmp/cache/products.jsonl, writes /tmp/staging/)
-uv run edgereco index /tmp/cache /tmp/staging
+# Build the FAISS index (reads /tmp/cache/products.jsonl, writes /tmp/staging/).
+# edge-proc never downloads the embedding model unless told it may: this is the
+# build machine, so opt in once (or point EDGEPROC_MODEL_PATH at a local copy).
+EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 uv run edgereco index /tmp/cache /tmp/staging
 
 # Sign + publish a content-addressed bundle origin. The demo's signing key is
 # deliberately not committed (only its public half, examples/keys/public.key, is),
-# so generate your own ed25519 pair once:
+# so generate your own ed25519 pair once (it prints the `wrote ...` line and then the
+# new key's `key_id`, the id a keyring trust root names it by):
 uv run edgeproc keygen --out /tmp/keys
 
 uv run edgereco bundle /tmp/staging /tmp/origin /tmp/keys/private.key \
@@ -165,8 +167,14 @@ cd backend
 EDGERECO_BUNDLE_BASE_URL=/path/to/origin \
 EDGERECO_VERIFY_KEY_PATH=examples/keys/public.key \
 EDGERECO_BUNDLE_CACHE_DIR=/tmp/edge-cache \
+EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 \
     uv run edgereco serve /tmp/staging /tmp/staging --port 8000
 ```
+
+The server embeds queries itself, so it needs the embedding model too:
+`EDGEPROC_ALLOW_MODEL_DOWNLOAD=1` lets it fetch the model once, and
+`EDGEPROC_MODEL_PATH=/path/to/model` loads a local copy with no model egress. With
+neither set it exits with `[config.missing]` and names both.
 
 Or use the alternative API-server launcher with the demo's CORS + browse route:
 

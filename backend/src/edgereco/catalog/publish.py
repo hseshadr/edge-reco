@@ -31,14 +31,20 @@ edge-proc stays generic (opaque files only); this module owns the domain shape.
 from __future__ import annotations
 
 import errno
+import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from edgeproc.bundles.cas import FilesystemCacheStore
 from edgeproc.bundles.chunking import GearCDC
+from edgeproc.bundles.manifest import VersionPointer, pointer_signing_bytes
 from edgeproc.bundles.publish import build_bundle
-from edgeproc.bundles.signing import Ed25519Signer
+from edgeproc.bundles.signing import Ed25519Signer, Ed25519Verifier, SignatureError
+from filelock import FileLock, Timeout
 from pydantic import BaseModel
 
 from edgereco.catalog.product_image import ImageMode, localize_catalog
@@ -49,6 +55,7 @@ from edgereco.reco.score_receipt import (
     sign_ranking_receipt,
     signing_key_from_seed,
 )
+from edgereco.safe_io import read_regular_bytes
 
 # Logical top-level entries a bundle staging dir must provide; ``vector`` is a dir.
 BUNDLE_FILES: Final[tuple[str, ...]] = (
@@ -73,6 +80,134 @@ _COOCCURRENCE_NAME: Final[str] = "cooccurrence.json"
 #: gap lets a consumer tell "older bundle predates this file" (default is correct) from
 #: "current bundle is unexpectedly missing a file it should have" (corruption — raise).
 CURRENT_META_SCHEMA: Final[int] = 2
+MAX_SEQUENCE: Final[int] = 2**53 - 1
+
+
+class SequenceNotIncreasingError(ValueError):
+    """A publish would not raise the origin's signed ``sequence`` (fail closed).
+
+    Every consumer keeps the highest pointer it accepted as an anti-rollback floor:
+    ``@edgeproc/browser`` refuses a lower or equal ``sequence`` over a different
+    manifest, and edge-proc >=0.3.0 promotes a same-version release only on a strictly
+    greater one. A publish at or below what the origin already serves would strand
+    every returning shopper, so the producer refuses it before signing anything.
+    """
+
+
+#: A served ``latest`` pointer is a few hundred bytes; anything past this is refused.
+_MAX_POINTER_BYTES: Final[int] = 64 * 1024
+_PUBLISH_LOCK_NAME: Final[str] = ".publish.lock"
+#: How long a publisher waits for another one on the same origin before giving up.
+_PUBLISH_LOCK_TIMEOUT_S: Final[float] = 300.0
+_CHANNEL: Final[str] = "stable"
+
+
+def _unreadable(latest: Path, why: str) -> SequenceNotIncreasingError:
+    return SequenceNotIncreasingError(
+        f"cannot read the served sequence from {latest} ({why}); refusing to publish "
+        "over a pointer whose rollback floor is unknown"
+    )
+
+
+def _check_range(sequence: int) -> int:
+    if not 1 <= sequence <= MAX_SEQUENCE:
+        raise ValueError(f"sequence must be between 1 and {MAX_SEQUENCE}, got {sequence}")
+    return sequence
+
+
+def _strict_sequence(raw: object) -> int | None:
+    """The pointer's ``sequence`` if it is a plain JSON integer in the safe range.
+
+    ``None`` only when the key is ABSENT (a pre-counter pointer). ``null``, a bool, a
+    float, a string, a negative, or anything past 2**53-1 raises ``ValueError``.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("latest is not a JSON object")
+    if "sequence" not in raw:
+        return None
+    value = raw["sequence"]
+    if type(value) is not int or not 0 <= value <= MAX_SEQUENCE:
+        raise ValueError("sequence is not a JSON integer in [0, 2**53-1]")
+    return value
+
+
+def _verify_served(pointer: VersionPointer, public_key: bytes, catalog_id: str) -> None:
+    """Trust a served pointer only if THIS publisher signed it for THIS catalog."""
+    if pointer.bundle_id != catalog_id or pointer.channel != _CHANNEL:
+        raise ValueError("latest names another catalog or channel")
+    Ed25519Verifier.from_public_bytes(public_key).verify(
+        pointer_signing_bytes(pointer), pointer.signature
+    )
+
+
+def served_sequence(origin_dir: Path, *, public_key: bytes, catalog_id: str) -> int | None:
+    """The ``sequence`` of the pointer ``origin_dir`` serves now, or ``None`` if none.
+
+    ``None`` means there is no ``latest`` at all (a fresh origin) or it predates the
+    counter. Otherwise ``latest`` must be a regular, non-symlinked, bounded file whose
+    ``sequence`` is a plain safe integer, and it must carry a valid signature by
+    ``public_key`` for ``catalog_id``. Anything else is refused rather than trusted as a
+    floor: a forged huge sequence would push every later release out of range, and a
+    guessed floor could sign a release every client rejects.
+    """
+    latest = origin_dir / "latest"
+    if not latest.exists() and not latest.is_symlink():
+        return None
+    try:
+        data = read_regular_bytes(latest, label="served latest", max_bytes=_MAX_POINTER_BYTES)
+        sequence = _strict_sequence(json.loads(data))
+        _verify_served(VersionPointer.model_validate_json(data), public_key, catalog_id)
+    except (OSError, ValueError, SignatureError) as exc:
+        raise _unreadable(latest, str(exc)) from exc
+    return sequence
+
+
+def next_sequence(
+    origin_dir: Path, *, public_key: bytes, catalog_id: str, at_least: int | None = None
+) -> int:
+    """One more than the highest of ``origin_dir``'s served sequence and ``at_least``."""
+    served = served_sequence(origin_dir, public_key=public_key, catalog_id=catalog_id)
+    floors = [value for value in (served, at_least) if value is not None]
+    return _check_range(max(floors, default=0) + 1)
+
+
+def _require_increasing(
+    origin_dir: Path, sequence: int | None, *, public_key: bytes, catalog_id: str
+) -> int:
+    """Resolve ``sequence`` (``None`` = next) and refuse one that does not climb."""
+    served = served_sequence(origin_dir, public_key=public_key, catalog_id=catalog_id)
+    if sequence is None:
+        return _check_range((served or 0) + 1)
+    _refuse_stale(origin_dir, _check_range(sequence), served)
+    return sequence
+
+
+def _refuse_stale(origin_dir: Path, sequence: int, served: int | None) -> None:
+    if served is not None and sequence <= served:
+        raise SequenceNotIncreasingError(
+            f"sequence {sequence} must be strictly greater than {served}, the sequence "
+            f"{origin_dir / 'latest'} serves now; returning shoppers refuse anything "
+            "lower or equal as a rollback (see docs/DEPLOY.md)"
+        )
+
+
+@contextmanager
+def _publish_lock(origin_dir: Path) -> Iterator[None]:
+    """Serialize publishers on one origin from the ``latest`` read to its write.
+
+    Separate from edge-proc's own store lock on purpose: that one covers only the
+    bundle write, and nesting inside its private path would couple us to it.
+    """
+    lock_path = origin_dir / _PUBLISH_LOCK_NAME
+    if lock_path.is_symlink():
+        raise SequenceNotIncreasingError(f"refusing a symlinked publish lock: {lock_path}")
+    try:
+        with FileLock(lock_path, timeout=_PUBLISH_LOCK_TIMEOUT_S):
+            yield
+    except Timeout as exc:
+        raise SequenceNotIncreasingError(
+            f"another publisher holds {lock_path}; retry when it finishes"
+        ) from exc
 
 
 class CatalogMeta(BaseModel):
@@ -104,16 +239,27 @@ def publish_bundle(
     embedding_count: int,
     product_count: int,
     require_feature_files: bool = False,
-    sequence: int = 1,
+    sequence: int | None = None,
     image_mode: ImageMode = ImageMode.LOCAL,
 ) -> None:
     """Write ``catalog_meta.json`` then build the signed origin from the staging dir.
+
+    ``sequence`` defaults to one more than ``origin_dir`` serves now (``1`` on a fresh
+    origin). An explicit value must be in ``[1, 2**53-1]`` and strictly greater than
+    the served one, or the publish is refused before the origin is written. The served
+    ``latest`` is trusted only if this key signed it for ``catalog_id``. One lock on
+    ``origin_dir`` spans that read through the ``latest`` write, so concurrent
+    publishers can neither sign the same sequence nor land an older one last.
 
     ``require_feature_files`` republishes a CURRENT bundle: ``ranking_config.json`` and
     ``cooccurrence.json`` MUST already be staged (a retrain re-staging a synced bundle),
     so a missing file raises instead of silently baking in legacy defaults. A fresh
     build leaves it ``False`` and the producer writes the defaults for the first time.
     """
+    if sequence is not None:
+        _check_range(sequence)
+    private_bytes = private_key_path.read_bytes()
+    public_key = Ed25519PrivateKey.from_private_bytes(private_bytes).public_key()
     meta = CatalogMeta(
         catalog_id=catalog_id,
         version=version,
@@ -123,25 +269,42 @@ def publish_bundle(
         product_count=product_count,
         schema_version=CURRENT_META_SCHEMA,
     )
+    files = _stage_files(staging_dir, meta, private_key_path, image_mode, require_feature_files)
+    origin_dir.mkdir(parents=True, exist_ok=True)
+    with _publish_lock(origin_dir):
+        sequence = _require_increasing(
+            origin_dir,
+            sequence,
+            public_key=public_key.public_bytes_raw(),
+            catalog_id=catalog_id,
+        )
+        build_bundle(
+            files=files,
+            store=FilesystemCacheStore(origin_dir),
+            chunker=GearCDC(),
+            signer=Ed25519Signer.from_private_bytes(private_bytes),
+            bundle_id=catalog_id,
+            version=version,
+            bind_identity=True,
+            channel=_CHANNEL,
+            sequence=sequence,
+        )
+
+
+def _stage_files(
+    staging_dir: Path,
+    meta: CatalogMeta,
+    private_key_path: Path,
+    image_mode: ImageMode,
+    require_feature_files: bool,
+) -> dict[str, bytes]:
+    """Write the derived staging files, then read the complete signed file set."""
     _write_json_no_follow(staging_dir / _META_NAME, meta.model_dump_json())
     _localize_product_images(staging_dir, image_mode)
     _ensure_ranking_config(staging_dir, require_present=require_feature_files)
     _ensure_cooccurrence(staging_dir, require_present=require_feature_files)
     _write_ranking_receipt(staging_dir, private_key_path)
-    files = _read_bundle_files(staging_dir)
-    signer = Ed25519Signer.from_private_bytes(private_key_path.read_bytes())
-    origin_dir.mkdir(parents=True, exist_ok=True)
-    build_bundle(
-        files=files,
-        store=FilesystemCacheStore(origin_dir),
-        chunker=GearCDC(),
-        signer=signer,
-        bundle_id=catalog_id,
-        version=version,
-        bind_identity=True,
-        channel="stable",
-        sequence=sequence,
-    )
+    return _read_bundle_files(staging_dir)
 
 
 def _ensure_ranking_config(staging_dir: Path, *, require_present: bool = False) -> None:

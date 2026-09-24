@@ -273,6 +273,36 @@ The demo container syncs the signed bundle from `edge:8081` at startup, then ser
 
 For multi-region: stamp the same container in each region; each replica syncs the bundle locally on cold start and serves recommendations from RAM. Bundle updates roll out by publishing a new `latest`; consumers pick it up on the next sync window (or on a signal).
 
+### The server images and the embedding model
+
+Both server images (`backend/deploy/Dockerfile` for `edgereco serve`, and
+`backend/demo_server/Dockerfile` for the flywheel collector) embed queries in Python,
+so they need the `sentence-transformers/all-MiniLM-L6-v2` weights. edge-proc never
+downloads a model unless told it may. Both images set `EDGEPROC_ALLOW_MODEL_DOWNLOAD=1`,
+so the first boot fetches the model from Hugging Face's `main` branch.
+
+That fetch is **not pinned**. The images do not name a model commit or a digest,
+because no upstream revision of that repository is recorded anywhere in this project to
+pin against. (The browser tier's weights are pinned by sha256 in
+`frontend/app/scripts/download-model.mjs`, but they are a different artifact: the
+`Xenova/` ONNX export, not the PyTorch model the server loads.) A change on the model's
+`main` branch would therefore reach a freshly started container unverified.
+
+To run a server image with a pinned, verified model and no model egress:
+
+1. On a build machine, download the model at a commit you have reviewed, for example
+   `huggingface_hub.snapshot_download("sentence-transformers/all-MiniLM-L6-v2",
+   revision="<commit sha>", local_dir="model")`.
+2. Record its digest with edge-proc:
+   `python -c "from pathlib import Path; from edgeproc.localvec.model_source import digest_model_dir; print(digest_model_dir(Path('model')))"`.
+3. Ship that directory into the image or mount it, and set `EDGEPROC_MODEL_PATH` to it
+   and `EDGEPROC_MODEL_DIGEST` to the digest. A path wins over the download opt-in, and
+   a digest mismatch refuses to start (`bundle.integrity_failed`).
+
+`backend/tests/integration/test_deploy_entrypoint.py` fails if an image declares no
+model source, sets a model path without its digest, or opts into the download without
+pointing here.
+
 ## Bundle lifecycle in production
 
 ```mermaid
@@ -295,12 +325,34 @@ flowchart TB
 Publisher (build CI):
 
 ```bash
+set -euo pipefail
 edgereco build-catalog new-products.csv staging/products.jsonl
-edgereco index staging staging
+# The build machine is the one place allowed to fetch the embedding model
+# (edge-proc refuses to otherwise); or set EDGEPROC_MODEL_PATH to a local copy.
+EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 edgereco index staging staging
+# A fresh CI checkout has no origin/latest, so read the sequence you serve now.
+# Any failure (fetch error, no numeric integer `sequence`) stops the job here, before
+# anything is signed: an empty read would otherwise make NEXT_SEQUENCE 1.
+SEQ=$(curl -fsS https://cdn.example.com/products/latest \
+    | jq -er '.sequence | select(type == "number" and . == floor and . >= 0)')
+NEXT_SEQUENCE=$((SEQ + 1))
 edgereco bundle staging origin examples/keys/private.key \
-    --catalog-id products --version "$VERSION"
+    --catalog-id products --version "$VERSION" --sequence "$NEXT_SEQUENCE"
 aws s3 sync origin/ s3://my-bundle-bucket/products/ --delete-after-sync
 ```
+
+`edgereco bundle` refuses a `--sequence` at or below the one `ORIGIN_DIR/latest` already
+holds, and without `--sequence` it signs one more than that (1 on an empty dir). It can
+only see the local `ORIGIN_DIR`, though, so a publisher that builds into a fresh
+directory must pass the next sequence explicitly, as above. For the very first release
+of a catalog, when nothing is served yet, pass `--sequence 1` instead of reading it.
+
+It trusts a local `ORIGIN_DIR/latest` as that floor only when it is a regular file,
+its `sequence` is a plain integer below 2^53, and it carries a valid signature by the
+publishing key for this `--catalog-id`. Anything else is refused, not guessed past.
+`--sequence` must be between 1 and 2^53 - 1. Publishers on one `ORIGIN_DIR` are
+serialized by a lock file (`ORIGIN_DIR/.publish.lock`, removed on release) held from
+that read to the `latest` write, so two of them can never sign the same sequence.
 
 The pointer flip (`latest` upload) is the only thing the consumer reacts to. Chunks are immutable, so the order of upload doesn't matter as long as the pointer goes last.
 
@@ -317,8 +369,10 @@ Everything an attacker could swap (chunks, manifest, pointer) is verified locall
 
 ### Signing keys, the release `sequence`, and rotation
 
-Every signed `latest` pointer carries a `sequence` (`edgereco bundle --sequence N`;
-`edgereco retrain` bumps it for you). Each browser keeps the highest pointer it has
+Every signed `latest` pointer carries a `sequence` (`edgereco bundle --sequence N`,
+which defaults to one more than the origin dir's current `latest` and refuses anything
+at or below it; `edgereco retrain` signs one more than the higher of the release it
+synced and the one its target origin already serves). Each browser keeps the highest pointer it has
 accepted as an **anti-rollback floor**, in OPFS and in IndexedDB. It keeps that floor
 even when the currently pinned key can't verify the stored pointer, so a key change
 can never be used to push an old release. That has three consequences for publishers:
@@ -341,7 +395,9 @@ can never be used to push an old release. That has three consequences for publis
   ```
 
   Ship a keyring that lists both the old and the new key in an app release first. Then
-  sign with the new key, using a higher `sequence`. Revoke the old key id once every
+  sign with the new key, using a higher `sequence`. Build that first new-key release into
+  a fresh `ORIGIN_DIR` and pass `--sequence` explicitly: the publisher refuses to read
+  a local `latest` signed by a different key as its floor. Revoke the old key id once every
   client has the new release. The sync Worker and the ranking-proof check both read the
   trust root with `@edgeproc/browser`'s `parseTrustRoot`, and
   `frontend/app/scripts/trust-root-contract.test.mjs` fails the gate if the committed

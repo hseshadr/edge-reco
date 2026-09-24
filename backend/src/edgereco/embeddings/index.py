@@ -6,18 +6,30 @@ edge-reco's historical API is synchronous and returns inner-product *similarity*
 calls to completion (every edge-reco call site is synchronous) and converts
 distance back to similarity, so behavior is identical to the previous in-house
 index while the FAISS work is owned by EdgeProc.
+
+On disk, ``vector/`` is EdgeReco's SIGNED BUNDLE format, not edge-proc's persistence
+format: exactly ``index.faiss`` + ``state.json`` + ``embeddings.f32``, flat and
+deterministic. edge-proc >=0.4.1 persists to crash-atomic ``snapshots/`` generations
+(random names, a lock file) and migrates a writable legacy pair into them on load,
+deleting the pair. The browser tier reads ``vector/state.json`` and a retrain copies
+the synced ``vector/`` verbatim into the next bundle, so this adapter writes the flat
+layout itself and loads it from a private copy, never touching the source directory.
 """
 
 from __future__ import annotations
 
 import asyncio
+import tempfile
 from pathlib import Path
 from typing import Final
 
+import faiss
 import numpy as np
 from edgeproc.localvec.faiss_index import FaissVectorIndex
 from edgeproc_core.vector_mgmt.core.types import IndexConfig, VectorEmbedding
 from numpy.typing import NDArray
+
+from edgereco.safe_io import copy_regular_file, write_atomic
 
 _INDEX_NAME = "edgereco"
 
@@ -25,6 +37,12 @@ _INDEX_NAME = "edgereco"
 #: to ``index.faiss``/``state.json`` so a Python-faiss-less tier (the browser) can do
 #: cosine search directly. Row ``i`` ↔ ``state.json`` ``faiss_ids[i]`` ↔ product id.
 EMBEDDINGS_FILE: Final[str] = "embeddings.f32"
+#: The FAISS index and its id-map sidecar, flat beside ``embeddings.f32``.
+INDEX_FILE: Final[str] = "index.faiss"
+STATE_FILE: Final[str] = "state.json"
+#: Upper bound on one ``vector/`` file read by :meth:`VectorIndex.load`. The committed
+#: 720 x 384 catalog is about 1.1 MB; 1 GiB leaves room for ~700k rows at 384 dims.
+MAX_VECTOR_FILE_BYTES: int = 1024 * 1024 * 1024
 
 
 class VectorIndex:
@@ -86,10 +104,39 @@ class VectorIndex:
         return np.ascontiguousarray(matrix, dtype=np.float32)
 
     def save(self, directory: Path) -> None:
-        self._inner.save(directory)
+        """Write the flat bundle layout: ``index.faiss``, ``state.json``, ``embeddings.f32``.
+
+        The same bytes edge-proc <=0.4.0 wrote for a saved index, so the committed seed
+        bundle, older servers, and the browser all read it unchanged. Deterministic:
+        the same index always saves to the same bytes. Each file is written to an
+        exclusive, no-follow temp beside it, fsynced, then renamed into place, so a
+        planted symlink is replaced rather than written through and a crash never
+        leaves a torn file. A symlinked ``directory`` itself is refused.
+        """
+        if directory.is_symlink():
+            raise ValueError(f"refusing to save a vector index into a symlink: {directory}")
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / EMBEDDINGS_FILE).write_bytes(self.raw_matrix().tobytes())
+        index_bytes = faiss.serialize_index(self._inner._faiss).tobytes()
+        state = self._inner._persisted_state().model_dump_json().encode("utf-8")
+        write_atomic(directory / INDEX_FILE, index_bytes)
+        write_atomic(directory / STATE_FILE, state)
+        write_atomic(directory / EMBEDDINGS_FILE, self.raw_matrix().tobytes())
 
     @classmethod
     def load(cls, directory: Path) -> VectorIndex:
-        return cls(FaissVectorIndex.load(_INDEX_NAME, directory))
+        """Load a flat ``vector/`` without modifying it.
+
+        edge-proc migrates the legacy pair it is handed, so it is handed a private
+        copy; the index lives in memory afterwards and the copy is discarded. Each
+        source is opened once, no-follow, must be a regular file no larger than
+        ``MAX_VECTOR_FILE_BYTES``, and is copied from that same descriptor.
+        """
+        with tempfile.TemporaryDirectory(prefix="edgereco-vector-") as scratch:
+            for name in (INDEX_FILE, STATE_FILE):
+                copy_regular_file(
+                    directory / name,
+                    Path(scratch) / name,
+                    label=f"vector/{name}",
+                    max_bytes=MAX_VECTOR_FILE_BYTES,
+                )
+            return cls(FaissVectorIndex.load(_INDEX_NAME, Path(scratch)))

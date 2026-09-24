@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     import polars as pl
 
     from edgereco.api.deps import ServiceContainer
@@ -20,6 +23,25 @@ if TYPE_CHECKING:
     from edgereco.republish import RetrainResult
 
 app = typer.Typer(name="edgereco", help="EdgeReco: edge product discovery engine.")
+
+
+@contextmanager
+def _coded_model_refusal() -> Iterator[None]:
+    """Render edge-proc's fail-closed model refusal as ``[code] message``, exit 1.
+
+    Since edge-proc 0.4.0 the embedding model never downloads implicitly: it needs
+    ``EDGEPROC_MODEL_PATH`` (a local model directory) or, on a build machine,
+    ``EDGEPROC_ALLOW_MODEL_DOWNLOAD=1``. The refusal already names both remedies, so
+    the CLI prints it with its canonical code instead of a traceback.
+    """
+    from edgeproc.localvec.model_source import ModelSourceError
+
+    try:
+        yield
+    except ModelSourceError as exc:
+        code = getattr(exc, "code", "config.invalid")
+        typer.echo(f"[{code}] {exc}", err=True)
+        raise typer.Exit(1) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +69,8 @@ def index(
     typer.echo(f"Loaded {len(products)} products.")
 
     typer.echo("Encoding embeddings (this may take a moment)...")
-    encoder = ProductEncoder()
+    with _coded_model_refusal():
+        encoder = ProductEncoder()
     embeddings = encoder.encode(products)
     ids = [p.id for p in products]
     dim = encoder.dim
@@ -89,35 +112,43 @@ def bundle(
     ] = 0,
     product_count: Annotated[int, typer.Option(help="Number of products in the catalog")] = 0,
     sequence: Annotated[
-        int,
+        int | None,
         typer.Option(
+            min=1,
+            max=2**53 - 1,
             help=(
                 "Monotonic signed release sequence: must exceed every sequence already "
                 "published for this catalog id, across signing keys (a new key does not "
-                "reset it). Browsers refuse a lower one as a rollback."
-            )
+                "reset it). Browsers refuse a lower or equal one as a rollback. Default: "
+                "one more than ORIGIN_DIR/latest serves now (1 on a fresh origin); an "
+                "explicit value at or below it is refused."
+            ),
         ),
-    ] = 1,
+    ] = None,
 ) -> None:
     """Build a signed, content-addressed bundle (FAISS index + catalog) origin.
 
     Key rotation: pin an edgeproc.keyring/v1 trust root listing the old and new keys
     (see docs/DEPLOY.md) rather than swapping public.key, and keep --sequence rising.
     """
-    from edgereco.catalog.publish import publish_bundle
+    from edgereco.catalog.publish import SequenceNotIncreasingError, publish_bundle
 
-    publish_bundle(
-        staging_dir=staging_dir,
-        origin_dir=origin_dir,
-        private_key_path=private_key_path,
-        catalog_id=catalog_id,
-        version=version,
-        embedding_model=embedding_model,
-        embedding_dim=embedding_dim,
-        embedding_count=embedding_count,
-        product_count=product_count,
-        sequence=sequence,
-    )
+    try:
+        publish_bundle(
+            staging_dir=staging_dir,
+            origin_dir=origin_dir,
+            private_key_path=private_key_path,
+            catalog_id=catalog_id,
+            version=version,
+            embedding_model=embedding_model,
+            embedding_dim=embedding_dim,
+            embedding_count=embedding_count,
+            product_count=product_count,
+            sequence=sequence,
+        )
+    except SequenceNotIncreasingError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(1) from exc
     typer.echo(f"Built bundle '{catalog_id}' v{version} → {origin_dir}")
 
 
@@ -380,7 +411,8 @@ def search(
     from edgereco.catalog.models import SessionProfile
     from edgereco.reco.reranker import rerank_search
 
-    container = ServiceContainer.from_dirs(cache_dir, index_dir)
+    with _coded_model_refusal():
+        container = ServiceContainer.from_dirs(cache_dir, index_dir)
     fused, evidence = _fused_search_results(container, query, k=max(limit * 3, 30))
     results = rerank_search(fused, SessionProfile(), evidence)
     if category:

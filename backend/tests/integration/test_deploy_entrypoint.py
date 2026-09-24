@@ -79,3 +79,41 @@ def test_entrypoint_is_valid_posix_shell() -> None:
         check=False,
     )
     assert check.returncode == 0, f"entrypoint.sh has shell syntax errors: {check.stderr}"
+
+
+def test_every_server_image_declares_where_its_embedding_model_comes_from() -> None:
+    """Both server images must say how the query encoder gets its model.
+
+    edge-proc >=0.4.0 refuses to fetch an embedding model unless EDGEPROC_MODEL_PATH
+    names a local model directory or EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 opts in. Both
+    images construct a ``ProductEncoder`` at boot (``edgereco serve`` and the flywheel
+    collector), so an image that declares neither crashes on start with
+    ``[config.missing]`` — a failure no unit test sees, because the suite opts in.
+    """
+    for dockerfile in (DOCKERFILE, BACKEND / "demo_server" / "Dockerfile"):
+        text = dockerfile.read_text()
+        declared = re.search(r"EDGEPROC_(MODEL_PATH=\S+|ALLOW_MODEL_DOWNLOAD=1\b)", text)
+        assert declared, f"{dockerfile.relative_to(BACKEND)} never declares a model source"
+
+
+def test_every_server_image_model_source_is_pinned_or_documented() -> None:
+    """A model path must carry its digest; a download opt-in must point at why.
+
+    The upstream model revision is not recorded in this project, so the images cannot
+    pin a commit yet. An image that opts into the download therefore has to reference
+    the DEPLOY.md section that states the gap and the pinning procedure, and an image
+    that ships a local model has to pin it with EDGEPROC_MODEL_DIGEST.
+    """
+    deploy_doc = (BACKEND.parent / "docs" / "DEPLOY.md").read_text(encoding="utf-8")
+    assert "### The server images and the embedding model" in deploy_doc
+    for dockerfile in (DOCKERFILE, BACKEND / "demo_server" / "Dockerfile"):
+        text = dockerfile.read_text()
+        name = dockerfile.relative_to(BACKEND)
+        if "EDGEPROC_MODEL_PATH=" in text:
+            assert re.search(r"EDGEPROC_MODEL_DIGEST=[0-9a-f]{64}\b", text), (
+                f"{name} ships a local model without pinning its digest"
+            )
+        if "EDGEPROC_ALLOW_MODEL_DOWNLOAD=1" in text:
+            assert "DEPLOY.md#the-server-images-and-the-embedding-model" in text, (
+                f"{name} downloads an unpinned model without pointing at DEPLOY.md"
+            )

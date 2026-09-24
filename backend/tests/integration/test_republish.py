@@ -94,6 +94,50 @@ def test_retrain_republishes_signed_bundle_with_boosted_popularity(
     assert by_id["P2"].popularity_score == 0.5  # untouched
 
 
+def test_retrain_sequence_climbs_past_what_the_target_origin_already_serves(
+    tmp_path: Path, keypair: tuple[Path, Ed25519Verifier]
+) -> None:
+    """Syncing from one origin and republishing into another must still climb.
+
+    The synced source is at sequence 1, but the target origin already serves sequence
+    7 (an earlier retrain, or a rebuild). ``active + 1`` would sign sequence 2 there —
+    a release every returning shopper refuses as a rollback — so the next sequence is
+    one more than the HIGHER of the two.
+    """
+    key_path, verifier = keypair
+    source = _seed_origin(tmp_path, key_path)
+    target = tmp_path / "target"
+    staging = tmp_path / "target-staging"
+    (staging / "vector").mkdir(parents=True)
+    dump_jsonl(staging / "products.jsonl", [Product(id="P1", title="Old", category="Books")])
+    (staging / "vector" / "embeddings.f32").write_bytes(b"\x00" * 16)
+    publish_bundle(
+        staging_dir=staging,
+        origin_dir=target,
+        private_key_path=key_path,
+        catalog_id="retrain-test",
+        version="v9",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dim=384,
+        embedding_count=1,
+        product_count=1,
+        sequence=7,
+    )
+
+    retrain_and_republish(
+        bundle_base_url=str(source),
+        origin_dir=target,
+        private_key_path=key_path,
+        verifier=verifier,
+        engagement={},
+        alpha=0.5,
+        cache_root=tmp_path / "cache",
+    )
+
+    pointer = VersionPointer.model_validate_json((target / "latest").read_bytes())
+    assert pointer.sequence == 8
+
+
 def test_retrain_recomputes_cooccurrence_into_bundle(
     tmp_path: Path, keypair: tuple[Path, Ed25519Verifier]
 ) -> None:
