@@ -24,13 +24,21 @@ COPY demo_server/ demo_server/
 COPY examples/keys/public.key examples/keys/public.key
 RUN uv sync --no-dev --frozen
 
+# avow (through 0.4.1) ships its own older `assay/` package, and both it and
+# assay-engine write site-packages/assay/, so the sync above can leave avow's copy on
+# top and `edgereco.reco.formula` fails to import. Reinstall ONLY assay-engine, from
+# the lock (hash-checked), as the last sync. Mirrors the Dagger ASSAY_INSTALL step.
+RUN uv sync --no-dev --frozen --reinstall-package assay-engine
+
 ENV DEMO_HOST=0.0.0.0 \
     DEMO_PORT=8000 \
     DEMO_CORS_ORIGINS=http://localhost:5174
 
 # The collector builds a query encoder at boot. edge-proc >=0.4.0 never downloads
-# the model implicitly, so this demo server opts in to its one-time fetch; set
-# EDGEPROC_MODEL_PATH to a local model directory to run it with no model egress.
+# the model implicitly, so this demo server opts in to its one-time fetch. That fetch
+# is NOT pinned to a model commit; see
+# docs/DEPLOY.md#the-server-images-and-the-embedding-model for why and for running
+# with a pinned local model (EDGEPROC_MODEL_PATH + EDGEPROC_MODEL_DIGEST) instead.
 ENV EDGEPROC_ALLOW_MODEL_DOWNLOAD=1
 
 EXPOSE 8000

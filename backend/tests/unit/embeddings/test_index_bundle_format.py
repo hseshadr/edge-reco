@@ -21,12 +21,14 @@ from __future__ import annotations
 import glob
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 import zstandard as zstd
 
+import edgereco.embeddings.index as index_module
 from edgereco.embeddings.index import EMBEDDINGS_FILE, VectorIndex
 
 _CATALOG = Path(__file__).resolve().parents[3] / "examples" / "catalog"
@@ -106,3 +108,48 @@ def test_load_refuses_a_symlinked_vector_file(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="symlinked"):
         VectorIndex.load(directory)
+
+
+def test_load_refuses_a_fifo_without_blocking(tmp_path: Path) -> None:
+    directory = _tiny(tmp_path)
+    (directory / "state.json").unlink()
+    os.mkfifo(directory / "state.json")
+
+    with pytest.raises(ValueError, match="regular file"):
+        VectorIndex.load(directory)
+
+
+def test_load_refuses_an_oversized_vector_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = _tiny(tmp_path)
+    monkeypatch.setattr(index_module, "MAX_VECTOR_FILE_BYTES", 16)
+
+    with pytest.raises(ValueError, match="larger than 16 bytes"):
+        VectorIndex.load(directory)
+
+
+def test_save_replaces_a_planted_symlink_instead_of_writing_through_it(tmp_path: Path) -> None:
+    directory = tmp_path / "vector"
+    directory.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text("do not touch", encoding="utf-8")
+    (directory / "state.json").symlink_to(outside)
+
+    VectorIndex.build(np.eye(3, 4, dtype=np.float32), ["x", "y", "z"], dim=4).save(directory)
+
+    assert outside.read_text(encoding="utf-8") == "do not touch"
+    assert not (directory / "state.json").is_symlink()
+    assert json.loads((directory / "state.json").read_bytes())["faiss_ids"] == ["x", "y", "z"]
+
+
+def test_save_refuses_a_symlinked_vector_directory(tmp_path: Path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    (tmp_path / "vector").symlink_to(real, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="symlink"):
+        VectorIndex.build(np.eye(3, 4, dtype=np.float32), ["x", "y", "z"], dim=4).save(
+            tmp_path / "vector"
+        )
+    assert list(real.iterdir()) == []

@@ -19,7 +19,6 @@ layout itself and loads it from a private copy, never touching the source direct
 from __future__ import annotations
 
 import asyncio
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Final
@@ -30,6 +29,8 @@ from edgeproc.localvec.faiss_index import FaissVectorIndex
 from edgeproc_core.vector_mgmt.core.types import IndexConfig, VectorEmbedding
 from numpy.typing import NDArray
 
+from edgereco.safe_io import copy_regular_file, write_atomic
+
 _INDEX_NAME = "edgereco"
 
 #: Raw, L2-normalized ``float32`` matrix (``ntotal x dim``, row-major) written next
@@ -39,6 +40,9 @@ EMBEDDINGS_FILE: Final[str] = "embeddings.f32"
 #: The FAISS index and its id-map sidecar, flat beside ``embeddings.f32``.
 INDEX_FILE: Final[str] = "index.faiss"
 STATE_FILE: Final[str] = "state.json"
+#: Upper bound on one ``vector/`` file read by :meth:`VectorIndex.load`. The committed
+#: 720 x 384 catalog is about 1.1 MB; 1 GiB leaves room for ~700k rows at 384 dims.
+MAX_VECTOR_FILE_BYTES: int = 1024 * 1024 * 1024
 
 
 class VectorIndex:
@@ -104,26 +108,35 @@ class VectorIndex:
 
         The same bytes edge-proc <=0.4.0 wrote for a saved index, so the committed seed
         bundle, older servers, and the browser all read it unchanged. Deterministic:
-        the same index always saves to the same bytes.
+        the same index always saves to the same bytes. Each file is written to an
+        exclusive, no-follow temp beside it, fsynced, then renamed into place, so a
+        planted symlink is replaced rather than written through and a crash never
+        leaves a torn file. A symlinked ``directory`` itself is refused.
         """
+        if directory.is_symlink():
+            raise ValueError(f"refusing to save a vector index into a symlink: {directory}")
         directory.mkdir(parents=True, exist_ok=True)
-        faiss.write_index(self._inner._faiss, str(directory / INDEX_FILE))
-        state = self._inner._persisted_state().model_dump_json()
-        (directory / STATE_FILE).write_text(state, encoding="utf-8")
-        (directory / EMBEDDINGS_FILE).write_bytes(self.raw_matrix().tobytes())
+        index_bytes = faiss.serialize_index(self._inner._faiss).tobytes()
+        state = self._inner._persisted_state().model_dump_json().encode("utf-8")
+        write_atomic(directory / INDEX_FILE, index_bytes)
+        write_atomic(directory / STATE_FILE, state)
+        write_atomic(directory / EMBEDDINGS_FILE, self.raw_matrix().tobytes())
 
     @classmethod
     def load(cls, directory: Path) -> VectorIndex:
         """Load a flat ``vector/`` without modifying it.
 
         edge-proc migrates the legacy pair it is handed, so it is handed a private
-        copy; the index lives in memory afterwards and the copy is discarded. A
-        symlinked entry is refused rather than followed.
+        copy; the index lives in memory afterwards and the copy is discarded. Each
+        source is opened once, no-follow, must be a regular file no larger than
+        ``MAX_VECTOR_FILE_BYTES``, and is copied from that same descriptor.
         """
         with tempfile.TemporaryDirectory(prefix="edgereco-vector-") as scratch:
             for name in (INDEX_FILE, STATE_FILE):
-                source = directory / name
-                if source.is_symlink():
-                    raise ValueError(f"refusing to load a symlinked vector file: {source}")
-                shutil.copyfile(source, Path(scratch) / name)
+                copy_regular_file(
+                    directory / name,
+                    Path(scratch) / name,
+                    label=f"vector/{name}",
+                    max_bytes=MAX_VECTOR_FILE_BYTES,
+                )
             return cls(FaissVectorIndex.load(_INDEX_NAME, Path(scratch)))

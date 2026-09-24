@@ -114,13 +114,15 @@ def bundle(
     sequence: Annotated[
         int | None,
         typer.Option(
+            min=1,
+            max=2**53 - 1,
             help=(
                 "Monotonic signed release sequence: must exceed every sequence already "
                 "published for this catalog id, across signing keys (a new key does not "
                 "reset it). Browsers refuse a lower or equal one as a rollback. Default: "
                 "one more than ORIGIN_DIR/latest serves now (1 on a fresh origin); an "
                 "explicit value at or below it is refused."
-            )
+            ),
         ),
     ] = None,
 ) -> None:

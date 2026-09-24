@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Final
 
 import httpx
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from edgeproc.bundles.cas import FilesystemCacheStore
 from edgeproc.bundles.signing import Verifier
 from pydantic import BaseModel
@@ -62,6 +63,12 @@ def bump_version(current: str) -> str:
     return f"{match.group(1)}{int(match.group(2)) + 1}"
 
 
+def _public_key(private_key_path: Path) -> bytes:
+    """The raw public half of the publisher's Ed25519 key (verifies the served floor)."""
+    private = Ed25519PrivateKey.from_private_bytes(private_key_path.read_bytes())
+    return private.public_key().public_bytes_raw()
+
+
 def fetch_engagement(events_url: str) -> dict[str, EngagementStat]:
     """Pull aggregated engagement from a collector's ``/events/export`` endpoint."""
     response = httpx.get(events_url, timeout=_FETCH_TIMEOUT_S)
@@ -100,9 +107,16 @@ def retrain_and_republish(
     # serves: the two differ whenever the retrain republishes somewhere other than
     # where it synced from, and a sequence at or below the served one is refused by
     # every returning shopper as a rollback (docs/DEPLOY.md).
-    sequence = next_sequence(origin_dir, at_least=active.sequence)
     base = load_jsonl(materialized / "products.jsonl")
     meta = CatalogMeta.model_validate_json((materialized / "catalog_meta.json").read_bytes())
+    # publish_bundle re-checks this under the origin's publish lock, so a concurrent
+    # publisher that got there first makes this retrain fail closed, never overwrite.
+    sequence = next_sequence(
+        origin_dir,
+        public_key=_public_key(private_key_path),
+        catalog_id=meta.catalog_id,
+        at_least=active.sequence,
+    )
     blended = blend_popularity(base, engagement, alpha=alpha)
     new_version = version or bump_version(meta.version)
     staging = _stage_catalog(materialized, blended, cache_root / "staging", sessions or [])

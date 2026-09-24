@@ -16,6 +16,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   three calls EdgeReco makes (`content_hash`, `load_signing_key`, `sign_payload`).
 
 ### Fixed
+- **Both server images booted into an `ImportError`** (pre-existing). avow ships its
+  own older `assay/` package, so a fresh `uv sync --frozen` could leave it on top of
+  assay-engine's and `edgereco.reco.formula` failed with `cannot import name
+  'canonical_zero' from 'assay.composite'`. `deploy/Dockerfile` and
+  `demo_server/Dockerfile` now finish with `uv sync --frozen --reinstall-package
+  assay-engine` (lock-pinned and hash-checked, the image equivalent of Dagger's
+  `ASSAY_INSTALL`). `tests/unit/test_assay_install.py` checks every installed
+  `assay/*.py` against assay-engine's RECORD hashes and requires the reinstall to be
+  each image's last sync.
+- **Concurrent publishers on one origin are serialized.** The served-`latest` read
+  and the `latest` write now happen under one `filelock` on
+  `ORIGIN_DIR/.publish.lock` (separate from edge-proc's own store lock, and removed on
+  release). Two publishers can no longer both sign N+1, and a slow N+1 can no longer
+  land over an N+2; threaded tests pin both. `filelock` is now a declared dependency.
+- **The served floor is parsed strictly and must be the publisher's own.** `latest`
+  is read no-follow, regular-file-only (a FIFO no longer blocks), bounded to 64 KiB, and
+  its `sequence` must be a plain JSON integer in [0, 2^53-1]. It must also carry a valid
+  signature by the publishing key for this `--catalog-id` and the `stable` channel.
+  Anything else is refused, so a tampered `latest` cannot push the floor out of range.
+  `--sequence`, and the library's `sequence`, must be in [1, 2^53-1].
+- **`VectorIndex` file I/O is no-follow and atomic.** `load` opens each source once
+  (no-follow, regular file, at most 1 GiB) and copies from that descriptor. `save`
+  writes each file through an `O_EXCL|O_NOFOLLOW` temp, fsyncs it and `os.replace`s it
+  into place, so a planted symlink is replaced, never written through. The committed
+  seed `vector/` still round-trips byte for byte.
+- **The DEPLOY.md CI recipe could sign sequence 1.** It runs under `set -euo
+  pipefail` and requires a numeric integer `sequence` from the served pointer, so a failed
+  fetch or a malformed pointer stops the job before `edgereco bundle`.
+  `tests/unit/test_deploy_sequence_recipe.py` runs the doc's own shell text against
+  shims and real `jq`, which the Dagger Python toolchain now installs.
+
 - **The publisher can no longer sign a sequence that returning shoppers refuse.**
   `edgereco bundle` used to default `--sequence` to 1 on every run, so re-bundling into
   an origin that already served a higher sequence signed a release every returning
@@ -44,7 +75,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   build machine, `EDGEPROC_ALLOW_MODEL_DOWNLOAD=1`. `edgereco index` and `edgereco
   search` print the refusal as `[config.missing] ...` with both remedies, not a
   traceback. Both server images (`deploy/Dockerfile`, `demo_server/Dockerfile`) opt in
-  explicitly, so `edgereco serve` and the flywheel collector still boot. The test suite
+  explicitly, so `edgereco serve` and the flywheel collector still boot. That fetch
+  is not pinned to a model commit, because no upstream revision is recorded in this
+  project to pin against. DEPLOY.md ("The server images and the embedding model")
+  states this and gives the pinned path (`EDGEPROC_MODEL_PATH` +
+  `EDGEPROC_MODEL_DIGEST`). A contract test requires a model path to carry its digest
+  and a download opt-in to point at that section. The test suite
   opts in from `tests/conftest.py`, and the two parity-fixture generators that embed
   with the real model opt in themselves. README, QUICKSTART and DEPLOY show the variable
   on every `index`/`serve` command. The browser tier self-hosts its own weights and is
