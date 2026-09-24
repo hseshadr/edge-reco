@@ -25,6 +25,7 @@ from __future__ import annotations
 import glob
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -106,6 +107,10 @@ def _search(
 
 
 def main() -> None:
+    # Build-machine opt-in (edge-proc >=0.4.0 never downloads a model implicitly):
+    # this generator embeds with the real sentence-transformers weights, so it may
+    # fetch them once. A configured EDGEPROC_MODEL_PATH still wins, and loads offline.
+    os.environ.setdefault("EDGEPROC_ALLOW_MODEL_DOWNLOAD", "1")
     products, vector, keyword, encoder = _load()
     cases = []
     for query in QUERIES:

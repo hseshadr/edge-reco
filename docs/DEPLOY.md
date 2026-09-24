@@ -296,11 +296,20 @@ Publisher (build CI):
 
 ```bash
 edgereco build-catalog new-products.csv staging/products.jsonl
-edgereco index staging staging
+# The build machine is the one place allowed to fetch the embedding model
+# (edge-proc refuses to otherwise); or set EDGEPROC_MODEL_PATH to a local copy.
+EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 edgereco index staging staging
+# A fresh CI checkout has no origin/latest, so read the sequence you serve now.
+NEXT_SEQUENCE=$(( $(curl -fsS https://cdn.example.com/products/latest | jq -e .sequence) + 1 ))
 edgereco bundle staging origin examples/keys/private.key \
-    --catalog-id products --version "$VERSION"
+    --catalog-id products --version "$VERSION" --sequence "$NEXT_SEQUENCE"
 aws s3 sync origin/ s3://my-bundle-bucket/products/ --delete-after-sync
 ```
+
+`edgereco bundle` refuses a `--sequence` at or below the one `ORIGIN_DIR/latest` already
+holds, and without `--sequence` it signs one more than that (1 on an empty dir). It can
+only see the local `ORIGIN_DIR`, though, so a publisher that builds into a fresh
+directory must pass the next sequence explicitly, as above.
 
 The pointer flip (`latest` upload) is the only thing the consumer reacts to. Chunks are immutable, so the order of upload doesn't matter as long as the pointer goes last.
 
@@ -317,8 +326,10 @@ Everything an attacker could swap (chunks, manifest, pointer) is verified locall
 
 ### Signing keys, the release `sequence`, and rotation
 
-Every signed `latest` pointer carries a `sequence` (`edgereco bundle --sequence N`;
-`edgereco retrain` bumps it for you). Each browser keeps the highest pointer it has
+Every signed `latest` pointer carries a `sequence` (`edgereco bundle --sequence N`,
+which defaults to one more than the origin dir's current `latest` and refuses anything
+at or below it; `edgereco retrain` signs one more than the higher of the release it
+synced and the one its target origin already serves). Each browser keeps the highest pointer it has
 accepted as an **anti-rollback floor**, in OPFS and in IndexedDB. It keeps that floor
 even when the currently pinned key can't verify the stored pointer, so a key change
 can never be used to push an old release. That has three consequences for publishers:

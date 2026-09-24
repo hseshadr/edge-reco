@@ -430,8 +430,9 @@ uv sync --group dev
 # 1. build a products.jsonl from a scraped-Amazon CSV
 uv run edgereco build-catalog products.csv /tmp/staging/products.jsonl
 
-# 2. build the vector index into the staging dir
-uv run edgereco index /tmp/staging /tmp/staging
+# 2. build the vector index into the staging dir (the build machine may fetch the
+#    embedding model; edge-proc refuses to unless told, or use EDGEPROC_MODEL_PATH)
+EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 uv run edgereco index /tmp/staging /tmp/staging
 
 # 3. sign + publish a content-addressed bundle origin
 uv run edgereco bundle /tmp/staging /tmp/origin examples/keys/private.key \
@@ -441,6 +442,7 @@ uv run edgereco bundle /tmp/staging /tmp/origin examples/keys/private.key \
 EDGERECO_BUNDLE_BASE_URL=/tmp/origin \
 EDGERECO_VERIFY_KEY_PATH=examples/keys/public.key \
 EDGERECO_BUNDLE_CACHE_DIR=/tmp/bundle-cache \
+EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 \
     uv run edgereco serve /tmp/staging /tmp/staging --port 8000
 ```
 
@@ -452,7 +454,7 @@ The committed `backend/examples/catalog/` is exactly such an origin, so step 4 a
 edgereco build-catalog INPUT.csv OUTPUT.jsonl           # scraped-Amazon CSV -> products.jsonl
 edgereco preprocess INPUT.csv OUTPUT_DIR [--limit N]    # Kaggle-schema CSV -> jsonl + manifest
 edgereco index STAGING_DIR INDEX_DIR                    # build the vector/ index
-edgereco bundle STAGING_DIR ORIGIN_DIR PRIVATE_KEY      # sign + publish a bundle origin
+edgereco bundle STAGING_DIR ORIGIN_DIR PRIVATE_KEY [--sequence N]  # sign + publish; N defaults to latest+1
 edgereco serve CACHE_DIR INDEX_DIR [--host HOST] [--port PORT]
     # with EDGERECO_BUNDLE_BASE_URL + EDGERECO_VERIFY_KEY_PATH set, syncs + verifies a
     # signed bundle from that origin instead of reading the flat CACHE_DIR/INDEX_DIR.

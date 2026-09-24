@@ -24,7 +24,7 @@ from edgereco.api.deps import sync_and_materialize
 from edgereco.api.models import EngagementExport
 from edgereco.catalog.loader import dump_jsonl, load_jsonl
 from edgereco.catalog.models import Product
-from edgereco.catalog.publish import CatalogMeta, publish_bundle
+from edgereco.catalog.publish import CatalogMeta, next_sequence, publish_bundle
 from edgereco.reco.cooccurrence import Session, build_cooccurrence
 from edgereco.reco.retrain import EngagementStat, blend_popularity
 
@@ -96,7 +96,11 @@ def retrain_and_republish(
     active = FilesystemCacheStore(cache_root).read_active()
     if active is None:  # pragma: no cover - sync_and_materialize promoted or raised
         raise RuntimeError("sync completed without an active bundle pointer")
-    next_sequence = 1 if active.sequence is None else active.sequence + 1
+    # Strictly above BOTH the release just synced and whatever origin_dir already
+    # serves: the two differ whenever the retrain republishes somewhere other than
+    # where it synced from, and a sequence at or below the served one is refused by
+    # every returning shopper as a rollback (docs/DEPLOY.md).
+    sequence = next_sequence(origin_dir, at_least=active.sequence)
     base = load_jsonl(materialized / "products.jsonl")
     meta = CatalogMeta.model_validate_json((materialized / "catalog_meta.json").read_bytes())
     blended = blend_popularity(base, engagement, alpha=alpha)
@@ -109,7 +113,7 @@ def retrain_and_republish(
         meta=meta,
         version=new_version,
         product_count=len(blended),
-        sequence=next_sequence,
+        sequence=sequence,
     )
     return RetrainResult(
         version=new_version, product_count=len(blended), changed=_deltas(base, blended)

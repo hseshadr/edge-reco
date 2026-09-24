@@ -79,3 +79,18 @@ def test_entrypoint_is_valid_posix_shell() -> None:
         check=False,
     )
     assert check.returncode == 0, f"entrypoint.sh has shell syntax errors: {check.stderr}"
+
+
+def test_every_server_image_declares_where_its_embedding_model_comes_from() -> None:
+    """Both server images must say how the query encoder gets its model.
+
+    edge-proc >=0.4.0 refuses to fetch an embedding model unless EDGEPROC_MODEL_PATH
+    names a local model directory or EDGEPROC_ALLOW_MODEL_DOWNLOAD=1 opts in. Both
+    images construct a ``ProductEncoder`` at boot (``edgereco serve`` and the flywheel
+    collector), so an image that declares neither crashes on start with
+    ``[config.missing]`` — a failure no unit test sees, because the suite opts in.
+    """
+    for dockerfile in (DOCKERFILE, BACKEND / "demo_server" / "Dockerfile"):
+        text = dockerfile.read_text()
+        declared = re.search(r"EDGEPROC_(MODEL_PATH=\S+|ALLOW_MODEL_DOWNLOAD=1\b)", text)
+        assert declared, f"{dockerfile.relative_to(BACKEND)} never declares a model source"

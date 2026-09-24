@@ -37,9 +37,10 @@ from typing import Final
 
 from edgeproc.bundles.cas import FilesystemCacheStore
 from edgeproc.bundles.chunking import GearCDC
+from edgeproc.bundles.manifest import VersionPointer
 from edgeproc.bundles.publish import build_bundle
 from edgeproc.bundles.signing import Ed25519Signer
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from edgereco.catalog.product_image import ImageMode, localize_catalog
 from edgereco.reco.cooccurrence import CooccurrenceMatrix
@@ -75,6 +76,60 @@ _COOCCURRENCE_NAME: Final[str] = "cooccurrence.json"
 CURRENT_META_SCHEMA: Final[int] = 2
 
 
+class SequenceNotIncreasingError(ValueError):
+    """A publish would not raise the origin's signed ``sequence`` (fail closed).
+
+    Every consumer keeps the highest pointer it accepted as an anti-rollback floor:
+    ``@edgeproc/browser`` refuses a lower or equal ``sequence`` over a different
+    manifest, and edge-proc >=0.3.0 promotes a same-version release only on a strictly
+    greater one. A publish at or below what the origin already serves would strand
+    every returning shopper, so the producer refuses it before signing anything.
+    """
+
+
+def served_sequence(origin_dir: Path) -> int | None:
+    """The ``sequence`` of the pointer ``origin_dir`` serves now, or ``None`` if none.
+
+    ``None`` means there is no ``latest`` at all (a fresh origin) or it predates the
+    counter. A ``latest`` that exists but is a symlink or not a pointer is refused:
+    guessing a floor from it could sign a release every client rejects.
+    """
+    latest = origin_dir / "latest"
+    if latest.is_symlink():
+        raise SequenceNotIncreasingError(
+            f"refusing to read the served sequence through a symlink: {latest}"
+        )
+    if not latest.exists():
+        return None
+    try:
+        return VersionPointer.model_validate_json(latest.read_bytes()).sequence
+    except (OSError, ValidationError) as exc:
+        raise SequenceNotIncreasingError(
+            f"cannot read the served sequence from {latest}; refusing to publish over "
+            "a pointer whose rollback floor is unknown"
+        ) from exc
+
+
+def next_sequence(origin_dir: Path, *, at_least: int | None = None) -> int:
+    """One more than the highest of ``origin_dir``'s served sequence and ``at_least``."""
+    floors = [value for value in (served_sequence(origin_dir), at_least) if value is not None]
+    return max(floors, default=0) + 1
+
+
+def _require_increasing(origin_dir: Path, sequence: int | None) -> int:
+    """Resolve ``sequence`` (``None`` = next) and refuse one that does not climb."""
+    served = served_sequence(origin_dir)
+    if sequence is None:
+        return (served or 0) + 1
+    if served is not None and sequence <= served:
+        raise SequenceNotIncreasingError(
+            f"sequence {sequence} must be strictly greater than {served}, the sequence "
+            f"{origin_dir / 'latest'} serves now; returning shoppers refuse anything "
+            "lower or equal as a rollback (see docs/DEPLOY.md)"
+        )
+    return sequence
+
+
 class CatalogMeta(BaseModel):
     """Domain metadata bundled as ``catalog_meta.json`` (typed JSON).
 
@@ -104,16 +159,21 @@ def publish_bundle(
     embedding_count: int,
     product_count: int,
     require_feature_files: bool = False,
-    sequence: int = 1,
+    sequence: int | None = None,
     image_mode: ImageMode = ImageMode.LOCAL,
 ) -> None:
     """Write ``catalog_meta.json`` then build the signed origin from the staging dir.
+
+    ``sequence`` defaults to one more than ``origin_dir`` serves now (``1`` on a fresh
+    origin). An explicit value must be strictly greater than the served one, or
+    :class:`SequenceNotIncreasingError` is raised before anything is written.
 
     ``require_feature_files`` republishes a CURRENT bundle: ``ranking_config.json`` and
     ``cooccurrence.json`` MUST already be staged (a retrain re-staging a synced bundle),
     so a missing file raises instead of silently baking in legacy defaults. A fresh
     build leaves it ``False`` and the producer writes the defaults for the first time.
     """
+    sequence = _require_increasing(origin_dir, sequence)
     meta = CatalogMeta(
         catalog_id=catalog_id,
         version=version,

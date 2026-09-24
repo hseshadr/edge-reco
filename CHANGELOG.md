@@ -5,7 +5,56 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- **Backend substrate bumped: edge-proc 0.2.0 → 0.5.0, edgeproc-core 0.2.1 → 0.4.3,
+  avow 0.3.0 → 0.4.1** (floors in `backend/pyproject.toml`; `uv.lock` moves only those
+  three packages). The important one is edge-proc 0.3.0's HIGH-severity anti-replay fix:
+  before it, an EQUAL version read as "fresh", so a genuinely signed older pointer at the
+  same version label could replay onto the Python tier (`edgereco serve`, `retrain`,
+  `audit`). A promote now needs a strictly greater `sequence`. The browser tier
+  (`@edgeproc/browser` 02171df) already enforced this. avow 0.4.x changes none of the
+  three calls EdgeReco makes (`content_hash`, `load_signing_key`, `sign_payload`).
+
+### Fixed
+- **The publisher can no longer sign a sequence that returning shoppers refuse.**
+  `edgereco bundle` used to default `--sequence` to 1 on every run, so re-bundling into
+  an origin that already served a higher sequence signed a release every returning
+  browser rejects as a rollback. Now `--sequence` defaults to one more than
+  `ORIGIN_DIR/latest` serves, and an explicit value at or below it is refused before
+  anything is written (`SequenceNotIncreasingError`, printed as `ERROR: ...`, exit 1).
+  An unreadable or symlinked `latest` is refused rather than guessed past. `edgereco
+  retrain` signed `synced sequence + 1` even when its target origin already served a
+  higher one. It now signs one more than the higher of the two. The DEPLOY.md CI
+  example built into a fresh directory, where the new default can only see an empty
+  origin, so it now reads the served sequence and passes `--sequence` explicitly.
+- **`vector/` stays in the signed-bundle format under edge-proc 0.4.1+.** edge-proc now
+  saves a FAISS index as crash-atomic `snapshots/` generations with random names, and
+  its `load` migrates a writable `index.faiss` + `state.json` pair into that layout,
+  deleting the pair. Adopted as-is, that would have signed bundles without the
+  `vector/state.json` the browser reads (every device fails closed) and made them
+  non-reproducible. A server load would also have rewritten the materialized
+  `vector/` that `retrain` copies into the next bundle. `VectorIndex` now writes the
+  flat, deterministic `index.faiss` + `state.json` + `embeddings.f32` itself and loads
+  from a private copy, never touching the source. The committed seed bundle's
+  `vector/` round-trips through load and save byte for byte.
+
 ### Changed
+- **The embedding model no longer downloads implicitly** (edge-proc 0.4.0). A
+  `ProductEncoder` needs `EDGEPROC_MODEL_PATH` (a local model directory) or, on a
+  build machine, `EDGEPROC_ALLOW_MODEL_DOWNLOAD=1`. `edgereco index` and `edgereco
+  search` print the refusal as `[config.missing] ...` with both remedies, not a
+  traceback. Both server images (`deploy/Dockerfile`, `demo_server/Dockerfile`) opt in
+  explicitly, so `edgereco serve` and the flywheel collector still boot. The test suite
+  opts in from `tests/conftest.py`, and the two parity-fixture generators that embed
+  with the real model opt in themselves. README, QUICKSTART and DEPLOY show the variable
+  on every `index`/`serve` command. The browser tier self-hosts its own weights and is
+  unaffected.
+- `edgeproc keygen` now prints a second `key_id <16 hex>` line. QUICKSTART says so;
+  nothing in this repo parses that output.
+- **`docs/SECURITY-PRIVACY.md` no longer says product images are placeholders.** They
+  are real product photos, self-hosted under `/images/<product-id>.jpg` (720 files,
+  about 18 MB) and fetched same-origin. They are not precached and not part of the
+  signed bundle.
 - **README follows the portfolio template.** A plain-language first screen: a tagline
   that says what it does and for whom, "At a glance" (including exactly what leaves the
   device), and a "Try it in 60 seconds" walkthrough whose hero screenshot and pasted

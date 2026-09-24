@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,13 @@ from edgereco.catalog.loader import load_jsonl
 from edgereco.catalog.models import Product
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+# The suite is a build machine: its encoder tests embed with the real
+# sentence-transformers weights, and edge-proc >=0.4.0 refuses to fetch a model unless
+# told it may. Opt in here, explicitly and only for the test run; a configured
+# EDGEPROC_MODEL_PATH still takes precedence and loads offline. The refusal itself is
+# pinned by tests/unit/embeddings/test_encoder_model_source.py, which clears this.
+os.environ.setdefault("EDGEPROC_ALLOW_MODEL_DOWNLOAD", "1")
 
 
 @pytest.fixture

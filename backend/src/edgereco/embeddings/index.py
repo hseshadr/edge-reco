@@ -6,14 +6,25 @@ edge-reco's historical API is synchronous and returns inner-product *similarity*
 calls to completion (every edge-reco call site is synchronous) and converts
 distance back to similarity, so behavior is identical to the previous in-house
 index while the FAISS work is owned by EdgeProc.
+
+On disk, ``vector/`` is EdgeReco's SIGNED BUNDLE format, not edge-proc's persistence
+format: exactly ``index.faiss`` + ``state.json`` + ``embeddings.f32``, flat and
+deterministic. edge-proc >=0.4.1 persists to crash-atomic ``snapshots/`` generations
+(random names, a lock file) and migrates a writable legacy pair into them on load,
+deleting the pair. The browser tier reads ``vector/state.json`` and a retrain copies
+the synced ``vector/`` verbatim into the next bundle, so this adapter writes the flat
+layout itself and loads it from a private copy, never touching the source directory.
 """
 
 from __future__ import annotations
 
 import asyncio
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Final
 
+import faiss
 import numpy as np
 from edgeproc.localvec.faiss_index import FaissVectorIndex
 from edgeproc_core.vector_mgmt.core.types import IndexConfig, VectorEmbedding
@@ -25,6 +36,9 @@ _INDEX_NAME = "edgereco"
 #: to ``index.faiss``/``state.json`` so a Python-faiss-less tier (the browser) can do
 #: cosine search directly. Row ``i`` ↔ ``state.json`` ``faiss_ids[i]`` ↔ product id.
 EMBEDDINGS_FILE: Final[str] = "embeddings.f32"
+#: The FAISS index and its id-map sidecar, flat beside ``embeddings.f32``.
+INDEX_FILE: Final[str] = "index.faiss"
+STATE_FILE: Final[str] = "state.json"
 
 
 class VectorIndex:
@@ -86,10 +100,30 @@ class VectorIndex:
         return np.ascontiguousarray(matrix, dtype=np.float32)
 
     def save(self, directory: Path) -> None:
-        self._inner.save(directory)
+        """Write the flat bundle layout: ``index.faiss``, ``state.json``, ``embeddings.f32``.
+
+        The same bytes edge-proc <=0.4.0 wrote for a saved index, so the committed seed
+        bundle, older servers, and the browser all read it unchanged. Deterministic:
+        the same index always saves to the same bytes.
+        """
         directory.mkdir(parents=True, exist_ok=True)
+        faiss.write_index(self._inner._faiss, str(directory / INDEX_FILE))
+        state = self._inner._persisted_state().model_dump_json()
+        (directory / STATE_FILE).write_text(state, encoding="utf-8")
         (directory / EMBEDDINGS_FILE).write_bytes(self.raw_matrix().tobytes())
 
     @classmethod
     def load(cls, directory: Path) -> VectorIndex:
-        return cls(FaissVectorIndex.load(_INDEX_NAME, directory))
+        """Load a flat ``vector/`` without modifying it.
+
+        edge-proc migrates the legacy pair it is handed, so it is handed a private
+        copy; the index lives in memory afterwards and the copy is discarded. A
+        symlinked entry is refused rather than followed.
+        """
+        with tempfile.TemporaryDirectory(prefix="edgereco-vector-") as scratch:
+            for name in (INDEX_FILE, STATE_FILE):
+                source = directory / name
+                if source.is_symlink():
+                    raise ValueError(f"refusing to load a symlinked vector file: {source}")
+                shutil.copyfile(source, Path(scratch) / name)
+            return cls(FaissVectorIndex.load(_INDEX_NAME, Path(scratch)))

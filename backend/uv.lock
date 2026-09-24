@@ -100,7 +100,7 @@ wheels = [
 
 [[package]]
 name = "avow"
-version = "0.3.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
@@ -108,9 +108,9 @@ dependencies = [
     { name = "pynacl" },
     { name = "rfc8785" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/72/1f9a1be2bc45651e02c6af7ec0bc803fbad1eec5090ae7761a9e6a14ee39/avow-0.3.0.tar.gz", hash = "sha256:2e30e1818bd905703fa9cb399d41a97b09f21f02e8bf0b1aa5d192c573b9c7c5", size = 102023, upload-time = "2026-08-03T14:24:20.108Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/55/49/d1de19426ed7e8b7d0bc23c6a5f4f64f31b5a4be98b85e420414a94568bd/avow-0.4.1.tar.gz", hash = "sha256:c2ada7b7e20ea3da48c02184c3cd7945b57052a30a6b7457b17a768e963f24c1", size = 169240, upload-time = "2026-08-13T16:01:08.095Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/49/0b17517aa13eb8273e81f8e0db622d2d3188e71e21fac3cf38e6ecd85735/avow-0.3.0-py3-none-any.whl", hash = "sha256:4170868fc4e26f3dfddbb507502ee48b619b9c338a1cbea8fd224ebeb82873e2", size = 52383, upload-time = "2026-08-03T14:24:18.669Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/63/55152cd308da6e128dbfd281d57a44929656842d6b0b28cd540a12fa6c29/avow-0.4.1-py3-none-any.whl", hash = "sha256:c295ff2d4b3d1ee13866d8d5a696e5344a1581cd0750b6bdba5f482f6b0e1630", size = 71972, upload-time = "2026-08-13T16:01:06.448Z" },
 ]
 
 [[package]]
@@ -490,7 +490,7 @@ wheels = [
 
 [[package]]
 name = "edge-proc"
-version = "0.2.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "edgeproc-core" },
@@ -498,9 +498,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/5f/5ea29c942135ce4aafb428170e98823de2d7a5b395f1035b8885cd204eae/edge_proc-0.2.0.tar.gz", hash = "sha256:5bf489170e3d8fd2b6794b34351b1dbf948c716e7ab9502140df847bbbe9c26c", size = 111729, upload-time = "2026-08-01T17:21:41.627Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cb/cb/241a84436a58ada1be949ed95073d4b62cc8b756fb47b24c5f5f4d63bb10/edge_proc-0.5.0.tar.gz", hash = "sha256:f1d8174becce15865c730d7144b44449fe451b8dc9fcf4f1938cab1d074c7bfc", size = 479965, upload-time = "2026-09-23T23:01:01.158Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/70/78cbc4e3b88430438e7c00397ec8a5f70a1c0493292e66075b094c67c846/edge_proc-0.2.0-py3-none-any.whl", hash = "sha256:2996fa244851992e941eace0bdcb4f80c6e097fd285202e8cf08ae6acc024dbb", size = 65072, upload-time = "2026-08-01T17:21:40.49Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/a6/aae3d52b83b38bc486f850e82e33dc11fff048ff2cf37fc51d3b08203dca/edge_proc-0.5.0-py3-none-any.whl", hash = "sha256:b12ad6e1324c33998632030551cfd30189ac2f6c9494d02eac08dade2ee760a7", size = 92804, upload-time = "2026-09-23T23:00:59.931Z" },
 ]
 
 [package.optional-dependencies]
@@ -514,21 +514,23 @@ bundles = [
 ]
 localvec = [
     { name = "faiss-cpu" },
+    { name = "filelock" },
     { name = "numpy" },
     { name = "rank-bm25" },
     { name = "sentence-transformers" },
+    { name = "torch" },
 ]
 
 [[package]]
 name = "edgeproc-core"
-version = "0.2.1"
+version = "0.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/54/c853d66cd394df406ea241c8610477c047110083dea6dd2ab53a178d85a9/edgeproc_core-0.2.1.tar.gz", hash = "sha256:d45761b058e5e944e47ce5bbcdeb0bbf250f57a185618a11ea9d2a2276ebf8c8", size = 61595, upload-time = "2026-07-22T02:05:17.704Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/70/be0357afd9a76b92578c7a1e60115810acb3aab677433b0940a0857dcb47/edgeproc_core-0.4.3.tar.gz", hash = "sha256:227dc6253bc38233a4ef850e8782a5073a101e17f82d49dc3e9a0a4123908db4", size = 105513, upload-time = "2026-09-23T18:14:08.77Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/a1/cb2a6353ae4436d30e346c3a60719cb452000f7aeb502a6e1f03e9faac38/edgeproc_core-0.2.1-py3-none-any.whl", hash = "sha256:cc5d357cba3dfcccf3bebbaab46203feb33c371d4e11ed872f8381d75ed64759", size = 26679, upload-time = "2026-07-22T02:05:16.383Z" },
+    { url = "https://files.pythonhosted.org/packages/69/90/abc10b4d695aa95403888806a77ddf129efa7d0ed5bbc956fb7ad11c2e04/edgeproc_core-0.4.3-py3-none-any.whl", hash = "sha256:7ce5b85f0ffdab55648b02e5ce74870840e242089dcb5952a555abf44187efbd", size = 38568, upload-time = "2026-09-23T18:14:07.505Z" },
 ]
 
 [[package]]
@@ -576,10 +578,10 @@ dev = [
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.2" },
     { name = "assay-engine", extras = ["metrics"], specifier = "==0.5.0.dev3" },
-    { name = "avow", specifier = ">=0.3.0" },
+    { name = "avow", specifier = ">=0.4.1" },
     { name = "cryptography", specifier = ">=50" },
-    { name = "edge-proc", extras = ["localvec", "bundles"], specifier = ">=0.2.0" },
-    { name = "edgeproc-core", specifier = ">=0.2.1" },
+    { name = "edge-proc", extras = ["localvec", "bundles"], specifier = ">=0.5.0" },
+    { name = "edgeproc-core", specifier = ">=0.4.3" },
     { name = "faiss-cpu", specifier = ">=1.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },

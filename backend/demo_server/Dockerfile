@@ -28,6 +28,11 @@ ENV DEMO_HOST=0.0.0.0 \
     DEMO_PORT=8000 \
     DEMO_CORS_ORIGINS=http://localhost:5174
 
+# The collector builds a query encoder at boot. edge-proc >=0.4.0 never downloads
+# the model implicitly, so this demo server opts in to its one-time fetch; set
+# EDGEPROC_MODEL_PATH to a local model directory to run it with no model egress.
+ENV EDGEPROC_ALLOW_MODEL_DOWNLOAD=1
+
 EXPOSE 8000
 
 CMD ["python", "-m", "demo_server.serve"]
