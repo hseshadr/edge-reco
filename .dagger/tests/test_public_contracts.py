@@ -22,7 +22,7 @@ import pytest
 import edge_reco.main as main_module
 from edge_reco.main import EdgeReco, parse_release_evidence
 
-FOUNDATION_SHA = "068c3c08c4d342b3dc2784cdc3804f2b2d51d622"
+FOUNDATION_SHA = "9d491851fc5c65ad4a388ed2dd7bb4def4e1f007"
 VALID_DEPLOYMENT_ID = "f621dc42-3cf9-4217-b4fb-0392c1d39020"
 VALID_DEPLOYMENT_URL = "https://f621dc42.edge-reco.pages.dev"
 RECORDING_ENVELOPE = object()
@@ -32,7 +32,7 @@ RECORDING_CLOUDFLARE_ACCOUNT = object()
 PRETRANSPORT_SOURCE = """\
 from dagger import dag, function, object_type
 
-SHA = "068c3c08c4d342b3dc2784cdc3804f2b2d51d622"
+SHA = "9d491851fc5c65ad4a388ed2dd7bb4def4e1f007"
 COMMIT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 REPOSITORY = "hseshadr/edge-reco"
 

@@ -119,7 +119,7 @@ def test_should_document_the_exact_trigger_attempt_delivery_contract() -> None:
     assert "A manual dispatch" not in deploy
     assert "manual runs" not in deploy
     assert "current remote `main`" not in deploy
-    assert "`068c3c08c4d342b3dc2784cdc3804f2b2d51d622`" in adoption
+    assert "`9d491851fc5c65ad4a388ed2dd7bb4def4e1f007`" in adoption
     assert "dagger call ci" in adoption
     assert '--commit-sha="$(git rev-parse HEAD)"' in adoption
     assert "DAGGER_NO_NAG=1 dagger check" not in adoption
