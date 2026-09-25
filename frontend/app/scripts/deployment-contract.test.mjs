@@ -91,7 +91,10 @@ test("deploy workflow is only a pinned checkout and Dagger invocation", async ()
 		workflow,
 		/HEAD_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/u,
 	);
-	assert.match(workflow, /RUN_ID: \$\{\{ github\.event\.workflow_run\.id \}\}/u);
+	assert.match(
+		workflow,
+		/RUN_ID: \$\{\{ github\.event\.workflow_run\.id \}\}/u,
+	);
 	assert.match(
 		workflow,
 		/RUN_ATTEMPT: \$\{\{ github\.event\.workflow_run\.run_attempt \}\}/u,
