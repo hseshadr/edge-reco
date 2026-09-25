@@ -4,7 +4,7 @@
 
 EdgeReco is the first—and currently the only—graduated consumer of the shared Dagger
 delivery modules. It pins both central modules to the literal commit
-`068c3c08c4d342b3dc2784cdc3804f2b2d51d622`, delegates common guard and provider
+`9d491851fc5c65ad4a388ed2dd7bb4def4e1f007`, delegates common guard and provider
 mechanics to them, and keeps only product-specific checks locally.
 
 The canary reached production at EdgeReco commit
