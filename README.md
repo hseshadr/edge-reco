@@ -117,7 +117,7 @@ make gate
 
 This runs the backend checks (`poe gate`) and the frontend checks (`pnpm gate`), the same
 as CI. Allow about 8 minutes. [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) takes a
-new developer from a fresh clone to a green build and a first change, including two
+new developer from a fresh clone to a green build and a first change, including the
 local traps to know about. Also see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## More detail

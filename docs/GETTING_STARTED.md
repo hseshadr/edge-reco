@@ -70,11 +70,16 @@ From the repo root:
 make gate
 ```
 
-That runs `uv run poe gate` in `backend/` (format, lint, strict types, complexity, 554
+That runs `uv run poe gate` in `backend/` (format, lint, strict types, complexity, 561
 tests with at least 90% coverage; 252 s on our run) and then `pnpm run gate` in
 `frontend/` (lint, types, 552 unit tests with coverage, build, and three Playwright
 browser suites; 210 s). Allow about 8 minutes. CI runs the same checks through Dagger;
 `dagger check` runs that exact graph locally if you have Dagger installed.
+
+Run `pnpm -F frontend run build:pages` (step 2) at least once before `make gate`. It
+downloads the language model into `frontend/app/public/models/`, and one browser-engine
+parity test (`hybridParity.test.ts`) fails with `file was not found locally at
+.../model_quantized.onnx` without it.
 
 The frontend check rebuilds `frontend/app/dist` for its offline test with a test-only
 catalog address (`localhost:8921`). If you then run `vite preview`, the app says
